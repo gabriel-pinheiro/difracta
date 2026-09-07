@@ -30,9 +30,10 @@ near-synonyms.
   snapshot.
 - The Output page stays tiny (no React). Studio is React with per-path
   subscriptions (`useDocumentPath`), so a control re-renders alone.
-- Studio UI: Tailwind plus shadcn components added with
-  `npx shadcn@latest add <component>` in `difracta-studio/`; do not hand-write
-  primitives.
+- Studio UI: Tailwind plus shadcn on Base UI (`components.json`, style
+  `base-mira`). Add primitives with `npx shadcn@latest add <component>` in
+  `difracta-studio/`; never hand-write them. Base UI composes with the `render`
+  prop, not `asChild`. Studio is dark only.
 - Strict TypeScript, ESM, `.ts` import specifiers inside Node packages. Accept
   `unknown` at boundaries and validate with Zod.
 - Runtime is authoritative. Studio, Output and the CLI are clients of the same
