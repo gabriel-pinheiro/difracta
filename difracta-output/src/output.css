@@ -1,0 +1,39 @@
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: #000;
+  color: #ddd;
+  font:
+    14px system-ui,
+    sans-serif;
+  overflow: hidden;
+}
+
+canvas {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+}
+
+#overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #000;
+  text-align: center;
+}
+
+#overlay[hidden] {
+  display: none;
+}
+
+#overlay ul {
+  list-style: none;
+  padding: 0;
+}
+
+#overlay a {
+  color: #9cf;
+}
