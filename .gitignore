@@ -1,0 +1,13 @@
+# Local working notes for agents and humans; never authoritative
+research/
+
+node_modules/
+dist/
+build/
+out/
+coverage/
+*.log
+.DS_Store
+.env
+.env.*
+*.autosave
