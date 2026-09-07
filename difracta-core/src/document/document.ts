@@ -41,6 +41,8 @@ export const OutputSchema = z
   .object({
     id: z.string().min(1),
     name: EntityName,
+    /** Render at 1× device pixel ratio; eases the load on weak GPUs such as TVs. */
+    limitPixelRatio: z.boolean().default(false),
   })
   .strict();
 export type Output = Entity<typeof OutputSchema, OutputId>;

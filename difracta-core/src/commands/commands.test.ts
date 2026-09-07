@@ -23,6 +23,7 @@ describe("built-in commands", () => {
     expect(created.document.outputs.out_a).toEqual({
       id: "out_a",
       name: "Projector",
+      limitPixelRatio: false,
     });
     expect(created.label).toBe("Create Output “Projector”");
 
@@ -59,6 +60,23 @@ describe("built-in commands", () => {
     expect(applyPatches(removed.document, removed.inverse)).toEqual(
       renamed.document,
     );
+  });
+
+  it("updates Output settings and skips unchanged ones", () => {
+    const start = run(emptyDocument("Living"), "output.create", {
+      id: "out_a",
+      name: "Projector",
+    }).document;
+    const limited = run(start, "output.update", {
+      outputId: "out_a",
+      limitPixelRatio: true,
+    });
+    expect(limited.document.outputs.out_a?.limitPixelRatio).toBe(true);
+    const unchanged = run(limited.document, "output.update", {
+      outputId: "out_a",
+      limitPixelRatio: true,
+    });
+    expect(unchanged.patches).toEqual([]);
   });
 
   it("rejects malformed payloads before apply runs", () => {

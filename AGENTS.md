@@ -34,6 +34,11 @@ near-synonyms.
   `base-mira`). Add primitives with `npx shadcn@latest add <component>` in
   `difracta-studio/`; never hand-write them. Base UI composes with the `render`
   prop, not `asChild`. Studio is dark only.
+- Studio entities: each entity kind has one folder under
+  `difracta-studio/src/entities/<kind>/` with its navigator section, its
+  inspector and anything else it shows, registered in `entities/index.ts`.
+  Inspector building blocks (name, switch, copy fields, heading) live in
+  `src/inspector/fields/` and are shared by every kind.
 - Strict TypeScript, ESM, `.ts` import specifiers inside Node packages. Accept
   `unknown` at boundaries and validate with Zod.
 - Runtime is authoritative. Studio, Output and the CLI are clients of the same

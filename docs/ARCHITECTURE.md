@@ -165,3 +165,23 @@ Per-path subscriptions: `useDocumentPath(view, path)` re-renders one component
 when a delta touches that path. There is no client-side optimistic apply; LAN
 round trips are short enough, and the input channel gives sliders immediate
 local feedback.
+
+The shell is a menu bar (File, Edit, Blackout, the Installation's name), three
+resizable columns and a status strip. The left column is the navigator: the
+Installation as root row, then one collapsible section per entity kind. The
+right column is the inspector, showing the settings of whatever is selected. The
+center holds tabs; the Outputs tab shows one card per Output. Selection is
+Studio-local state and never reaches the runtime; the selected row and card
+carry an outline so the inspector's subject is visible at a glance. Column sizes
+and section open states are remembered per browser in localStorage.
+
+Why per-entity folders: every entity kind contributes the same two pieces, a
+navigator section and an inspector, and they change together. Each kind lives in
+`src/entities/<kind>/` and is registered once in `src/entities/index.ts`; the
+navigator and inspector iterate that registry rather than knowing kinds. Shared
+field components under `src/inspector/fields/` keep inspectors short and
+uniform.
+
+Blackout sits in the menu bar because it is the one control a performer must
+reach without looking; it writes `installation/blackout` through the input
+channel and is not undoable.

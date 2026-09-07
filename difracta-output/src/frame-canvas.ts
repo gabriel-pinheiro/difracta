@@ -6,6 +6,7 @@ export class FrameCanvas {
   readonly #canvas: HTMLCanvasElement;
   readonly #context: CanvasRenderingContext2D;
   #blackout = false;
+  #limitPixelRatio = false;
   #label = "";
   #animationFrame: number | undefined;
 
@@ -16,8 +17,13 @@ export class FrameCanvas {
     this.#context = context;
   }
 
-  update(state: { readonly blackout: boolean; readonly label: string }): void {
+  update(state: {
+    readonly blackout: boolean;
+    readonly limitPixelRatio: boolean;
+    readonly label: string;
+  }): void {
     this.#blackout = state.blackout;
+    this.#limitPixelRatio = state.limitPixelRatio;
     this.#label = state.label;
   }
 
@@ -37,7 +43,7 @@ export class FrameCanvas {
   }
 
   #draw(): void {
-    const ratio = window.devicePixelRatio || 1;
+    const ratio = this.#limitPixelRatio ? 1 : window.devicePixelRatio || 1;
     const width = Math.round(this.#canvas.clientWidth * ratio);
     const height = Math.round(this.#canvas.clientHeight * ratio);
     if (this.#canvas.width !== width || this.#canvas.height !== height) {

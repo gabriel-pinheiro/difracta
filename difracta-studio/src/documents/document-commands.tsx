@@ -1,8 +1,8 @@
+import type { DocumentView } from "@difracta/client";
 import type { DocumentSummary, FileEntry } from "@difracta/protocol";
 import {
   createContext,
   useContext,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -12,18 +12,20 @@ import { toast } from "sonner";
 import { useClient, useSignal } from "@/lib/client";
 
 import { ConfirmDialog, type ConfirmRequest } from "./confirm-dialog";
-import { NameDialog, type NameRequest } from "./name-dialog";
+import { NameDialog, type NameRequest } from "@/components/name-dialog";
 import { OpenFileDialog } from "./open-file-dialog";
 
 /**
  * Every document-level action Studio exposes (menu items, shortcuts): new,
  * open, save, save as, revert, close, undo, redo. Owns the dialogs those
  * actions need and reports failures as toasts. Studio works on one selected
- * Installation: the one just created or opened, else the runtime's first.
+ * Installation: the one just created or opened, else the runtime's first;
+ * `view` is its live document.
  */
 export interface DocumentCommands {
   readonly documents: readonly DocumentSummary[];
   readonly selected: DocumentSummary | undefined;
+  readonly view: DocumentView | undefined;
   readonly create: () => void;
   readonly open: () => void;
   readonly save: () => void;
@@ -78,6 +80,8 @@ export function DocumentCommandsProvider({
     return {
       documents,
       selected,
+      view:
+        selected === undefined ? undefined : client.openDocument(selected.id),
       create: () =>
         setDialog({
           kind: "name",
@@ -152,21 +156,6 @@ export function DocumentCommandsProvider({
       redo: () => history("history.redo"),
     };
   }, [client, documents, selected]);
-
-  useEffect(() => {
-    if (selected === undefined) return;
-    const id = `recovered:${selected.id}`;
-    if (!selected.recovered) {
-      toast.dismiss(id);
-      return;
-    }
-    toast.warning("Recovered unsaved changes from an autosave.", {
-      id,
-      description: "Save keeps them, or revert to the file as last saved.",
-      duration: Infinity,
-      action: { label: "Revert to saved", onClick: () => commands.revert() },
-    });
-  }, [selected, commands]);
 
   function openFile(entry: FileEntry): void {
     setDialog(undefined);

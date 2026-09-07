@@ -5,12 +5,14 @@ import { installationRename } from "./installation.rename.ts";
 import { outputCreate } from "./output.create.ts";
 import { outputRemove } from "./output.remove.ts";
 import { outputRename } from "./output.rename.ts";
+import { outputUpdate } from "./output.update.ts";
 
 /** Every built-in command. Add one import line per new command file. */
 export const builtInCommands: readonly CommandDefinition<never>[] = [
   installationRename,
   outputCreate,
   outputRename,
+  outputUpdate,
   outputRemove,
   addressSet,
   addressToggle,

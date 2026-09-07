@@ -29,7 +29,7 @@ export const outputCreate = defineCommand({
       tableEntries(document.outputs).map((output) => output.name),
       payload.name,
     );
-    const output: Output = { id: outputId, name };
+    const output: Output = { id: outputId, name, limitPixelRatio: false };
     return accepted([
       { op: "set", path: ["outputs", outputId], value: output },
     ]);

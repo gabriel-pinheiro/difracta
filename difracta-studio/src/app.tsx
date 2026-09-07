@@ -3,18 +3,19 @@ import {
   DocumentCommandsProvider,
   useDocumentCommands,
 } from "@/documents/document-commands";
-import { InstallationPanel } from "@/installation/installation-panel";
 import { ShortcutKeys } from "@/keyboard/shortcut-keys";
 import { useClient, useSignal } from "@/lib/client";
 import { MenuBar } from "@/menu/menu-bar";
-import { OutputsPanel } from "@/outputs/outputs-panel";
+import { StatusStrip } from "@/status/status-strip";
+import { Workspace } from "@/workspace/workspace";
 
 export function App() {
   return (
     <DocumentCommandsProvider>
       <div className="flex h-dvh flex-col">
         <MenuBar />
-        <Workspace />
+        <Main />
+        <StatusStrip />
       </div>
       <ShortcutKeys />
       <Toaster position="bottom-right" closeButton />
@@ -22,13 +23,10 @@ export function App() {
   );
 }
 
-function Workspace() {
+function Main() {
   const client = useClient();
   const phase = useSignal(client.phase);
-  const { selected } = useDocumentCommands();
-  const view =
-    selected === undefined ? undefined : client.openDocument(selected.id);
-
+  const { view } = useDocumentCommands();
   if (view === undefined) {
     return (
       <main className="grid flex-1 place-items-center text-muted-foreground">
@@ -38,10 +36,5 @@ function Workspace() {
       </main>
     );
   }
-  return (
-    <main className="grid flex-1 grid-cols-[16rem_1fr] gap-px overflow-hidden bg-border">
-      <InstallationPanel view={view} />
-      <OutputsPanel view={view} />
-    </main>
-  );
+  return <Workspace view={view} />;
 }

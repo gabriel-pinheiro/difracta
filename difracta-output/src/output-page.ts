@@ -68,6 +68,7 @@ export class OutputPage {
         const output = document.outputs[outputId];
         this.#frame.update({
           blackout: document.operational.blackout,
+          limitPixelRatio: output?.limitPixelRatio ?? false,
           label: `${document.installation.name} · ${output?.name ?? outputId}`,
         });
       };
