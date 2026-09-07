@@ -54,7 +54,7 @@ export async function buildRuntime(
   app.get("/health", () => ({
     name: "Difracta Runtime",
     version: RUNTIME_VERSION,
-    documents: store.list().length,
+    document: store.current()?.name ?? null,
   }));
   app.get(settings.runtime.livePath, { websocket: true }, (socket) => {
     live.accept(socket);
@@ -82,11 +82,13 @@ export async function buildRuntime(
     app,
     store,
     async listen() {
-      for (const filePath of new Set(config.openPaths)) {
-        const opened = await store.open(filePath);
-        if (!opened.ok) log(`Skipping ${filePath}: ${opened.error}`);
+      if (config.openPath !== undefined) {
+        const opened = await store.open(config.openPath);
+        if (!opened.ok) log(`Skipping ${config.openPath}: ${opened.error}`);
         else if (opened.result.recovered)
-          log(`Recovered unsaved changes for ${filePath} from its autosave.`);
+          log(
+            `Recovered unsaved changes for ${config.openPath} from its autosave.`,
+          );
       }
       return app.listen({ host: config.host, port: config.port });
     },

@@ -24,12 +24,13 @@ export function OutputsTab({ view }: { readonly view: DocumentView }) {
   }
   return (
     <div
-      className="grid min-h-full grid-cols-[repeat(auto-fill,minmax(18rem,1fr))] content-start gap-2 p-2"
+      className="grid min-h-full content-start gap-2 p-2"
       onClick={deselectOnBackgroundClick(select)}
     >
       {list.map((output) => (
         <OutputCard
           key={output.id}
+          view={view}
           output={output}
           selected={isSelected(selection, "output", output.id)}
           onSelect={() => select({ kind: "output", id: output.id })}

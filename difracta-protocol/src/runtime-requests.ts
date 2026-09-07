@@ -1,15 +1,20 @@
 import { z } from "zod";
 
 /**
- * Runtime-scoped requests: documents and files. These are not Document
- * commands; they manage which Documents the runtime has open. Names and
+ * Runtime-scoped requests: the document and files. These are not Document
+ * commands; they manage which Document the runtime has open. Names and
  * payload schemas live here so the runtime, Studio and CLI agree.
  */
 export const RuntimeRequestSchemas = {
-  "documents.list": z.object({}).strict(),
+  /** Replaces the open document with a new, unsaved one. */
   "documents.new": z
-    .object({ name: z.string().trim().min(1).max(120) })
+    .object({
+      name: z.string().trim().min(1).max(120),
+      /** Drop unsaved changes of the current document instead of failing. */
+      discard: z.boolean().optional(),
+    })
     .strict(),
+  /** Replaces the open document with a file. */
   "documents.open": z
     .object({
       /**
@@ -18,6 +23,7 @@ export const RuntimeRequestSchemas = {
        * document opens dirty and `recovered`.
        */
       path: z.string().min(1),
+      discard: z.boolean().optional(),
     })
     .strict(),
   "documents.save": z

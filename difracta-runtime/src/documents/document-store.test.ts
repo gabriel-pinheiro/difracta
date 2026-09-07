@@ -30,7 +30,7 @@ afterEach(async () => {
 
 describe("DocumentStore", () => {
   it("creates, saves as a .difracta file, and reopens it", async () => {
-    const created = store.create("Living");
+    const created = await store.create("Living");
     expect(created.ok).toBe(true);
     const documentId = created.ok ? created.result.id : "";
     store
@@ -49,7 +49,8 @@ describe("DocumentStore", () => {
     const parsed = parseDocumentFile(text);
     expect(parsed.ok && parsed.document.outputs.out_a?.name).toBe("TV");
 
-    expect(store.close(documentId).ok).toBe(true);
+    expect((await store.close(documentId)).ok).toBe(true);
+    expect(store.current()).toBeNull();
     const reopened = await store.open("living");
     expect(reopened.ok && reopened.result.outputs).toEqual([
       { id: "out_a", name: "TV" },
@@ -59,15 +60,36 @@ describe("DocumentStore", () => {
     ]);
   });
 
-  it("refuses to close dirty documents unless discarded", async () => {
-    const created = store.create("X");
+  it("holds one document: new and open replace it, refusing to drop unsaved changes", async () => {
+    const created = await store.create("X");
     const documentId = created.ok ? created.result.id : "";
-    expect(store.close(documentId).ok).toBe(false);
-    expect(store.close(documentId, true).ok).toBe(true);
+    expect((await store.close(documentId)).ok).toBe(false);
+    expect((await store.create("Y")).ok).toBe(false);
+    const replaced = await store.create("Y", true);
+    expect(replaced.ok && replaced.result.name).toBe("Y");
+    expect(store.session(documentId)).toBeUndefined();
+    expect(store.current()?.name).toBe("Y");
+    await store.save(replaced.ok ? replaced.result.id : "", "y");
+    const opened = await store.open("y");
+    expect(opened.ok && opened.result.id).toBe(store.current()?.id);
+  });
+
+  it("discarding a dirty document also drops its autosaves", async () => {
+    const created = await store.create("Living");
+    const documentId = created.ok ? created.result.id : "";
+    await store.save(documentId, "living");
+    store
+      .session(documentId)!
+      .execute("installation.rename", { name: "Changed" }, "test");
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    const filePath = path.join(dir, "living.difracta");
+    expect(await listAutosaves(filePath)).toHaveLength(1);
+    await store.create("Other", true);
+    expect(await listAutosaves(filePath)).toEqual([]);
   });
 
   it("autosaves dirty documents, recovers on open, and reverts to the file", async () => {
-    const created = store.create("Living");
+    const created = await store.create("Living");
     const documentId = created.ok ? created.result.id : "";
     await store.save(documentId, "living");
     const filePath = path.join(dir, "living.difracta");
@@ -87,7 +109,12 @@ describe("DocumentStore", () => {
     expect(listed.map((entry) => entry.name)).toEqual(["living"]);
     expect(listed[0]?.recoveryAvailable).toBe(true);
 
-    store.close(documentId, true);
+    // A runtime that died leaves the sidecar behind; the next one recovers it.
+    store = new DocumentStore({
+      projectsDir: dir,
+      registry: createBuiltInRegistry(),
+      autosaveIntervalMs: 10,
+    });
     const recovered = await store.open("living");
     expect(recovered.ok && recovered.result).toMatchObject({
       name: "Living 2",

@@ -33,9 +33,17 @@ export type StoreResult<TResult> =
   | { readonly ok: true; readonly result: TResult }
   | { readonly ok: false; readonly error: string };
 
+const UNSAVED_CHANGES =
+  "The open Installation has unsaved changes; save first or discard them.";
+
 /**
- * The set of Documents this runtime has open. Owns new/open/save/revert/close,
- * the projects directory listing, and the autosave sidecar for dirty documents.
+ * The one Document this runtime has open, or none. Owns new/open/save/
+ * revert/close, the projects directory listing, and the autosave sidecar
+ * while the document is dirty.
+ *
+ * New and open replace the current document. They refuse while it has
+ * unsaved changes unless told to discard, in which case its autosaves go
+ * too, so a discarded state does not resurface as a recovery.
  *
  * Opening a file whose newest autosave is younger than the file loads the
  * autosave: the document starts dirty and `recovered`, so nothing is lost by
@@ -43,10 +51,11 @@ export type StoreResult<TResult> =
  * file as saved and drops the autosaves.
  */
 export class DocumentStore {
-  readonly #sessions = new Map<string, DocumentSession>();
+  #session: DocumentSession | undefined;
+  #unsubscribeSession: (() => void) | undefined;
   readonly #options: DocumentStoreOptions;
   readonly #listeners = new Set<() => void>();
-  readonly #autosaveTimers = new Map<string, NodeJS.Timeout>();
+  #autosaveTimer: NodeJS.Timeout | undefined;
 
   constructor(options: DocumentStoreOptions) {
     this.#options = options;
@@ -56,19 +65,20 @@ export class DocumentStore {
     return this.#options.projectsDir;
   }
 
-  list(): readonly DocumentSummary[] {
-    return [...this.#sessions.values()].map((session) => session.summary());
+  current(): DocumentSummary | null {
+    return this.#session?.summary() ?? null;
   }
 
+  /** The open session when its id matches, the way requests address it. */
   session(documentId: string): DocumentSession | undefined {
-    return this.#sessions.get(documentId);
+    return this.#session?.id === documentId ? this.#session : undefined;
   }
 
-  sessions(): readonly DocumentSession[] {
-    return [...this.#sessions.values()];
+  currentSession(): DocumentSession | undefined {
+    return this.#session;
   }
 
-  /** Fires whenever the document list or any summary changes. */
+  /** Fires whenever the document or its summary changes. */
   onChange(listener: () => void): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
@@ -78,43 +88,45 @@ export class DocumentStore {
     return ensureExtension(path.resolve(this.#options.projectsDir, candidate));
   }
 
-  create(name: string): StoreResult<DocumentSummary> {
+  async create(
+    name: string,
+    discard = false,
+  ): Promise<StoreResult<DocumentSummary>> {
+    if (this.#session?.dirty === true && !discard)
+      return { ok: false, error: UNSAVED_CHANGES };
     const session = new DocumentSession(
       emptyDocument(name),
       this.#options.registry,
       { dirty: true },
     );
-    this.#adopt(session);
+    await this.#replace(session);
     return { ok: true, result: session.summary() };
   }
 
-  async open(candidate: string): Promise<StoreResult<DocumentSummary>> {
+  async open(
+    candidate: string,
+    discard = false,
+  ): Promise<StoreResult<DocumentSummary>> {
     const filePath = this.resolvePath(candidate);
-    const already = this.sessions().find(
-      (session) => session.path === filePath,
-    );
-    if (already !== undefined) return { ok: true, result: already.summary() };
+    if (this.#session?.path === filePath)
+      return { ok: true, result: this.#session.summary() };
+    if (this.#session?.dirty === true && !discard)
+      return { ok: false, error: UNSAVED_CHANGES };
 
     const sidecar = await newerAutosave(filePath);
     const loaded = await this.#load(sidecar ?? filePath);
     if (!loaded.ok) return loaded;
-    if (this.#sessions.has(loaded.result.installation.id)) {
-      return {
-        ok: false,
-        error: "An Installation with the same id is already open.",
-      };
-    }
     const session = new DocumentSession(loaded.result, this.#options.registry, {
       path: filePath,
       recovered: sidecar !== undefined,
     });
-    this.#adopt(session);
+    await this.#replace(session);
     return { ok: true, result: session.summary() };
   }
 
   /** Reloads the file as last saved over the open document and drops autosaves. */
   async revert(documentId: string): Promise<StoreResult<DocumentSummary>> {
-    const session = this.#sessions.get(documentId);
+    const session = this.session(documentId);
     if (session === undefined)
       return { ok: false, error: `Document “${documentId}” is not open.` };
     if (session.path === null)
@@ -129,7 +141,7 @@ export class DocumentStore {
         ok: false,
         error: "The file on disk is a different Installation.",
       };
-    this.#cancelAutosave(session.id);
+    this.#cancelAutosave();
     await removeAutosaves(session.path);
     session.replaceDocument(loaded.result, "runtime");
     return { ok: true, result: session.summary() };
@@ -154,7 +166,7 @@ export class DocumentStore {
     documentId: string,
     candidate?: string,
   ): Promise<StoreResult<DocumentSummary>> {
-    const session = this.#sessions.get(documentId);
+    const session = this.session(documentId);
     if (session === undefined)
       return { ok: false, error: `Document “${documentId}” is not open.` };
     const filePath =
@@ -164,16 +176,6 @@ export class DocumentStore {
         ok: false,
         error: "This Installation has no file yet; supply a path.",
       };
-    if (candidate !== undefined) {
-      const clash = this.sessions().find(
-        (other) => other !== session && other.path === filePath,
-      );
-      if (clash !== undefined)
-        return {
-          ok: false,
-          error: "Another open Installation uses that path.",
-        };
-    }
     try {
       await writeFileAtomically(filePath, serializeDocument(session.document));
       await removeAutosaves(filePath);
@@ -183,27 +185,21 @@ export class DocumentStore {
         error: `Cannot write ${filePath}: ${(error as Error).message}`,
       };
     }
-    this.#cancelAutosave(session.id);
+    this.#cancelAutosave();
     if (session.path !== filePath) session.bindPath(filePath);
     session.markSaved();
     return { ok: true, result: session.summary() };
   }
 
-  close(
+  async close(
     documentId: string,
     discard = false,
-  ): StoreResult<{ readonly closed: true }> {
-    const session = this.#sessions.get(documentId);
+  ): Promise<StoreResult<{ readonly closed: true }>> {
+    const session = this.session(documentId);
     if (session === undefined)
       return { ok: false, error: `Document “${documentId}” is not open.` };
-    if (session.dirty && !discard)
-      return {
-        ok: false,
-        error: "Unsaved changes; save first or close with discard.",
-      };
-    this.#cancelAutosave(session.id);
-    this.#sessions.delete(documentId);
-    this.#emit();
+    if (session.dirty && !discard) return { ok: false, error: UNSAVED_CHANGES };
+    await this.#replace(undefined);
     return { ok: true, result: { closed: true } };
   }
 
@@ -231,41 +227,48 @@ export class DocumentStore {
     return entries.sort((a, b) => b.modifiedAt - a.modifiedAt);
   }
 
-  /** Flushes pending autosaves; call before process exit. */
+  /** Flushes a pending autosave; call before process exit. */
   async flush(): Promise<void> {
-    await Promise.all(
-      [...this.#autosaveTimers.keys()].map((id) => this.#autosave(id)),
-    );
+    if (this.#autosaveTimer !== undefined) await this.#autosave();
   }
 
-  #adopt(session: DocumentSession): void {
-    this.#sessions.set(session.id, session);
-    session.onMeta(() => {
-      if (session.dirty) this.#scheduleAutosave(session.id);
-      this.#emit();
-    });
-    if (session.dirty) this.#scheduleAutosave(session.id);
+  /** Swaps the open document; a discarded dirty document loses its autosaves. */
+  async #replace(next: DocumentSession | undefined): Promise<void> {
+    const previous = this.#session;
+    this.#cancelAutosave();
+    this.#unsubscribeSession?.();
+    this.#unsubscribeSession = undefined;
+    if (previous?.dirty === true && previous.path !== null)
+      await removeAutosaves(previous.path);
+
+    this.#session = next;
+    if (next !== undefined) {
+      this.#unsubscribeSession = next.onMeta(() => {
+        if (next.dirty) this.#scheduleAutosave();
+        this.#emit();
+      });
+      if (next.dirty) this.#scheduleAutosave();
+    }
     this.#emit();
   }
 
-  #scheduleAutosave(documentId: string): void {
-    if (this.#autosaveTimers.has(documentId)) return;
+  #scheduleAutosave(): void {
+    if (this.#autosaveTimer !== undefined) return;
     const timer = setTimeout(() => {
-      void this.#autosave(documentId);
+      void this.#autosave();
     }, this.#options.autosaveIntervalMs ?? settings.autosave.delayMs);
     timer.unref();
-    this.#autosaveTimers.set(documentId, timer);
+    this.#autosaveTimer = timer;
   }
 
-  #cancelAutosave(documentId: string): void {
-    const timer = this.#autosaveTimers.get(documentId);
-    if (timer !== undefined) clearTimeout(timer);
-    this.#autosaveTimers.delete(documentId);
+  #cancelAutosave(): void {
+    if (this.#autosaveTimer !== undefined) clearTimeout(this.#autosaveTimer);
+    this.#autosaveTimer = undefined;
   }
 
-  async #autosave(documentId: string): Promise<void> {
-    this.#cancelAutosave(documentId);
-    const session = this.#sessions.get(documentId);
+  async #autosave(): Promise<void> {
+    this.#cancelAutosave();
+    const session = this.#session;
     if (session === undefined || !session.dirty || session.path === null)
       return;
     try {

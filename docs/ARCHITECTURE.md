@@ -13,10 +13,17 @@ Output pages (browsers) ───┼── websocket /live ──▶ Runtime ─
 difracta CLI (agents) ─────┘
 ```
 
-The runtime is authoritative. It holds every open Installation as a Document,
+The runtime is authoritative. It holds one Installation at a time as a Document,
 applies commands, replicates per-property deltas, keeps undo history, and saves
 files. Clients never hold state the runtime does not have, except transient UI
 state.
+
+**Why one Installation:** a runtime runs one show on one mini-PC, the way a
+Chataigne or Resolume process runs one project. Holding several would mean
+Output pages and Studio disagreeing about which one is "the" Installation, and
+copies of a file (Save As) clashing on entity ids. One document makes "open"
+mean replace, keeps every Output attached to the same document, and lets a copy
+on disk keep its ids.
 
 **Why:** show control (OSC from a hub such as Chataigne), several Studio
 windows, Output displays and shell agents all mutate the same Installation. One
@@ -101,19 +108,41 @@ one Address table a new entry is reachable from every control surface at once.
 
 ## Live protocol
 
-One websocket per client. After `hello` the runtime sends `welcome` and the
-open-document list, and keeps broadcasting the list on change.
+One websocket per client. After `hello` the runtime sends `welcome` and the open
+document's summary (or null), and sends it again on every change. Documents are
+still addressed by id, so a client can tell a replaced document from the one it
+subscribed to; the client drops views of a replaced one.
 
-- `subscribe` a document → one `snapshot`, then `delta` messages carrying
+- `subscribe` the document → one `snapshot`, then `delta` messages carrying
   `fromRevision`, `revision` and per-path patches. Deltas produced within one
-  event-loop turn are merged into one message per document per client. A
-  `fromRevision` mismatch makes the client resubscribe.
+  event-loop turn are merged into one message per client. A `fromRevision`
+  mismatch makes the client resubscribe.
+- `subscribe` with `live: true` adds the **live state** to the snapshot and
+  sends `live` messages afterwards: patches relative to the live root, with no
+  revision. Live state is what is happening right now around the document, today
+  the Output Sessions; it is never saved, never undone, and never changes the
+  document revision. Studio reads it under the `live` path root
+  (`["live", "outputs", id, "sessions"]`) with the same subscriptions as the
+  document. Output pages never ask for it.
+- `attach` declares the connection an Output page showing one Output; the
+  runtime keeps an **Output Session** per attached connection. `telemetry`
+  reports frame interval, render work, resolution, pixel ratio and workload once
+  a second (`settings.live`). A session with no report for a few seconds shows
+  as stale, one silent for minutes is dropped, and a closed socket drops it at
+  once. Removing the Output drops its sessions.
 - `command` is acknowledged with a `reply`. `history.undo` and `history.redo`
   are commands too.
 - `input` is an unacknowledged latest-wins write to an Address, coalesced per
   frame on the client; the runtime applies it as `address.set`.
-- `request` covers runtime-scoped operations:
-  `documents.list/new/open/save/close` and `files.list`.
+- `request` covers runtime-scoped operations: `documents.new/open` (replace the
+  document; refused while it has unsaved changes unless `discard`),
+  `documents.save/revert/close` and `files.list`.
+
+**Why a live root instead of a second channel:** telemetry, calibration state
+and playback all need per-path subscriptions exactly like document values, so
+they ride the same view and the same hooks. Keeping them out of the revision
+means an Output reporting once a second never forces anyone to resubscribe, and
+keeping them opt-in means an Output page pays nothing for other pages' reports.
 
 **Why:** busking is a stream of Macro triggers and Controller moves. Shipping
 the whole Installation on each would parse and re-render everything on every
@@ -141,8 +170,11 @@ gives agents `difracta undo`.
 ## Files
 
 One Installation per `.difracta` file: JSON with sorted keys, a `kind` and
-`formatVersion`. The runtime opens exactly the files named on its command line
-and nothing else; Studio and the CLI open more through `documents.open`.
+`formatVersion`. The runtime opens the one file named on its command line, if
+any, and nothing else; Studio and the CLI replace it through `documents.open` or
+`documents.new`. Replacing a document with unsaved changes needs an explicit
+discard, which also removes that file's autosaves so the discarded state does
+not come back as a recovery.
 
 Save is explicit and atomic: the content is written to a sibling temporary file,
 flushed to disk, then renamed over the target, so a crash leaves either the old
@@ -151,10 +183,10 @@ file or the complete new one.
 Dirty documents autosave to a sibling `<name>.<timestamp>.autosave.difracta` on
 a debounce (`settings.autosave`); only the newest sidecar is kept. Opening a
 file whose sidecar is younger than the file loads the sidecar instead: the
-document starts dirty and `recovered`, Studio shows a banner, and nothing is
-written until someone saves. `documents.revert` reloads the file as saved over
-the open document in one delta and drops the sidecars. A successful save also
-removes them.
+document starts dirty and `recovered`, Studio says so in the status strip, and
+nothing is written until someone saves. `documents.revert` reloads the file as
+saved over the open document in one delta and drops the sidecars. A successful
+save also removes them.
 
 **Why:** users of DAWs and Chataigne expect one document per file that can be
 versioned next to the rest of a show and moved between machines. Explicit save

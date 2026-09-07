@@ -40,39 +40,19 @@ export async function connect(url: string): Promise<DifractaClient> {
       }
     });
   });
-  // The documents list arrives right after welcome.
+  // The document summary arrives right after welcome.
   await new Promise((resolve) => setTimeout(resolve, 20));
   return client;
 }
 
-/** Picks a document by id or name; with one document open, picks it. */
-export function selectDocument(
-  documents: readonly DocumentSummary[],
-  selector: string | undefined,
-): DocumentSummary {
-  if (selector !== undefined) {
-    const match = documents.find(
-      (summary) =>
-        summary.id === selector ||
-        summary.name.localeCompare(selector, undefined, {
-          sensitivity: "accent",
-        }) === 0,
-    );
-    if (match === undefined)
-      throw new Error(
-        `No open Installation matches “${selector}”. Open ones: ${documents.map((d) => d.name).join(", ") || "none"}.`,
-      );
-    return match;
-  }
-  const only = documents.length === 1 ? documents[0] : undefined;
-  if (only !== undefined) return only;
-  if (documents.length === 0)
+/** The runtime's open Installation, or a helpful error. */
+export function currentDocument(client: DifractaClient): DocumentSummary {
+  const summary = client.document.get();
+  if (summary === null)
     throw new Error(
       "No Installation is open. Use `difracta documents open <file>`.",
     );
-  throw new Error(
-    `Several Installations are open; pass --doc <name|id>: ${documents.map((d) => d.name).join(", ")}.`,
-  );
+  return summary;
 }
 
 export function parseJsonArgument(text: string | undefined): unknown {

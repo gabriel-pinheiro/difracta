@@ -9,8 +9,8 @@ export interface RuntimeConfig {
   readonly port: number;
   /** Where `.difracta` files live; relative paths in requests resolve here. */
   readonly projectsDir: string;
-  /** Files to open at startup. The runtime opens nothing else. */
-  readonly openPaths: readonly string[];
+  /** The file to open at startup, if any. The runtime opens nothing else. */
+  readonly openPath: string | undefined;
   readonly studioDist: string | undefined;
   readonly outputDist: string | undefined;
   readonly autosaveIntervalMs: number;
@@ -30,6 +30,10 @@ export function configFromEnvironment(
       "projects-dir": { type: "string" },
     },
   });
+  if (positionals.length > 1)
+    throw new Error(
+      "A runtime holds one Installation; pass at most one .difracta file.",
+    );
   const env = process.env;
   return {
     host: values.host ?? env.DIFRACTA_HOST ?? settings.runtime.host,
@@ -42,7 +46,8 @@ export function configFromEnvironment(
         env.DIFRACTA_PROJECTS_DIR ??
         path.join(homedir(), "Difracta"),
     ),
-    openPaths: positionals.map((candidate) => path.resolve(candidate)),
+    openPath:
+      positionals[0] === undefined ? undefined : path.resolve(positionals[0]),
     studioDist:
       env.DIFRACTA_STUDIO_DIST ??
       path.join(packageRoot, "difracta-studio", "dist"),

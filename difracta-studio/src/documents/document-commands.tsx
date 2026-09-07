@@ -18,12 +18,11 @@ import { OpenFileDialog } from "./open-file-dialog";
 /**
  * Every document-level action Studio exposes (menu items, shortcuts): new,
  * open, save, save as, revert, close, undo, redo. Owns the dialogs those
- * actions need and reports failures as toasts. Studio works on one selected
- * Installation: the one just created or opened, else the runtime's first;
- * `view` is its live document.
+ * actions need and reports failures as toasts. The runtime holds one
+ * Installation; `selected` is its summary and `view` its live document,
+ * opened with live state so the Outputs monitor sees sessions.
  */
 export interface DocumentCommands {
-  readonly documents: readonly DocumentSummary[];
   readonly selected: DocumentSummary | undefined;
   readonly view: DocumentView | undefined;
   readonly create: () => void;
@@ -49,11 +48,8 @@ export function DocumentCommandsProvider({
   readonly children: ReactNode;
 }) {
   const client = useClient();
-  const documents = useSignal(client.documents);
-  const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
+  const selected = useSignal(client.document) ?? undefined;
   const [dialog, setDialog] = useState<Dialog | undefined>(undefined);
-  const selected =
-    documents.find((summary) => summary.id === selectedId) ?? documents[0];
 
   const commands = useMemo<DocumentCommands>(() => {
     const run = (action: () => Promise<unknown>): void => {
@@ -72,35 +68,54 @@ export function DocumentCommandsProvider({
       );
     const closeDocument = (documentId: string, discard: boolean): void =>
       run(() => client.request("documents.close", { documentId, discard }));
+    /** Runs `proceed` at once, or after confirming that unsaved changes may go. */
+    const afterDiscardCheck = (
+      what: string,
+      proceed: (discard: boolean) => void,
+    ): void => {
+      if (selected?.dirty !== true) {
+        proceed(false);
+        return;
+      }
+      setDialog({
+        kind: "confirm",
+        request: {
+          title: "Discard unsaved changes?",
+          description: `“${selected.name}” has changes that were not saved. ${what} replaces it.`,
+          actionLabel: "Discard and continue",
+          onConfirm: () => proceed(true),
+        },
+      });
+    };
     const history = (name: "history.undo" | "history.redo"): void => {
       if (selected === undefined) return;
       void client.command(selected.id, name, {}).catch(() => undefined);
     };
 
     return {
-      documents,
       selected,
       view:
-        selected === undefined ? undefined : client.openDocument(selected.id),
+        selected === undefined
+          ? undefined
+          : client.openDocument(selected.id, { live: true }),
       create: () =>
-        setDialog({
-          kind: "name",
-          request: {
-            title: "New Installation",
-            label: "Name",
-            initial: "Untitled",
-            submitLabel: "Create",
-            onSubmit: (name) =>
-              run(async () => {
-                const summary = await client.request<DocumentSummary>(
-                  "documents.new",
-                  { name },
-                );
-                setSelectedId(summary.id);
-              }),
-          },
-        }),
-      open: () => setDialog({ kind: "open" }),
+        afterDiscardCheck("A new Installation", (discard) =>
+          setDialog({
+            kind: "name",
+            request: {
+              title: "New Installation",
+              label: "Name",
+              initial: "Untitled",
+              submitLabel: "Create",
+              onSubmit: (name) =>
+                run(() => client.request("documents.new", { name, discard })),
+            },
+          }),
+        ),
+      open: () =>
+        afterDiscardCheck("Opening another Installation", () =>
+          setDialog({ kind: "open" }),
+        ),
       save: () => {
         if (selected === undefined) return;
         if (selected.path === null) commands.saveAs();
@@ -155,13 +170,16 @@ export function DocumentCommandsProvider({
       undo: () => history("history.undo"),
       redo: () => history("history.redo"),
     };
-  }, [client, documents, selected]);
+  }, [client, selected]);
 
   function openFile(entry: FileEntry): void {
     setDialog(undefined);
+    // The discard check ran before the dialog opened.
     void client
-      .request<DocumentSummary>("documents.open", { path: entry.path })
-      .then((summary) => setSelectedId(summary.id))
+      .request("documents.open", {
+        path: entry.path,
+        discard: selected?.dirty === true,
+      })
       .catch((failure: unknown) => {
         toast.error(
           failure instanceof Error ? failure.message : String(failure),
@@ -183,9 +201,7 @@ export function DocumentCommandsProvider({
       />
       <OpenFileDialog
         open={dialog?.kind === "open"}
-        openPaths={documents.flatMap((summary) =>
-          summary.path === null ? [] : [summary.path],
-        )}
+        currentPath={selected?.path ?? null}
         onOpen={openFile}
         onClose={closeDialog}
       />

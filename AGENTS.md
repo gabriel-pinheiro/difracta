@@ -41,6 +41,7 @@ near-synonyms.
   `src/inspector/fields/` and are shared by every kind.
 - Strict TypeScript, ESM, `.ts` import specifiers inside Node packages. Accept
   `unknown` at boundaries and validate with Zod.
+- A runtime holds one Installation at a time; open and new replace it.
 - Runtime is authoritative. Studio, Output and the CLI are clients of the same
   `@difracta/client`.
 - Comments and docs describe what the code does now. Planned work belongs in a

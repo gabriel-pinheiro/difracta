@@ -21,6 +21,16 @@ export const settings = {
     /** Delay between a document becoming dirty and its sidecar being written. */
     delayMs: 5_000,
   },
+  live: {
+    /** How often an Output page reports telemetry. */
+    telemetryIntervalMs: 1_000,
+    /** An Output Session with no report for this long shows as stale. */
+    staleAfterMs: 3_000,
+    /** ...and is dropped after this long (a socket that died without closing). */
+    dropAfterMs: 600_000,
+    /** How often the runtime checks sessions for staleness. */
+    sweepIntervalMs: 1_000,
+  },
   client: {
     /** First reconnect delay; doubles on each failure up to the maximum. */
     reconnectInitialMs: 500,

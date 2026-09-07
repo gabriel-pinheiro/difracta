@@ -1,6 +1,6 @@
 import type { DocumentView } from "@difracta/client";
 import { orderedEntries, type Output, type Table } from "@difracta/core";
-import { MonitorUp, Trash2 } from "lucide-react";
+import { Monitor, MonitorUp, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -12,10 +12,22 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { useClient, useDocumentPath } from "@/lib/client";
+import { useNow } from "@/lib/use-now";
 import { NavigatorRow } from "@/navigator/navigator-row";
 import { NavigatorSection } from "@/navigator/navigator-section";
 import { SortableItem, SortableList } from "@/navigator/sortable";
 import { isSelected, useSelection } from "@/selection/selection";
+
+import {
+  formatResolution,
+  formatScale,
+  presenceTone,
+  sessionList,
+  sessionStatus,
+  toneClass,
+  toneTitle,
+  type SessionTable,
+} from "./output-live";
 
 function generateOutputId(): string {
   return `output_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
@@ -65,17 +77,12 @@ export function OutputsSection({ view }: { readonly view: DocumentView }) {
             <SortableItem key={output.id} id={output.id}>
               <ContextMenu>
                 <ContextMenuTrigger>
-                  <NavigatorRow
-                    icon={MonitorUp}
-                    label={output.name}
+                  <OutputRow
+                    view={view}
+                    output={output}
                     selected={isSelected(selection, "output", output.id)}
                     onSelect={() => select({ kind: "output", id: output.id })}
-                  >
-                    <span
-                      className="size-1.5 shrink-0 rounded-full bg-muted-foreground/30"
-                      title="No Output Session connected"
-                    />
-                  </NavigatorRow>
+                  />
                 </ContextMenuTrigger>
                 <ContextMenuContent>
                   <ContextMenuItem
@@ -106,6 +113,62 @@ export function OutputsSection({ view }: { readonly view: DocumentView }) {
         }
         onClose={() => setNaming(false)}
       />
+    </>
+  );
+}
+
+/** The Output's row plus one row per Output Session under it. */
+function OutputRow({
+  view,
+  output,
+  selected,
+  onSelect,
+}: {
+  readonly view: DocumentView;
+  readonly output: Output;
+  readonly selected: boolean;
+  readonly onSelect: () => void;
+}) {
+  const sessions = sessionList(
+    useDocumentPath<SessionTable>(view, [
+      "live",
+      "outputs",
+      output.id,
+      "sessions",
+    ]),
+  );
+  const now = useNow(sessions.some((session) => session.stale));
+  return (
+    <>
+      <NavigatorRow
+        icon={MonitorUp}
+        label={output.name}
+        selected={selected}
+        onSelect={onSelect}
+      >
+        <span
+          className={`size-1.5 shrink-0 rounded-full ${toneClass[presenceTone(sessions)]}`}
+          title={toneTitle(sessions)}
+        />
+      </NavigatorRow>
+      {sessions.map((session) => (
+        <NavigatorRow
+          key={session.sessionId}
+          icon={Monitor}
+          depth={2}
+          label={`${formatResolution(session)} ${formatScale(session)}`}
+          selected={false}
+          onSelect={onSelect}
+        >
+          <span className="font-mono text-[0.625rem] text-muted-foreground">
+            {sessionStatus(session, now)}
+          </span>
+          <span
+            className={`size-1.5 shrink-0 rounded-full ${toneClass[session.stale ? "stale" : "live"]}`}
+            title={session.stale ? "Stopped reporting" : "Reporting"}
+          />
+        </NavigatorRow>
+      ))}
     </>
   );
 }

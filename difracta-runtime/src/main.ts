@@ -16,7 +16,7 @@ const address = await runtime.listen();
 runtime.app.log.info(
   {
     projectsDir: config.projectsDir,
-    documents: runtime.store.list().map((item) => item.name),
+    document: runtime.store.current()?.name ?? null,
   },
   `Difracta Runtime listening at ${address}`,
 );

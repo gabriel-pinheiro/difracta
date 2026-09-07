@@ -14,19 +14,20 @@ import { useClient } from "@/lib/client";
 
 interface OpenFileDialogProps {
   readonly open: boolean;
-  /** Paths of the Installations the runtime already has open. */
-  readonly openPaths: readonly string[];
+  /** Path of the Installation the runtime has open, to mark it. */
+  readonly currentPath: string | null;
   readonly onOpen: (entry: FileEntry) => void;
   readonly onClose: () => void;
 }
 
 /**
- * Lists `.difracta` files in the runtime's projects folder. A file with a
- * newer autosave opens from it; the recovery toast then offers Save or Revert.
+ * Lists `.difracta` files in the runtime's projects folder. Opening one
+ * replaces the current Installation. A file with a newer autosave opens from
+ * it; the status strip then offers Revert.
  */
 export function OpenFileDialog({
   open,
-  openPaths,
+  currentPath,
   onOpen,
   onClose,
 }: OpenFileDialogProps) {
@@ -39,7 +40,11 @@ export function OpenFileDialog({
     >
       <DialogContent className="sm:max-w-xl">
         {open && (
-          <FileList openPaths={openPaths} onOpen={onOpen} onClose={onClose} />
+          <FileList
+            currentPath={currentPath}
+            onOpen={onOpen}
+            onClose={onClose}
+          />
         )}
       </DialogContent>
     </Dialog>
@@ -53,7 +58,7 @@ const modifiedFormat = new Intl.DateTimeFormat(undefined, {
 
 /** Mounted while the dialog is open, so each opening fetches a fresh listing. */
 function FileList({
-  openPaths,
+  currentPath,
   onOpen,
   onClose,
 }: Omit<OpenFileDialogProps, "open">) {
@@ -100,8 +105,8 @@ function FileList({
               >
                 <span className="truncate font-medium">{entry.name}</span>
                 <span className="flex gap-1 text-[0.625rem] tracking-wide uppercase">
-                  {openPaths.includes(entry.path) && (
-                    <span className="text-emerald-400">open</span>
+                  {currentPath === entry.path && (
+                    <span className="text-emerald-400">current</span>
                   )}
                   {entry.recoveryAvailable && (
                     <span className="text-amber-400">unsaved changes</span>

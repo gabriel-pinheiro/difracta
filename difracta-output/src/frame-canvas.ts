@@ -1,7 +1,20 @@
 /**
  * Placeholder Projection Frame: black in Blackout, otherwise a dim field with
- * the Output's label. The renderer replaces the body of `draw`.
+ * the Output's label. The renderer replaces the body of `draw`. The loop also
+ * measures itself, cheaply: one timestamp per frame and two around the draw,
+ * folded into rolling averages that the page reports once a second.
  */
+export interface FrameMetrics {
+  readonly width: number;
+  readonly height: number;
+  readonly pixelRatio: number;
+  readonly frameIntervalMs: number | null;
+  readonly renderWorkMs: number | null;
+}
+
+/** Weight of the newest sample in the rolling averages. */
+const SMOOTHING = 0.1;
+
 export class FrameCanvas {
   readonly #canvas: HTMLCanvasElement;
   readonly #context: CanvasRenderingContext2D;
@@ -9,6 +22,10 @@ export class FrameCanvas {
   #limitPixelRatio = false;
   #label = "";
   #animationFrame: number | undefined;
+  #lastFrameAt: number | undefined;
+  #frameIntervalMs: number | null = null;
+  #renderWorkMs: number | null = null;
+  #pixelRatio = 1;
 
   constructor(canvas: HTMLCanvasElement) {
     this.#canvas = canvas;
@@ -27,10 +44,31 @@ export class FrameCanvas {
     this.#label = state.label;
   }
 
+  metrics(): FrameMetrics {
+    return {
+      width: Math.max(1, this.#canvas.width),
+      height: Math.max(1, this.#canvas.height),
+      pixelRatio: this.#pixelRatio,
+      frameIntervalMs: this.#frameIntervalMs,
+      renderWorkMs: this.#renderWorkMs,
+    };
+  }
+
   start(): void {
     if (this.#animationFrame !== undefined) return;
-    const tick = (): void => {
+    const tick = (now: number): void => {
+      if (this.#lastFrameAt !== undefined)
+        this.#frameIntervalMs = smooth(
+          this.#frameIntervalMs,
+          now - this.#lastFrameAt,
+        );
+      this.#lastFrameAt = now;
+      const started = performance.now();
       this.#draw();
+      this.#renderWorkMs = smooth(
+        this.#renderWorkMs,
+        performance.now() - started,
+      );
       this.#animationFrame = requestAnimationFrame(tick);
     };
     this.#animationFrame = requestAnimationFrame(tick);
@@ -40,10 +78,14 @@ export class FrameCanvas {
     if (this.#animationFrame !== undefined)
       cancelAnimationFrame(this.#animationFrame);
     this.#animationFrame = undefined;
+    this.#lastFrameAt = undefined;
+    this.#frameIntervalMs = null;
+    this.#renderWorkMs = null;
   }
 
   #draw(): void {
     const ratio = this.#limitPixelRatio ? 1 : window.devicePixelRatio || 1;
+    this.#pixelRatio = ratio;
     const width = Math.round(this.#canvas.clientWidth * ratio);
     const height = Math.round(this.#canvas.clientHeight * ratio);
     if (this.#canvas.width !== width || this.#canvas.height !== height) {
@@ -60,4 +102,8 @@ export class FrameCanvas {
     context.font = `${Math.round(16 * ratio)}px system-ui, sans-serif`;
     context.fillText(this.#label, 24 * ratio, height - 24 * ratio);
   }
+}
+
+function smooth(average: number | null, sample: number): number {
+  return average === null ? sample : average + SMOOTHING * (sample - average);
 }

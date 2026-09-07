@@ -120,4 +120,67 @@ describe("DifractaClient subscriptions", () => {
       vi.useRealTimers();
     }
   });
+
+  it("asks for live state when requested and routes live patches under the live root", () => {
+    const { client, sockets, subscribes } = connectedClient();
+    const socket = sockets[0]!;
+    const view = client.openDocument("doc", { live: true });
+    expect(subscribes(socket)).toEqual([
+      { type: "subscribe", documentId: "doc", live: true },
+    ]);
+    socket.receive({
+      type: "snapshot",
+      documentId: "doc",
+      revision: 1,
+      document: emptyDocument("Living"),
+      live: { outputs: {} },
+    });
+    const seen: unknown[] = [];
+    view.subscribePath(["live", "outputs", "out_a"], () =>
+      seen.push(view.valueAt(["live", "outputs", "out_a", "sessions"])),
+    );
+    socket.receive({
+      type: "live",
+      documentId: "doc",
+      patches: [
+        { op: "set", path: ["outputs", "out_a", "sessions", "s2"], value: {} },
+      ],
+    });
+    expect(seen).toEqual([{ s2: {} }]);
+    expect(view.revision.get()).toBe(1);
+  });
+
+  it("drops views of a replaced document and re-attaches after reconnect", () => {
+    const { client, sockets, welcome } = connectedClient();
+    const view = client.openDocument("old");
+    client.attach("out_a");
+    sockets[0]!.receive({
+      type: "document",
+      summary: {
+        id: "new",
+        name: "N",
+        path: null,
+        dirty: true,
+        recovered: false,
+        revision: 0,
+        outputs: [],
+      },
+    });
+    expect(client.document.get()?.id).toBe("new");
+    expect(client.openDocument("old")).not.toBe(view);
+
+    vi.useFakeTimers();
+    try {
+      sockets[0]!.close();
+      vi.runOnlyPendingTimers();
+      const next = sockets[1]!;
+      welcome(next);
+      expect(next.sent.filter((m) => m.type === "attach")).toEqual([
+        { type: "attach", outputId: "out_a" },
+      ]);
+      client.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

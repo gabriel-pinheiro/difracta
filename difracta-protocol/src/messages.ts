@@ -1,18 +1,27 @@
 import { DocumentSchema } from "@difracta/core";
 import { z } from "zod";
 
+import { LiveStateSchema, OutputTelemetrySchema } from "./live.ts";
+
 /**
  * The live protocol between the runtime and every client (Studio, Output,
  * CLI). Two flows share one socket:
  *
- * - State: `subscribe` a document, receive one `snapshot`, then `delta`
+ * - State: `subscribe` the document, receive one `snapshot`, then `delta`
  *   messages with per-path patches and a revision. A gap means resubscribe.
+ *   Subscribing with `live: true` adds the live state to the snapshot and
+ *   `live` messages afterwards; Output pages never ask for it.
  * - Input: `input` messages are unacknowledged latest-wins writes to an
  *   Address; the runtime coalesces them per tick and replicates the result
  *   as ordinary deltas.
+ * - Presence: an Output page `attach`es to one Output and reports
+ *   `telemetry`; both are unacknowledged.
  *
  * `command` is a document-scoped acknowledged operation (registry commands,
  * undo, redo). `request` is a runtime-scoped one (documents, files).
+ *
+ * A runtime holds one document at a time. It is still addressed by id so a
+ * client can tell a replaced document from the one it subscribed to.
  */
 export const PROTOCOL_VERSION = 1;
 
@@ -55,7 +64,12 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
     })
     .strict(),
   z
-    .object({ type: z.literal("subscribe"), documentId: DocumentIdSchema })
+    .object({
+      type: z.literal("subscribe"),
+      documentId: DocumentIdSchema,
+      /** Also receive the live state and its changes. */
+      live: z.boolean().optional(),
+    })
     .strict(),
   z
     .object({ type: z.literal("unsubscribe"), documentId: DocumentIdSchema })
@@ -85,6 +99,13 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
       value: z.unknown(),
     })
     .strict(),
+  /** This connection is an Output page showing `outputId`; null detaches. */
+  z
+    .object({ type: z.literal("attach"), outputId: z.string().nullable() })
+    .strict(),
+  z
+    .object({ type: z.literal("telemetry"), telemetry: OutputTelemetrySchema })
+    .strict(),
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 
@@ -111,10 +132,11 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
       runtime: z.object({ name: z.string(), version: z.string() }).strict(),
     })
     .strict(),
+  /** The open document, or null; sent after welcome and on every change. */
   z
     .object({
-      type: z.literal("documents"),
-      items: z.array(DocumentSummarySchema),
+      type: z.literal("document"),
+      summary: DocumentSummarySchema.nullable(),
     })
     .strict(),
   z
@@ -123,6 +145,15 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
       documentId: DocumentIdSchema,
       revision: z.number().int().nonnegative(),
       document: DocumentSchema,
+      live: LiveStateSchema.optional(),
+    })
+    .strict(),
+  /** Live-state patches, relative to the live root; not revisioned. */
+  z
+    .object({
+      type: z.literal("live"),
+      documentId: DocumentIdSchema,
+      patches: z.array(PatchSchema),
     })
     .strict(),
   z

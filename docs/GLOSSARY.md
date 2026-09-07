@@ -373,10 +373,17 @@ Layers, and control playback. Do not call the whole application `Control`.
 The fullscreen browser experience that renders one Output's Projection Frames on
 the mini-PC. The Output page is not the physical Projector.
 
+### Output Session
+
+One Output page tab attached to one Output through the Runtime. An Output may
+have several at once (a display and a preview tab, say); each reports its own
+Output Telemetry. A session that stops reporting is stale, then dropped.
+
 ### Runtime
 
-The authoritative process on the mini-PC. It owns current in-memory state,
-coordinates live edits, and synchronizes Studio and Output pages.
+The authoritative process on the mini-PC. It holds one Installation at a time,
+owns current in-memory state, coordinates live edits, and synchronizes Studio
+and Output pages.
 
 ### OSC
 
@@ -415,9 +422,9 @@ client's last observed Revision.
 
 ### Output Telemetry
 
-Live health and performance measurements produced by an Output page and relayed
-through Runtime to Studio. It includes connection or suspension state,
-resolution, Frame Interval, Render Work, and Layer failures.
+Live performance measurements an Output Session reports once a second and the
+Runtime relays to Studio as live state: resolution, pixel ratio, Frame Interval,
+Render Work and workload counts.
 
 ### Frame Interval
 

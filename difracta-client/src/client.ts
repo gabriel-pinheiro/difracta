@@ -6,6 +6,7 @@ import {
   type ClientKind,
   type ClientMessage,
   type DocumentSummary,
+  type OutputTelemetry,
   type RuntimeRequestName,
   type RuntimeRequestPayload,
   type ServerMessage,
@@ -38,14 +39,16 @@ interface PendingRequest {
 export class CommandError extends Error {}
 
 /**
- * One connection to a runtime. Holds the list of open documents, one
+ * One connection to a runtime. Holds the open document's summary, one
  * DocumentView per subscribed document, acknowledged commands and requests,
- * and a per-frame coalesced input queue (latest value per address wins).
+ * a per-frame coalesced input queue (latest value per address wins), and for
+ * an Output page the Output it is attached to.
  */
 export class DifractaClient {
   readonly phase = new Signal<ConnectionPhase>("connecting");
   readonly sessionId = new Signal<string | undefined>(undefined);
-  readonly documents = new Signal<readonly DocumentSummary[]>([]);
+  /** The runtime's open document, or null. */
+  readonly document = new Signal<DocumentSummary | null>(null);
   readonly lastError = new Signal<string | undefined>(undefined);
 
   readonly #options: ClientOptions;
@@ -57,6 +60,7 @@ export class DifractaClient {
   #closed = false;
   #retryMs: number = settings.client.reconnectInitialMs;
   #requestCounter = 0;
+  #attachedOutput: string | null = null;
 
   constructor(options: ClientOptions) {
     this.#options = options;
@@ -72,14 +76,18 @@ export class DifractaClient {
   /**
    * Returns the replica for a document, subscribing the first time only.
    * Safe to call on every render: later calls are lookups. The client
-   * resubscribes by itself after a reconnect and on a revision gap.
+   * resubscribes by itself after a reconnect and on a revision gap, and
+   * drops the view when the runtime replaces the document.
    */
-  openDocument(documentId: string): DocumentView {
+  openDocument(
+    documentId: string,
+    options: { readonly live?: boolean } = {},
+  ): DocumentView {
     const existing = this.#views.get(documentId);
     if (existing !== undefined) return existing;
-    const view = new DocumentView(documentId);
+    const view = new DocumentView(documentId, options);
     this.#views.set(documentId, view);
-    this.#send({ type: "subscribe", documentId });
+    this.#subscribe(view);
     return view;
   }
 
@@ -120,6 +128,22 @@ export class DifractaClient {
     });
   }
 
+  /**
+   * Declares this connection an Output page showing `outputId` (null to
+   * detach). Re-sent after every reconnect until detached.
+   */
+  attach(outputId: string | null): void {
+    if (this.#attachedOutput === outputId) return;
+    this.#attachedOutput = outputId;
+    this.#send({ type: "attach", outputId });
+  }
+
+  /** Unacknowledged telemetry for the attached Output; dropped when detached. */
+  report(telemetry: OutputTelemetry): void {
+    if (this.#attachedOutput === null) return;
+    this.#send({ type: "telemetry", telemetry });
+  }
+
   /** Latest-wins per address; flushed once per frame. */
   input(documentId: string, address: string, value: unknown): void {
     this.#inputs.set(`${documentId}\u0000${address}`, {
@@ -145,6 +169,14 @@ export class DifractaClient {
       this.#flushScheduled = false;
       for (const message of this.#inputs.values()) this.#send(message);
       this.#inputs.clear();
+    });
+  }
+
+  #subscribe(view: DocumentView): void {
+    this.#send({
+      type: "subscribe",
+      documentId: view.documentId,
+      ...(view.live ? { live: true } : {}),
     });
   }
 
@@ -228,16 +260,25 @@ export class DifractaClient {
       case "welcome":
         this.sessionId.set(parsed.sessionId);
         this.phase.set("connected");
-        for (const documentId of this.#views.keys())
-          this.#send({ type: "subscribe", documentId });
+        for (const view of this.#views.values()) this.#subscribe(view);
+        if (this.#attachedOutput !== null)
+          this.#send({ type: "attach", outputId: this.#attachedOutput });
         break;
-      case "documents":
-        this.documents.set(parsed.items);
+      case "document":
+        this.document.set(parsed.summary);
+        // Views of a replaced document would never hear from the runtime again.
+        for (const documentId of this.#views.keys()) {
+          if (documentId !== parsed.summary?.id) this.#views.delete(documentId);
+        }
         break;
       case "snapshot":
         this.#views
           .get(parsed.documentId)
-          ?.replaceSnapshot(parsed.document as Document, parsed.revision);
+          ?.replaceSnapshot(
+            parsed.document as Document,
+            parsed.revision,
+            parsed.live,
+          );
         break;
       case "delta": {
         const view = this.#views.get(parsed.documentId);
@@ -245,10 +286,13 @@ export class DifractaClient {
           view !== undefined &&
           !view.applyDelta(parsed.patches, parsed.fromRevision, parsed.revision)
         ) {
-          this.#send({ type: "subscribe", documentId: parsed.documentId });
+          this.#subscribe(view);
         }
         break;
       }
+      case "live":
+        this.#views.get(parsed.documentId)?.applyLive(parsed.patches);
+        break;
       case "reply": {
         const pending = this.#pending.get(parsed.requestId);
         this.#pending.delete(parsed.requestId);

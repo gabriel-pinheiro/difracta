@@ -10,10 +10,10 @@ import { z } from "zod";
 
 import {
   connect,
+  currentDocument,
   DEFAULT_URL,
   parseJsonArgument,
   parseValue,
-  selectDocument,
 } from "./connection.ts";
 
 /**
@@ -29,15 +29,10 @@ const program = new Command("difracta")
     "runtime live URL",
     process.env.DIFRACTA_URL ?? DEFAULT_URL,
   )
-  .option(
-    "--doc <selector>",
-    "open Installation by name or id (optional with one open)",
-  )
   .option("--json", "machine-readable output", false);
 
 interface GlobalOptions {
   readonly url: string;
-  readonly doc?: string;
   readonly json: boolean;
 }
 
@@ -66,9 +61,7 @@ async function withDocument<TResult>(
     summary: DocumentSummary,
   ) => Promise<TResult>,
 ): Promise<TResult> {
-  return withClient((client) =>
-    action(client, selectDocument(client.documents.get(), options().doc)),
-  );
+  return withClient((client) => action(client, currentDocument(client)));
 }
 
 async function readDocument(
@@ -90,17 +83,16 @@ const registry = createBuiltInRegistry();
 
 program
   .command("health")
-  .description("Show the runtime and its open Installations.")
+  .description("Show the runtime and its open Installation.")
   .action(() =>
     withClient(async (client) => {
-      const documents = client.documents.get();
-      print({ sessionId: client.sessionId.get(), documents }, () =>
+      const document = client.document.get();
+      print({ sessionId: client.sessionId.get(), document }, () =>
         [
           `Connected as ${client.sessionId.get() ?? "?"}`,
-          ...documents.map(
-            (d) =>
-              `  ${d.name}  ${d.id}  ${d.path ?? "(unsaved)"}${d.dirty ? " *" : ""}`,
-          ),
+          document === null
+            ? "  No Installation is open."
+            : `  ${document.name}  ${document.id}  ${document.path ?? "(unsaved)"}${document.dirty ? " *" : ""}`,
         ].join("\n"),
       );
     }),
@@ -242,25 +234,8 @@ for (const direction of ["undo", "redo"] as const) {
 
 const documents = program
   .command("documents")
-  .description("Open, create, save and close Installations on the runtime.");
-
-documents
-  .command("list")
-  .description("List open Installations.")
-  .action(() =>
-    withClient(async (client) => {
-      const items = client.documents.get();
-      print(items, () =>
-        items.length === 0
-          ? "No open Installations."
-          : items
-              .map(
-                (d) =>
-                  `${d.name}  ${d.id}  ${d.path ?? "(unsaved)"}${d.dirty ? " *" : ""}`,
-              )
-              .join("\n"),
-      );
-    }),
+  .description(
+    "Open, create, save and close the Installation on the runtime (one at a time).",
   );
 
 documents
@@ -286,11 +261,13 @@ documents
 
 documents
   .command("new <name>")
-  .description("Create an unsaved Installation.")
-  .action((name: string) =>
+  .description("Replace the open Installation with a new, unsaved one.")
+  .option("--discard", "drop unsaved changes of the current one", false)
+  .action((name: string, local: { discard: boolean }) =>
     withClient(async (client) => {
       const summary = await client.request<DocumentSummary>("documents.new", {
         name,
+        discard: local.discard,
       });
       print(summary, () => `Created ${summary.name} (${summary.id}).`);
     }),
@@ -299,12 +276,14 @@ documents
 documents
   .command("open <path>")
   .description(
-    "Open a .difracta file (relative to the projects folder or absolute).",
+    "Open a .difracta file (relative to the projects folder or absolute), replacing the current Installation.",
   )
-  .action((path: string) =>
+  .option("--discard", "drop unsaved changes of the current one", false)
+  .action((path: string, local: { discard: boolean }) =>
     withClient(async (client) => {
       const summary = await client.request<DocumentSummary>("documents.open", {
         path,
+        discard: local.discard,
       });
       print(
         summary,
@@ -320,9 +299,7 @@ documents
 
 documents
   .command("revert")
-  .description(
-    "Reload the selected Installation as last saved, dropping autosaves.",
-  )
+  .description("Reload the Installation as last saved, dropping autosaves.")
   .action(() =>
     withDocument(async (client, summary) => {
       const reverted = await client.request<DocumentSummary>(
@@ -338,7 +315,7 @@ documents
 
 documents
   .command("save [path]")
-  .description("Save the selected Installation, optionally to a new path.")
+  .description("Save the Installation, optionally to a new path.")
   .action((path: string | undefined) =>
     withDocument(async (client, summary) => {
       const saved = await client.request<DocumentSummary>(
@@ -353,7 +330,7 @@ documents
 
 documents
   .command("close")
-  .description("Close the selected Installation.")
+  .description("Close the Installation.")
   .option("--discard", "close even with unsaved changes", false)
   .action((local: { discard: boolean }) =>
     withDocument(async (client, summary) => {

@@ -1,9 +1,12 @@
 import type { DocumentView } from "@difracta/client";
 import type { Output, Table } from "@difracta/core";
+import type { LiveState } from "@difracta/protocol";
 
 import { useDocumentCommands } from "@/documents/document-commands";
 import { useClient, useDocumentPath, useSignal } from "@/lib/client";
 import { cn } from "@/lib/utils";
+
+import { liveSessions, sessionList } from "@/entities/output/output-live";
 
 /** Bottom strip: runtime connection, save state, outputs and blackout at a glance. */
 export function StatusStrip() {
@@ -49,13 +52,18 @@ export function StatusStrip() {
 
 function DocumentStatus({ view }: { readonly view: DocumentView }) {
   const outputs = useDocumentPath<Table<Output>>(view, ["outputs"]) ?? {};
+  const live = useDocumentPath<LiveState["outputs"]>(view, ["live", "outputs"]);
   const blackout =
     useDocumentPath<boolean>(view, ["operational", "blackout"]) ?? false;
   const count = Object.keys(outputs).length;
+  const connected = Object.keys(outputs).filter(
+    (id) => liveSessions(sessionList(live?.[id]?.sessions)).length > 0,
+  ).length;
   return (
     <>
-      <span>
-        {String(count)} {count === 1 ? "Output" : "Outputs"}
+      <span title="Outputs with at least one Output Session reporting">
+        {String(connected)} of {String(count)}{" "}
+        {count === 1 ? "Output" : "Outputs"} connected
       </span>
       {blackout && (
         <span className="rounded-sm bg-destructive px-1.5 font-semibold tracking-wider text-white uppercase">
