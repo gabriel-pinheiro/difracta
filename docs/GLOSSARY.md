@@ -1,8 +1,8 @@
 # Glossary
 
-Canonical vocabulary, carried from Projection v1 and revised as Difracta grows.
-Terms describe intended scope; a term may name a concept not yet implemented.
-Prefer these terms in code, UI text, docs, and conversation.
+Canonical vocabulary for Difracta, revised as the project grows. Terms describe
+intended scope; a term may name a concept not yet implemented. Prefer these
+terms in code, UI text, docs, and conversation.
 
 ## Physical and mapped space
 
@@ -177,9 +177,8 @@ Studio.
 ### Visual Backend
 
 The rendering API used by a Visual implementation. Canvas 2D and shader are the
-implemented Visual Backends. This is distinct from the Projection compositor,
-which uses WebGL2 to map and combine Layer results even when a Visual uses
-Canvas 2D.
+implemented Visual Backends. This is distinct from the compositor, which uses
+WebGL2 to map and combine Layer results even when a Visual uses Canvas 2D.
 
 ### Filter
 
@@ -379,26 +378,16 @@ the mini-PC. The Output page is not the physical Projector.
 The authoritative process on the mini-PC. It owns current in-memory state,
 coordinates live edits, and synchronizes Studio and Output pages.
 
-### Command
-
-A validated request from Studio or the Agent API to author or operate
-authoritative Runtime state. Commands carry a unique command ID for
-acknowledgement but are ordered by Runtime arrival rather than by the client's
-last observed Revision. The Agent API supplies that identity when its caller
-omits one. A Macro trigger Command identifies the persisted Macro; it does not
-send its action list.
-
 ### OSC
 
 Open Sound Control, the trusted-LAN transport through which external
-show-control software can trigger Projection Macros and set Controller values
-while Studio is closed. Projection accepts exact, stable ID-based addresses; OSC
-is an inbound protocol boundary, not an Installation-owned entity or an
-automation engine.
+show-control software can trigger Macros and set Controller values while Studio
+is closed. Difracta accepts exact, stable ID-based addresses; OSC is an inbound
+protocol boundary, not an Installation-owned entity or an automation engine.
 
 ### OSCQuery
 
-The read-only HTTP discovery protocol that describes Projection's writable OSC
+The read-only HTTP discovery protocol that describes Difracta's writable OSC
 Macro and Controller methods. It supplies current human-facing names and values
 while stable identities remain in each OSC address. OSCQuery does not mutate
 Runtime state and is distinct from OSC message transport.
@@ -420,7 +409,9 @@ Macros, Pads, Color Pickers, OSC, and the CLI all read and write Addresses.
 
 The only way an Installation changes: a named, validated operation that produces
 patches. Authoring Commands enter undo history and dirty the Installation;
-Performance Commands are live show input and do neither.
+Performance Commands are live show input and do neither. Commands carry a
+request id for acknowledgement and are ordered by Runtime arrival, not by the
+client's last observed Revision.
 
 ### Output Telemetry
 
@@ -461,9 +452,9 @@ Operational state is never written to it.
 
 ### Autosave
 
-A sidecar file `<name>.difracta.autosave` the runtime writes for a dirty
-Installation on a short debounce. Studio offers recovery when the sidecar is
-newer than the Installation File. A successful save removes it.
+A sidecar file `<name>.<timestamp>.autosave.difracta` the runtime writes next to
+a dirty Installation File on a short debounce. Studio offers recovery when the
+sidecar is newer than the Installation File. A successful save removes it.
 
 ## Deferred terminology
 
