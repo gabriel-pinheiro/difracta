@@ -55,6 +55,14 @@ Entity names inside one table are unique. Creating or renaming an entity into a
 name that is taken yields the next free `Name N` (`document/names.ts`), the way
 DAWs and Chataigne do, instead of failing.
 
+Entities the user can arrange carry an `order` key (`document/order.ts`): a
+short string that sorts lexicographically, produced by fractional indexing.
+`entity.move` places an entity after a sibling by setting only that entity's key
+to a value between its new neighbours, so a move is one patch, one inverse
+patch, and one changed line in the file. When two neighbours leave no room (keys
+from older files can tie) the command renumbers the whole table once. Readers
+sort with `orderedEntries`; the file's sorted keys say nothing about order.
+
 **Why:** a nested tree forces every change to rebuild, re-validate and re-send
 the whole Installation. Flat tables keyed by id make a change one patch, keep
 validation local to the touched entity, and let ordering be a parent id plus an

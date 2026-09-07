@@ -2,6 +2,7 @@ export * from "./ids.ts";
 export * from "./settings.ts";
 export * from "./document/document.ts";
 export * from "./document/names.ts";
+export * from "./document/order.ts";
 export * from "./document/patch.ts";
 export * from "./document/validate.ts";
 export * from "./address/address.ts";

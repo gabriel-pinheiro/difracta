@@ -1,5 +1,5 @@
 import type { DocumentView } from "@difracta/client";
-import type { Output, Table } from "@difracta/core";
+import { orderedEntries, type Output, type Table } from "@difracta/core";
 import { MonitorUp, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -14,6 +14,7 @@ import {
 import { useClient, useDocumentPath } from "@/lib/client";
 import { NavigatorRow } from "@/navigator/navigator-row";
 import { NavigatorSection } from "@/navigator/navigator-section";
+import { SortableItem, SortableList } from "@/navigator/sortable";
 import { isSelected, useSelection } from "@/selection/selection";
 
 function generateOutputId(): string {
@@ -26,6 +27,7 @@ export function OutputsSection({ view }: { readonly view: DocumentView }) {
   const { selection, select } = useSelection();
   const outputs = useDocumentPath<Table<Output>>(view, ["outputs"]) ?? {};
   const [naming, setNaming] = useState(false);
+  const ordered = orderedEntries(outputs);
 
   function run(name: string, payload: unknown): Promise<unknown> {
     return client
@@ -51,33 +53,44 @@ export function OutputsSection({ view }: { readonly view: DocumentView }) {
         label="Outputs"
         onCreate={() => setNaming(true)}
       >
-        {Object.values(outputs).map((output) => (
-          <ContextMenu key={output.id}>
-            <ContextMenuTrigger>
-              <NavigatorRow
-                icon={MonitorUp}
-                label={output.name}
-                selected={isSelected(selection, "output", output.id)}
-                onSelect={() => select({ kind: "output", id: output.id })}
-              >
-                <span
-                  className="size-1.5 shrink-0 rounded-full bg-muted-foreground/30"
-                  title="No Output Session connected"
-                />
-              </NavigatorRow>
-            </ContextMenuTrigger>
-            <ContextMenuContent>
-              <ContextMenuItem
-                variant="destructive"
-                onClick={() =>
-                  void run("output.remove", { outputId: output.id })
-                }
-              >
-                <Trash2 /> Remove
-              </ContextMenuItem>
-            </ContextMenuContent>
-          </ContextMenu>
-        ))}
+        <SortableList
+          kind="output"
+          ids={ordered.map((output) => output.id)}
+          selectedId={selection?.kind === "output" ? selection.id : undefined}
+          onMove={(id, after) =>
+            void run("entity.move", { table: "outputs", id, after })
+          }
+        >
+          {ordered.map((output) => (
+            <SortableItem key={output.id} id={output.id}>
+              <ContextMenu>
+                <ContextMenuTrigger>
+                  <NavigatorRow
+                    icon={MonitorUp}
+                    label={output.name}
+                    selected={isSelected(selection, "output", output.id)}
+                    onSelect={() => select({ kind: "output", id: output.id })}
+                  >
+                    <span
+                      className="size-1.5 shrink-0 rounded-full bg-muted-foreground/30"
+                      title="No Output Session connected"
+                    />
+                  </NavigatorRow>
+                </ContextMenuTrigger>
+                <ContextMenuContent>
+                  <ContextMenuItem
+                    variant="destructive"
+                    onClick={() =>
+                      void run("output.remove", { outputId: output.id })
+                    }
+                  >
+                    <Trash2 /> Remove
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
+            </SortableItem>
+          ))}
+        </SortableList>
       </NavigatorSection>
       <NameDialog
         request={

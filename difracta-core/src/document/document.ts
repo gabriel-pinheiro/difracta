@@ -6,6 +6,7 @@ import {
   type InstallationId,
   type OutputId,
 } from "../ids.ts";
+import { DEFAULT_ORDER_KEY } from "./order.ts";
 
 /**
  * A Document is one Installation as normalized entity tables. Every table is
@@ -43,6 +44,8 @@ export const OutputSchema = z
     name: EntityName,
     /** Render at 1× device pixel ratio; eases the load on weak GPUs such as TVs. */
     limitPixelRatio: z.boolean().default(false),
+    /** Position among Outputs; see `order.ts`. */
+    order: z.string().min(1).default(DEFAULT_ORDER_KEY),
   })
   .strict();
 export type Output = Entity<typeof OutputSchema, OutputId>;
@@ -77,6 +80,12 @@ export const TABLE_SCHEMAS = {
   outputs: OutputSchema,
 } as const;
 export type TableName = keyof typeof TABLE_SCHEMAS;
+
+/** Tables whose entities carry an `order` key and can be rearranged. */
+export const ORDERED_TABLES = [
+  "outputs",
+] as const satisfies readonly TableName[];
+export type OrderedTableName = (typeof ORDERED_TABLES)[number];
 
 export const defaultOperational: Operational = { blackout: false };
 

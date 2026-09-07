@@ -14,7 +14,8 @@ export function Inspector({ view }: { readonly view: DocumentView }) {
       <div className="min-h-0 overflow-auto">
         {selection === undefined ? (
           <p className="p-3 text-muted-foreground">
-            Nothing selected. Click an item in the navigator to see its settings here.
+            Nothing selected. Click an item in the navigator to see its settings
+            here.
           </p>
         ) : selection.kind === "installation" ? (
           <InstallationInspector view={view} />

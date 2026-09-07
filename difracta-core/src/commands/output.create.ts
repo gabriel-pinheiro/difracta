@@ -3,6 +3,7 @@ import { z } from "zod";
 import { accepted, defineCommand, rejected } from "../command/command.ts";
 import { tableEntries, type Output } from "../document/document.ts";
 import { uniqueName } from "../document/names.ts";
+import { appendOrderKey } from "../document/order.ts";
 import { generateId, id } from "../ids.ts";
 
 export const outputCreate = defineCommand({
@@ -29,7 +30,12 @@ export const outputCreate = defineCommand({
       tableEntries(document.outputs).map((output) => output.name),
       payload.name,
     );
-    const output: Output = { id: outputId, name, limitPixelRatio: false };
+    const output: Output = {
+      id: outputId,
+      name,
+      limitPixelRatio: false,
+      order: appendOrderKey(document.outputs),
+    };
     return accepted([
       { op: "set", path: ["outputs", outputId], value: output },
     ]);

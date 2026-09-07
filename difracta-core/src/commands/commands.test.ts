@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { executeCommand } from "../command/execute.ts";
 import { emptyDocument, type Document } from "../document/document.ts";
+import { orderedEntries } from "../document/order.ts";
 import { applyPatches } from "../document/patch.ts";
 import { createBuiltInRegistry } from "./index.ts";
 
@@ -24,6 +25,7 @@ describe("built-in commands", () => {
       id: "out_a",
       name: "Projector",
       limitPixelRatio: false,
+      order: "a0",
     });
     expect(created.label).toBe("Create Output “Projector”");
 
@@ -75,6 +77,36 @@ describe("built-in commands", () => {
     const unchanged = run(limited.document, "output.update", {
       outputId: "out_a",
       limitPixelRatio: true,
+    });
+    expect(unchanged.patches).toEqual([]);
+  });
+
+  it("moves entities among their siblings with one order patch", () => {
+    let document = emptyDocument("Living");
+    for (const name of ["A", "B", "C"]) {
+      document = run(document, "output.create", {
+        id: `out_${name}`,
+        name,
+      }).document;
+    }
+    const names = (candidate: Document) =>
+      orderedEntries(candidate.outputs).map((output) => output.name);
+    expect(names(document)).toEqual(["A", "B", "C"]);
+
+    const moved = run(document, "entity.move", {
+      table: "outputs",
+      id: "out_C",
+      after: null,
+    });
+    expect(moved.patches).toHaveLength(1);
+    expect(names(moved.document)).toEqual(["C", "A", "B"]);
+    expect(moved.label).toBe("Move Output");
+    expect(applyPatches(moved.document, moved.inverse)).toEqual(document);
+
+    const unchanged = run(moved.document, "entity.move", {
+      table: "outputs",
+      id: "out_A",
+      after: "out_C",
     });
     expect(unchanged.patches).toEqual([]);
   });

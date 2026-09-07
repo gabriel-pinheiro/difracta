@@ -1,5 +1,7 @@
 import type { DocumentView } from "@difracta/client";
+import { autoScrollForElements } from "@atlaskit/pragmatic-drag-and-drop-auto-scroll/element";
 import { Box } from "lucide-react";
+import { useEffect, useRef } from "react";
 
 import { PanelHeader } from "@/components/panel-header";
 import { entities, entityKinds } from "@/entities";
@@ -12,13 +14,23 @@ import { NavigatorRow } from "./navigator-row";
 export function Navigator({ view }: { readonly view: DocumentView }) {
   const { selection, select } = useSelection();
   const name = useDocumentPath<string>(view, ["installation", "name"]) ?? "";
+  const scroller = useRef<HTMLDivElement>(null);
+  // Dragging a row near the top or bottom scrolls the list.
+  useEffect(() => {
+    const element = scroller.current;
+    if (element === null) return;
+    return autoScrollForElements({ element });
+  }, []);
   return (
     <aside
       className="flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground"
       onClick={deselectOnBackgroundClick(select)}
     >
       <PanelHeader>Navigator</PanelHeader>
-      <div className="grid flex-1 content-start gap-1 overflow-auto p-1">
+      <div
+        ref={scroller}
+        className="grid flex-1 content-start gap-1 overflow-auto p-1"
+      >
         <NavigatorRow
           icon={Box}
           label={name}

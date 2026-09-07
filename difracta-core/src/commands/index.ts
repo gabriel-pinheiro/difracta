@@ -1,6 +1,7 @@
 import type { CommandDefinition } from "../command/command.ts";
 import { CommandRegistry } from "../command/registry.ts";
 import { addressSet, addressToggle } from "./address.set.ts";
+import { entityMove } from "./entity.move.ts";
 import { installationRename } from "./installation.rename.ts";
 import { outputCreate } from "./output.create.ts";
 import { outputRemove } from "./output.remove.ts";
@@ -16,6 +17,7 @@ export const builtInCommands: readonly CommandDefinition<never>[] = [
   outputRemove,
   addressSet,
   addressToggle,
+  entityMove,
 ] as unknown as readonly CommandDefinition<never>[];
 
 export function createBuiltInRegistry(): CommandRegistry {

@@ -1,5 +1,5 @@
 import type { DocumentView } from "@difracta/client";
-import type { Output, Table } from "@difracta/core";
+import { orderedEntries, type Output, type Table } from "@difracta/core";
 
 import { OutputCard } from "@/entities/output/output-card";
 import { useDocumentPath } from "@/lib/client";
@@ -13,7 +13,7 @@ import {
 export function OutputsTab({ view }: { readonly view: DocumentView }) {
   const { selection, select } = useSelection();
   const outputs = useDocumentPath<Table<Output>>(view, ["outputs"]) ?? {};
-  const list = Object.values(outputs);
+  const list = orderedEntries(outputs);
   if (list.length === 0) {
     return (
       <p className="p-3 text-muted-foreground">
