@@ -1,7 +1,6 @@
 import { DifractaClient } from "@difracta/client";
 
 import { OutputPage } from "./output-page.ts";
-import "./output.css";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#frame");
 const overlay = document.querySelector<HTMLDivElement>("#overlay");
