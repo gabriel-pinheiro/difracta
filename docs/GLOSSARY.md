@@ -453,8 +453,9 @@ Operational state is never written to it.
 ### Autosave
 
 A sidecar file `<name>.<timestamp>.autosave.difracta` the runtime writes next to
-a dirty Installation File on a short debounce. Studio offers recovery when the
-sidecar is newer than the Installation File. A successful save removes it.
+a dirty Installation File on a short debounce. Opening an Installation File
+whose Autosave is newer loads the Autosave, and Studio offers to save it or
+revert to the file. A successful save or a revert removes it.
 
 ## Deferred terminology
 

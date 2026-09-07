@@ -12,10 +12,12 @@ export const RuntimeRequestSchemas = {
     .strict(),
   "documents.open": z
     .object({
-      /** Path relative to the runtime's projects directory, or absolute. */
+      /**
+       * Path relative to the runtime's projects directory, or absolute. When
+       * an autosave newer than the file exists it is loaded instead and the
+       * document opens dirty and `recovered`.
+       */
       path: z.string().min(1),
-      /** Load the newest autosave sidecar instead of the file. */
-      recover: z.boolean().optional(),
     })
     .strict(),
   "documents.save": z
@@ -25,6 +27,8 @@ export const RuntimeRequestSchemas = {
       path: z.string().min(1).optional(),
     })
     .strict(),
+  /** Reload the file as last saved over the open document, dropping autosaves. */
+  "documents.revert": z.object({ documentId: z.string().min(1) }).strict(),
   "documents.close": z
     .object({ documentId: z.string().min(1), discard: z.boolean().optional() })
     .strict(),

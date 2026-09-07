@@ -94,6 +94,8 @@ export const DocumentSummarySchema = z
     name: z.string(),
     path: z.string().nullable(),
     dirty: z.boolean(),
+    /** Loaded from an autosave newer than the file; cleared by save or revert. */
+    recovered: z.boolean(),
     revision: z.number().int().nonnegative(),
     outputs: z.array(z.object({ id: z.string(), name: z.string() }).strict()),
   })

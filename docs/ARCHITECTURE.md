@@ -133,11 +133,20 @@ gives agents `difracta undo`.
 ## Files
 
 One Installation per `.difracta` file: JSON with sorted keys, a `kind` and
-`formatVersion`. Save is explicit. Dirty documents autosave to a sibling
-`<name>.<timestamp>.autosave.difracta` on a debounce (`settings.autosave`); the
-file listing flags a sidecar newer than the file and `documents.open` can
-recover from it. A successful save removes the sidecar. The runtime remembers
-which files were open and reopens them on start.
+`formatVersion`. The runtime opens exactly the files named on its command line
+and nothing else; Studio and the CLI open more through `documents.open`.
+
+Save is explicit and atomic: the content is written to a sibling temporary file,
+flushed to disk, then renamed over the target, so a crash leaves either the old
+file or the complete new one.
+
+Dirty documents autosave to a sibling `<name>.<timestamp>.autosave.difracta` on
+a debounce (`settings.autosave`); only the newest sidecar is kept. Opening a
+file whose sidecar is younger than the file loads the sidecar instead: the
+document starts dirty and `recovered`, Studio shows a banner, and nothing is
+written until someone saves. `documents.revert` reloads the file as saved over
+the open document in one delta and drops the sidecars. A successful save also
+removes them.
 
 **Why:** users of DAWs and Chataigne expect one document per file that can be
 versioned next to the rest of a show and moved between machines. Explicit save
