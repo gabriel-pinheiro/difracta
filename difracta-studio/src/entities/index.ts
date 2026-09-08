@@ -1,6 +1,7 @@
 import type { DocumentView } from "@difracta/client";
 import type { ComponentType } from "react";
 
+import { maskEntity } from "./mask/mask-entity";
 import { outputEntity } from "./output/output-entity";
 import { surfaceEntity } from "./surface/surface-entity";
 
@@ -12,7 +13,8 @@ import { surfaceEntity } from "./surface/surface-entity";
 export interface EntityModule {
   /** Section label in the navigator, plural. */
   readonly label: string;
-  readonly Section: ComponentType<{ readonly view: DocumentView }>;
+  /** Top-level kinds have a section; child kinds render rows under their parent instead. */
+  readonly Section?: ComponentType<{ readonly view: DocumentView }>;
   readonly Inspector: ComponentType<{
     readonly view: DocumentView;
     readonly id: string;
@@ -22,6 +24,7 @@ export interface EntityModule {
 export const entities = {
   output: outputEntity,
   surface: surfaceEntity,
+  mask: maskEntity,
 } as const satisfies Record<string, EntityModule>;
 
 export type EntityKind = keyof typeof entities;

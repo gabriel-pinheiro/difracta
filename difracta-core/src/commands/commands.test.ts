@@ -290,6 +290,214 @@ describe("built-in commands", () => {
     expect(applyPatches(gone.document, gone.inverse)).toEqual(removed.document);
   });
 
+  function withSurface(): Document {
+    let document = run(emptyDocument("Living"), "output.create", {
+      id: "out_a",
+      name: "Projector",
+    }).document;
+    document = run(document, "surface.create", {
+      id: "sur_a",
+      name: "Wall",
+    }).document;
+    return run(document, "surface.create", {
+      id: "sur_b",
+      name: "Floor",
+    }).document;
+  }
+
+  it("creates Masks as inset include rectangles, named and ordered per Surface", () => {
+    const first = run(withSurface(), "mask.create", {
+      id: "mask_a",
+      surfaceId: "sur_a",
+      name: "Outlet",
+    });
+    expect(first.document.masks.mask_a).toEqual({
+      id: "mask_a",
+      name: "Outlet",
+      surfaceId: "sur_a",
+      mode: "include",
+      points: [
+        { x: 0.1, y: 0.1 },
+        { x: 0.9, y: 0.1 },
+        { x: 0.9, y: 0.9 },
+        { x: 0.1, y: 0.9 },
+      ],
+      feather: 0,
+      order: "a0",
+    });
+    expect(first.label).toBe("Create Mask “Outlet”");
+
+    // Names and order keys are scoped to the Surface, not the whole table.
+    const sameSurface = run(first.document, "mask.create", {
+      id: "mask_b",
+      surfaceId: "sur_a",
+      name: "Outlet",
+    });
+    expect(sameSurface.document.masks.mask_b).toMatchObject({
+      name: "Outlet 1",
+      order: "a1",
+    });
+    const otherSurface = run(sameSurface.document, "mask.create", {
+      id: "mask_c",
+      surfaceId: "sur_b",
+      name: "Outlet",
+    });
+    expect(otherSurface.document.masks.mask_c).toMatchObject({
+      name: "Outlet",
+      order: "a0",
+    });
+    expect(
+      executeCommand(registry, first.document, "mask.create", {
+        surfaceId: "sur_missing",
+        name: "x",
+      }),
+    ).toMatchObject({ ok: false });
+
+    const renamed = run(otherSurface.document, "mask.rename", {
+      maskId: "mask_b",
+      name: "outlet",
+    });
+    expect(renamed.document.masks.mask_b?.name).toBe("outlet 1");
+    const updated = run(renamed.document, "mask.update", {
+      maskId: "mask_a",
+      mode: "exclude",
+      feather: 0.05,
+    });
+    expect(updated.document.masks.mask_a).toMatchObject({
+      mode: "exclude",
+      feather: 0.05,
+    });
+    expect(updated.patches).toHaveLength(2);
+    expect(applyPatches(updated.document, updated.inverse)).toEqual(
+      renamed.document,
+    );
+  });
+
+  it("moves Masks only among the Masks of their Surface", () => {
+    let document = withSurface();
+    for (const [id, surfaceId] of [
+      ["mask_a", "sur_a"],
+      ["mask_b", "sur_a"],
+      ["mask_c", "sur_b"],
+    ] as const) {
+      document = run(document, "mask.create", {
+        id,
+        surfaceId,
+        name: id,
+      }).document;
+    }
+    const moved = run(document, "entity.move", {
+      table: "masks",
+      id: "mask_b",
+      after: null,
+    });
+    expect(moved.label).toBe("Move Mask");
+    expect(
+      orderedEntries(moved.document.masks)
+        .filter((mask) => mask.surfaceId === "sur_a")
+        .map((mask) => mask.id),
+    ).toEqual(["mask_b", "mask_a"]);
+    expect(
+      executeCommand(registry, document, "entity.move", {
+        table: "masks",
+        id: "mask_a",
+        after: "mask_c",
+      }),
+    ).toMatchObject({ ok: false });
+  });
+
+  it("edits Mask points within the point limits", () => {
+    const start = run(withSurface(), "mask.create", {
+      id: "mask_a",
+      surfaceId: "sur_a",
+      name: "Outlet",
+    }).document;
+    const points = (candidate: Document) => candidate.masks.mask_a?.points;
+
+    const set = run(start, "mask.point.set", {
+      maskId: "mask_a",
+      index: 1,
+      point: { x: 0.95, y: 0.2 },
+    });
+    expect(points(set.document)?.[1]).toEqual({ x: 0.95, y: 0.2 });
+    expect(set.coalesceKey).toBe("mask.point:mask_a:1");
+    const nudged = run(set.document, "mask.point.nudge", {
+      maskId: "mask_a",
+      index: 1,
+      by: { x: 0.01, y: 0 },
+    });
+    expect(points(nudged.document)?.[1]).toEqual({ x: 0.96, y: 0.2 });
+    expect(nudged.coalesceKey).toBe(set.coalesceKey);
+    expect(applyPatches(nudged.document, nudged.inverse)).toEqual(set.document);
+
+    const added = run(nudged.document, "mask.point.add", {
+      maskId: "mask_a",
+      after: 3,
+    });
+    expect(points(added.document)).toHaveLength(5);
+    // Halfway along the closing edge, from the last point back to the first.
+    expect(points(added.document)?.[4]).toEqual({ x: 0.1, y: 0.5 });
+
+    const removed = run(added.document, "mask.point.remove", {
+      maskId: "mask_a",
+      index: 4,
+    });
+    expect(points(removed.document)).toEqual(points(nudged.document));
+
+    let minimal = removed.document;
+    minimal = run(minimal, "mask.point.remove", {
+      maskId: "mask_a",
+      index: 0,
+    }).document;
+    expect(points(minimal)).toHaveLength(3);
+    expect(
+      executeCommand(registry, minimal, "mask.point.remove", {
+        maskId: "mask_a",
+        index: 0,
+      }),
+    ).toMatchObject({ ok: false });
+    expect(
+      executeCommand(registry, minimal, "mask.point.set", {
+        maskId: "mask_a",
+        index: 3,
+        point: { x: 0, y: 0 },
+      }),
+    ).toMatchObject({ ok: false });
+
+    let full = minimal;
+    while ((points(full)?.length ?? 0) < 16) {
+      full = run(full, "mask.point.add", {
+        maskId: "mask_a",
+        after: 0,
+      }).document;
+    }
+    expect(
+      executeCommand(registry, full, "mask.point.add", {
+        maskId: "mask_a",
+        after: 0,
+      }),
+    ).toMatchObject({ ok: false });
+  });
+
+  it("removing a Surface removes its Masks", () => {
+    let document = withSurface();
+    document = run(document, "mask.create", {
+      id: "mask_a",
+      surfaceId: "sur_a",
+      name: "A",
+    }).document;
+    document = run(document, "mask.create", {
+      id: "mask_c",
+      surfaceId: "sur_b",
+      name: "C",
+    }).document;
+    const removed = run(document, "surface.remove", { surfaceId: "sur_a" });
+    expect(Object.keys(removed.document.masks)).toEqual(["mask_c"]);
+    expect(applyPatches(removed.document, removed.inverse)).toEqual(document);
+    const gone = run(removed.document, "mask.remove", { maskId: "mask_c" });
+    expect(gone.document.masks).toEqual({});
+  });
+
   it("rejects malformed payloads before apply runs", () => {
     const result = executeCommand(
       registry,

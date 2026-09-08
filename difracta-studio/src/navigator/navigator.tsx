@@ -40,7 +40,9 @@ export function Navigator({ view }: { readonly view: DocumentView }) {
         />
         {entityKinds.map((kind) => {
           const { Section } = entities[kind];
-          return <Section key={kind} view={view} />;
+          return Section === undefined ? null : (
+            <Section key={kind} view={view} />
+          );
         })}
       </div>
     </aside>

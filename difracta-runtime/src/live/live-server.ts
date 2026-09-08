@@ -305,6 +305,9 @@ export class LiveServer {
       message.payload,
       session.actor,
     );
+    // The caller sees its own change before the reply, so code that runs on
+    // the reply (select the created entity) finds it in the view.
+    if (session.flushScheduled) this.#flush(session);
     this.#reply(
       session,
       message.requestId,

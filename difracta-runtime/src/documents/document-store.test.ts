@@ -171,6 +171,7 @@ describe("DocumentStore", () => {
         installation: { id: "i" as never, name: "N" },
         outputs: {},
         surfaces: {},
+        masks: {},
         operational: { blackout: true },
       }),
     );

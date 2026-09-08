@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 
 import { isBoolean, useStoredState } from "@/lib/storage";
 
+import { NavigatorEmptyRow } from "./navigator-row";
+
 /** Collapsible group of rows with a create button; the open state is remembered per browser. */
 export function NavigatorSection({
   storageKey,
@@ -53,9 +55,7 @@ export function NavigatorSection({
         (empty === undefined ? (
           <div className="grid gap-px">{children}</div>
         ) : (
-          <p className="h-6 truncate pl-5 text-xs/6 text-muted-foreground/60 italic">
-            {empty}
-          </p>
+          <NavigatorEmptyRow>{empty}</NavigatorEmptyRow>
         ))}
     </section>
   );

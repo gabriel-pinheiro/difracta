@@ -2,16 +2,19 @@ import type { DocumentView } from "@difracta/client";
 import {
   orderedEntries,
   tableEntries,
+  type Mask,
   type Output,
   type Surface,
   type Table,
 } from "@difracta/core";
+import { SquareDashed } from "lucide-react";
 import { useEffect } from "react";
 
 import { InspectorHeading } from "@/inspector/fields/inspector-heading";
 import { NameField } from "@/inspector/fields/name-field";
 import { SelectField } from "@/inspector/fields/select-field";
 import { useCommand, useDocumentPath } from "@/lib/client";
+import { useExpansion } from "@/navigator/expansion";
 import { useSelection } from "@/selection/selection";
 
 import {
@@ -20,7 +23,7 @@ import {
   type SessionTable,
 } from "@/entities/output/output-live";
 
-import { QuadEditor } from "./quad-editor";
+import { QuadEditor, quadPoints } from "./quad-editor";
 
 /** Frame shape assumed until an Output Session reports its real resolution. */
 const DEFAULT_ASPECT = 16 / 9;
@@ -34,13 +37,16 @@ export function SurfaceInspector({
 }) {
   const command = useCommand(view);
   const { select } = useSelection();
+  const { setExpanded } = useExpansion();
   const surface = useDocumentPath<Surface>(view, ["surfaces", id]);
   const outputs = useDocumentPath<Table<Output>>(view, ["outputs"]) ?? {};
+  const masks = useDocumentPath<Table<Mask>>(view, ["masks"]) ?? {};
 
   useEffect(() => {
     if (surface === undefined) select({ kind: "installation" });
   }, [surface, select]);
   if (surface === undefined) return null;
+  const owned = orderedEntries(masks).filter((mask) => mask.surfaceId === id);
 
   return (
     <>
@@ -72,6 +78,39 @@ export function SurfaceInspector({
         ) : (
           <Mapping view={view} surface={surface} outputId={surface.output} />
         )}
+        <div className="grid gap-1">
+          <span className="text-xs text-muted-foreground">Masks</span>
+          {owned.length === 0 ? (
+            <p className="text-[0.6875rem]/relaxed text-muted-foreground">
+              No Masks: the whole Surface is lit. Add one from its row in the
+              navigator.
+            </p>
+          ) : (
+            <ul className="grid gap-px">
+              {owned.map((mask) => (
+                <li key={mask.id}>
+                  <button
+                    type="button"
+                    className="flex h-6 w-full items-center gap-1.5 rounded-sm px-1.5 text-left text-xs hover:bg-accent hover:text-accent-foreground"
+                    onClick={() => {
+                      // Selecting from here reveals the Mask's row in the navigator.
+                      setExpanded("surface", id, true);
+                      select({ kind: "mask", id: mask.id });
+                    }}
+                  >
+                    <SquareDashed className="size-3.5 shrink-0 text-muted-foreground" />
+                    <span className="truncate">{mask.name}</span>
+                    {mask.mode === "exclude" && (
+                      <span className="ml-auto text-[0.625rem] text-muted-foreground">
+                        exclude
+                      </span>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </>
   );
@@ -105,7 +144,7 @@ function Mapping({
   const others = tableEntries(surfaces).flatMap((other) => {
     const corners = other.mappings[outputId]?.corners;
     return other.id !== surface.id && other.output === outputId && corners
-      ? [{ name: other.name, corners }]
+      ? [{ name: other.name, points: quadPoints(corners) }]
       : [];
   });
   return (

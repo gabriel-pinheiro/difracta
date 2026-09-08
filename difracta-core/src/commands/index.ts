@@ -3,6 +3,16 @@ import { CommandRegistry } from "../command/registry.ts";
 import { addressSet, addressToggle } from "./address.set.ts";
 import { entityMove } from "./entity.move.ts";
 import { installationRename } from "./installation.rename.ts";
+import { maskCreate } from "./mask.create.ts";
+import {
+  maskPointAdd,
+  maskPointNudge,
+  maskPointRemove,
+  maskPointSet,
+} from "./mask.point.ts";
+import { maskRemove } from "./mask.remove.ts";
+import { maskRename } from "./mask.rename.ts";
+import { maskUpdate } from "./mask.update.ts";
 import { outputCreate } from "./output.create.ts";
 import { outputRemove } from "./output.remove.ts";
 import { outputRename } from "./output.rename.ts";
@@ -26,6 +36,14 @@ export const builtInCommands: readonly CommandDefinition<never>[] = [
   surfaceCornerSet,
   surfaceCornerNudge,
   surfaceRemove,
+  maskCreate,
+  maskRename,
+  maskUpdate,
+  maskPointSet,
+  maskPointNudge,
+  maskPointAdd,
+  maskPointRemove,
+  maskRemove,
   addressSet,
   addressToggle,
   entityMove,

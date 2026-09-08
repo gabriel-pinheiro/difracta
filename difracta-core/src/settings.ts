@@ -21,6 +21,10 @@ export const settings = {
     /** Delay between a document becoming dirty and its sidecar being written. */
     delayMs: 5_000,
   },
+  masks: {
+    /** A new Mask is the Surface minus this fraction on each side. */
+    defaultInset: 0.1,
+  },
   live: {
     /** How often an Output page reports telemetry. */
     telemetryIntervalMs: 1_000,

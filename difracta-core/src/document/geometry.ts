@@ -47,6 +47,25 @@ export function roundPoint(point: Point): Point {
   };
 }
 
+/** The unit square shrunk by `inset` on every side, as a point list. */
+export function insetPolygon(inset: number): readonly Point[] {
+  const near = inset;
+  const far = 1 - inset;
+  return [
+    { x: near, y: near },
+    { x: far, y: near },
+    { x: far, y: far },
+    { x: near, y: far },
+  ];
+}
+
+export function midpoint(first: Point, second: Point): Point {
+  return roundPoint({
+    x: (first.x + second.x) / 2,
+    y: (first.y + second.y) / 2,
+  });
+}
+
 export function addPoints(point: Point, delta: Point): Point {
   return roundPoint({ x: point.x + delta.x, y: point.y + delta.y });
 }

@@ -12,7 +12,8 @@ import {
 } from "@/components/ui/context-menu";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useNow } from "@/lib/use-now";
-import { NavigatorRow } from "@/navigator/navigator-row";
+import { useExpansion } from "@/navigator/expansion";
+import { NavigatorEmptyRow, NavigatorRow } from "@/navigator/navigator-row";
 import { NavigatorSection } from "@/navigator/navigator-section";
 import { SortableItem, SortableList } from "@/navigator/sortable";
 import { isSelected, useSelection } from "@/selection/selection";
@@ -109,7 +110,7 @@ export function OutputsSection({ view }: { readonly view: DocumentView }) {
   );
 }
 
-/** The Output's row plus one row per Output Session under it. */
+/** The Output's row plus, while open, one row per Output Session under it. */
 function OutputRow({
   view,
   output,
@@ -130,12 +131,16 @@ function OutputRow({
     ]),
   );
   const now = useNow(sessions.some((session) => session.stale));
+  const { isExpanded, setExpanded } = useExpansion();
+  const expanded = isExpanded("output", output.id);
   return (
     <>
       <NavigatorRow
         icon={MonitorUp}
         label={output.name}
         selected={selected}
+        expanded={expanded}
+        onToggle={(next) => setExpanded("output", output.id, next)}
         onSelect={onSelect}
       >
         <span
@@ -143,24 +148,28 @@ function OutputRow({
           title={toneTitle(sessions)}
         />
       </NavigatorRow>
-      {sessions.map((session) => (
-        <NavigatorRow
-          key={session.sessionId}
-          icon={Monitor}
-          depth={2}
-          label={`${formatResolution(session)} ${formatScale(session)}`}
-          selected={false}
-          onSelect={onSelect}
-        >
-          <span className="font-mono text-[0.625rem] text-muted-foreground">
-            {sessionStatus(session, now)}
-          </span>
-          <span
-            className={`size-1.5 shrink-0 rounded-full ${toneClass[session.stale ? "stale" : "live"]}`}
-            title={session.stale ? "Stopped reporting" : "Reporting"}
-          />
-        </NavigatorRow>
-      ))}
+      {expanded && sessions.length === 0 && (
+        <NavigatorEmptyRow depth={2}>Not connected</NavigatorEmptyRow>
+      )}
+      {expanded &&
+        sessions.map((session) => (
+          <NavigatorRow
+            key={session.sessionId}
+            icon={Monitor}
+            depth={2}
+            label={`${formatResolution(session)} ${formatScale(session)}`}
+            selected={false}
+            onSelect={onSelect}
+          >
+            <span className="font-mono text-[0.625rem] text-muted-foreground">
+              {sessionStatus(session, now)}
+            </span>
+            <span
+              className={`size-1.5 shrink-0 rounded-full ${toneClass[session.stale ? "stale" : "live"]}`}
+              title={session.stale ? "Stopped reporting" : "Reporting"}
+            />
+          </NavigatorRow>
+        ))}
     </>
   );
 }

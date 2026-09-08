@@ -91,6 +91,8 @@ describe("live protocol", () => {
       { id: "out_a", name: "TV" },
     );
     expect(reply).toMatchObject({ revision: 1, changed: true });
+    // The caller's own delta precedes its reply, so the view already has it.
+    expect(studioView.get()?.outputs.out_a?.name).toBe("TV");
     await waitFor(() => (outputView.revision.get() === 1 ? true : undefined));
     expect(names).toEqual(["TV"]);
     expect(studioView.get()?.outputs.out_a?.name).toBe("TV");

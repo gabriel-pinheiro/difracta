@@ -4,10 +4,11 @@ import {
   generateId,
   type Id,
   type InstallationId,
+  type MaskId,
   type OutputId,
   type SurfaceId,
 } from "../ids.ts";
-import { QuadSchema } from "./geometry.ts";
+import { PointSchema, QuadSchema } from "./geometry.ts";
 import { DEFAULT_ORDER_KEY } from "./order.ts";
 
 /**
@@ -78,6 +79,34 @@ export const SurfaceSchema = z
   .strict();
 export type Surface = Entity<typeof SurfaceSchema, SurfaceId>;
 
+export const MASK_POINTS = { min: 3, max: 16 } as const;
+
+/**
+ * A polygon in Surface Space deciding which part of its Surface is lit. A
+ * Surface with no include Masks is fully lit; with any, it starts closed.
+ * Masks then apply in order, each opening (include) or closing (exclude)
+ * only its own polygon. Feather fades inward only, as a fraction of Surface
+ * Space, so it never spills past the physical edge the Mask respects.
+ */
+export const MaskSchema = z
+  .object({
+    id: z.string().min(1),
+    name: EntityName,
+    surfaceId: z.string().min(1),
+    mode: z.enum(["include", "exclude"]),
+    points: z
+      .array(PointSchema)
+      .min(MASK_POINTS.min)
+      .max(MASK_POINTS.max)
+      .readonly(),
+    feather: z.number().min(0).max(1),
+    /** Position among the Masks of the same Surface. */
+    order: z.string().min(1).default(DEFAULT_ORDER_KEY),
+  })
+  .strict();
+export type Mask = Entity<typeof MaskSchema, MaskId>;
+export type MaskMode = Mask["mode"];
+
 export const OperationalSchema = z
   .object({
     blackout: z.boolean(),
@@ -94,6 +123,7 @@ export const DocumentSchema = z
     installation: InstallationSchema,
     outputs: z.record(z.string(), OutputSchema),
     surfaces: z.record(z.string(), SurfaceSchema),
+    masks: z.record(z.string(), MaskSchema),
     operational: OperationalSchema,
   })
   .strict();
@@ -102,6 +132,7 @@ export interface Document {
   readonly installation: Installation;
   readonly outputs: Table<Output>;
   readonly surfaces: Table<Surface>;
+  readonly masks: Table<Mask>;
   readonly operational: Operational;
 }
 
@@ -109,6 +140,7 @@ export interface Document {
 export const TABLE_SCHEMAS = {
   outputs: OutputSchema,
   surfaces: SurfaceSchema,
+  masks: MaskSchema,
 } as const;
 export type TableName = keyof typeof TABLE_SCHEMAS;
 
@@ -116,8 +148,34 @@ export type TableName = keyof typeof TABLE_SCHEMAS;
 export const ORDERED_TABLES = [
   "outputs",
   "surfaces",
+  "masks",
 ] as const satisfies readonly TableName[];
 export type OrderedTableName = (typeof ORDERED_TABLES)[number];
+
+/**
+ * Ordered tables whose entities are children: siblings share the value of
+ * this field, and order keys and names are unique only among siblings.
+ */
+export const PARENT_FIELDS: Partial<Record<OrderedTableName, string>> = {
+  masks: "surfaceId",
+};
+
+/** The entities of `table` that share `entity`'s parent, `entity` included. */
+export function siblingsOf<TEntity extends { readonly id: string }>(
+  tableName: OrderedTableName,
+  table: Table<TEntity>,
+  entity: TEntity,
+): Table<TEntity> {
+  const field = PARENT_FIELDS[tableName];
+  if (field === undefined) return table;
+  const parent = (entity as Record<string, unknown>)[field];
+  return Object.fromEntries(
+    Object.entries(table).filter(
+      ([, candidate]) =>
+        (candidate as Record<string, unknown>)[field] === parent,
+    ),
+  );
+}
 
 export const defaultOperational: Operational = { blackout: false };
 
@@ -126,6 +184,7 @@ export function emptyDocument(name: string): Document {
     installation: { id: generateId("installation"), name },
     outputs: {},
     surfaces: {},
+    masks: {},
     operational: defaultOperational,
   };
 }

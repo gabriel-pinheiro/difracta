@@ -56,12 +56,15 @@ Document
 ├── installation { id, name }
 ├── outputs { [id]: Output }
 ├── surfaces { [id]: Surface }        output, mappings per Output
+├── masks { [id]: Mask }              surfaceId, mode, points, feather
 └── operational { blackout }          replicated, never saved
 ```
 
-Entity names inside one table are unique. Creating or renaming an entity into a
-name that is taken yields the next free `Name N` (`document/names.ts`), the way
-DAWs and Chataigne do, instead of failing.
+Entity names inside one table are unique, or, for child entities such as Masks,
+unique among the children of one parent (`PARENT_FIELDS`, `siblingsOf`).
+Creating or renaming an entity into a name that is taken yields the next free
+`Name N` (`document/names.ts`), the way DAWs and Chataigne do, instead of
+failing.
 
 Entities the user can arrange carry an `order` key (`document/order.ts`): a
 short string that sorts lexicographically, produced by fractional indexing.
@@ -93,6 +96,25 @@ Corners are edited by `surface.corner.set` (absolute) and `surface.corner.nudge`
 (relative). Both coalesce under one key per corner, so a drag or a held arrow
 key is one undo step, and both round to a millionth of the frame so files stay
 free of float noise.
+
+### Masks
+
+A Mask is a polygon in Surface Space, three to sixteen points, that decides
+which part of its Surface is lit: `include` lights only its area, `exclude`
+never lights it. A Surface with no include Masks is fully lit; with any, it
+starts closed, and Masks then apply in order, each changing only its own
+polygon. Feather is a fraction of Surface Space and fades inward only. Masks
+live in their own table with a `surfaceId` and an `order` key scoped to that
+Surface; `entity.move` keeps a Mask among its siblings. Removing a Surface
+removes its Masks. Point commands (`mask.point.set`, `.nudge`, `.add`,
+`.remove`) replace the whole `points` array, because patch paths address object
+keys, not array positions, and sixteen points is a small value.
+
+**Why a table rather than an array on the Surface:** Masks are selected,
+renamed, reordered and inspected like any entity, and the navigator and
+inspector iterate the entity registry. A row in a table with a parent id gets
+all of that from the generic code; an array inside the Surface would need its
+own selection, move and validation paths.
 
 **Why mappings live on the Surface:** a mapping is calibration, and calibration
 is what an operator loses when a projector is swapped and swapped back. Keeping
@@ -157,8 +179,10 @@ subscribed to; the client drops views of a replaced one.
   a second (`settings.live`). A session with no report for a few seconds shows
   as stale, one silent for minutes is dropped, and a closed socket drops it at
   once. Removing the Output drops its sessions.
-- `command` is acknowledged with a `reply`. `history.undo` and `history.redo`
-  are commands too.
+- `command` is acknowledged with a `reply`. The caller's own delta is flushed
+  before its reply, so code that runs on the reply (select what was just
+  created) already finds it in the view. `history.undo` and `history.redo` are
+  commands too.
 - `input` is an unacknowledged latest-wins write to an Address, coalesced per
   frame on the client; the runtime applies it as `address.set`.
 - `request` covers runtime-scoped operations: `documents.new/open` (replace the
@@ -239,9 +263,14 @@ Installation as root row, then one collapsible section per entity kind. The
 right column is the inspector, showing the settings of whatever is selected. The
 center holds tabs; the Outputs tab shows one card per Output. Selection is
 Studio-local state and never reaches the runtime; the selected row and card
-carry an outline so the inspector's subject is visible at a glance. Column sizes
-and section open states are remembered per browser in localStorage. An empty
-section says how to add its first entity.
+carry an outline so the inspector's subject is visible at a glance. Rows with
+children open and close with a chevron: Output rows start open so their live
+sessions stay in view, Surface rows start closed so Masks do not crowd the list;
+creating a child or selecting one from an inspector opens its parent. Column
+sizes and section open states are remembered per browser in localStorage; row
+open states live in memory and reset with the Installation. An empty section
+says how to add its first entity, and an open row without children says so in
+one dim line.
 
 Why per-entity folders: every entity kind contributes the same two pieces, a
 navigator section and an inspector, and they change together. Each kind lives in

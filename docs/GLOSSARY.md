@@ -70,7 +70,8 @@ A Mask belongs to a Surface, not to a Surface Mapping: it records a physical
 fact about the receiving surface and therefore travels with the Surface when its
 enabled Output changes. It is `include`, meaning only its area is lit, or
 `exclude`, meaning its area is never lit, and it has 3–16 points forming a
-closed polygon plus its own feather amount.
+closed polygon plus its own feather amount. Masks of one Surface are ordered and
+named uniquely within that Surface.
 
 A Surface with no Include Masks is fully lit; one with any Include Mask starts
 fully closed. Masks then apply in array order, each opening or closing only its

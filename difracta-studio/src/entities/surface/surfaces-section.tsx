@@ -1,11 +1,12 @@
 import type { DocumentView } from "@difracta/client";
 import {
   orderedEntries,
+  type Mask,
   type Output,
   type Surface,
   type Table,
 } from "@difracta/core";
-import { Box, Trash2 } from "lucide-react";
+import { Box, SquareDashed, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { NameDialog } from "@/components/name-dialog";
@@ -13,10 +14,13 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { generateMaskId, MaskRows } from "@/entities/mask/mask-rows";
 import { useCommand, useDocumentPath } from "@/lib/client";
-import { NavigatorRow } from "@/navigator/navigator-row";
+import { useExpansion } from "@/navigator/expansion";
+import { NavigatorEmptyRow, NavigatorRow } from "@/navigator/navigator-row";
 import { NavigatorSection } from "@/navigator/navigator-section";
 import { SortableItem, SortableList } from "@/navigator/sortable";
 import { isSelected, useSelection } from "@/selection/selection";
@@ -29,17 +33,32 @@ function generateSurfaceId(): string {
 export function SurfacesSection({ view }: { readonly view: DocumentView }) {
   const command = useCommand(view);
   const { selection, select } = useSelection();
+  const { isExpanded, setExpanded } = useExpansion();
   const surfaces = useDocumentPath<Table<Surface>>(view, ["surfaces"]) ?? {};
   const outputs = useDocumentPath<Table<Output>>(view, ["outputs"]) ?? {};
-  const [naming, setNaming] = useState(false);
+  const masks = useDocumentPath<Table<Mask>>(view, ["masks"]) ?? {};
+  const [naming, setNaming] = useState<
+    { kind: "surface" } | { kind: "mask"; surface: Surface } | undefined
+  >(undefined);
   const ordered = orderedEntries(surfaces);
 
   function create(name: string): void {
+    if (naming?.kind === "mask") {
+      const id = generateMaskId();
+      const surfaceId = naming.surface.id;
+      void command("mask.create", { id, surfaceId, name }).then(() => {
+        setExpanded("surface", surfaceId, true);
+        select({ kind: "mask", id });
+      });
+      return;
+    }
     const id = generateSurfaceId();
     void command("surface.create", { id, name }).then(() => {
       select({ kind: "surface", id });
     });
   }
+  const maskCount = (surface: Surface): number =>
+    Object.values(masks).filter((mask) => mask.surfaceId === surface.id).length;
 
   return (
     <>
@@ -49,7 +68,7 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
         empty={
           ordered.length === 0 ? "No Surfaces. Press + to add one." : undefined
         }
-        onCreate={() => setNaming(true)}
+        onCreate={() => setNaming({ kind: "surface" })}
       >
         <SortableList
           kind="surface"
@@ -62,6 +81,7 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
           {ordered.map((surface) => {
             const output =
               surface.output === null ? undefined : outputs[surface.output];
+            const expanded = isExpanded("surface", surface.id);
             return (
               <SortableItem key={surface.id} id={surface.id}>
                 <ContextMenu>
@@ -70,9 +90,14 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
                       icon={Box}
                       label={surface.name}
                       selected={isSelected(selection, "surface", surface.id)}
+                      expanded={expanded}
+                      onToggle={(next) =>
+                        setExpanded("surface", surface.id, next)
+                      }
                       onSelect={() =>
                         select({ kind: "surface", id: surface.id })
                       }
+                      onCreate={() => setNaming({ kind: "mask", surface })}
                     >
                       <span
                         className={
@@ -87,6 +112,12 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
                   </ContextMenuTrigger>
                   <ContextMenuContent>
                     <ContextMenuItem
+                      onClick={() => setNaming({ kind: "mask", surface })}
+                    >
+                      <SquareDashed /> Add Mask…
+                    </ContextMenuItem>
+                    <ContextMenuSeparator />
+                    <ContextMenuItem
                       variant="destructive"
                       onClick={() =>
                         void command("surface.remove", {
@@ -98,6 +129,12 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
                     </ContextMenuItem>
                   </ContextMenuContent>
                 </ContextMenu>
+                {expanded &&
+                  (maskCount(surface) === 0 ? (
+                    <NavigatorEmptyRow depth={2}>No Masks</NavigatorEmptyRow>
+                  ) : (
+                    <MaskRows view={view} surfaceId={surface.id} />
+                  ))}
               </SortableItem>
             );
           })}
@@ -105,17 +142,25 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
       </NavigatorSection>
       <NameDialog
         request={
-          naming
-            ? {
-                title: "New Surface",
-                label: "Name",
-                initial: `Surface ${String(ordered.length + 1)}`,
-                submitLabel: "Create",
-                onSubmit: create,
-              }
-            : undefined
+          naming === undefined
+            ? undefined
+            : naming.kind === "surface"
+              ? {
+                  title: "New Surface",
+                  label: "Name",
+                  initial: `Surface ${String(ordered.length + 1)}`,
+                  submitLabel: "Create",
+                  onSubmit: create,
+                }
+              : {
+                  title: `New Mask on ${naming.surface.name}`,
+                  label: "Name",
+                  initial: `Mask ${String(maskCount(naming.surface) + 1)}`,
+                  submitLabel: "Create",
+                  onSubmit: create,
+                }
         }
-        onClose={() => setNaming(false)}
+        onClose={() => setNaming(undefined)}
       />
     </>
   );

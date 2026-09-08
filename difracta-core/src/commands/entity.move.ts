@@ -1,7 +1,11 @@
 import { z } from "zod";
 
 import { accepted, defineCommand, rejected } from "../command/command.ts";
-import { ORDERED_TABLES, type OrderedTableName } from "../document/document.ts";
+import {
+  ORDERED_TABLES,
+  siblingsOf,
+  type OrderedTableName,
+} from "../document/document.ts";
 import {
   orderedEntries,
   orderKeysForMove,
@@ -12,9 +16,10 @@ import type { Patch } from "../document/patch.ts";
 const labels: Record<OrderedTableName, string> = {
   outputs: "Output",
   surfaces: "Surface",
+  masks: "Mask",
 };
 
-/** Places an entity right after a sibling (or first) within its table. */
+/** Places an entity right after a sibling (or first) among its siblings: its table, or its parent's children. */
 export const entityMove = defineCommand({
   name: "entity.move",
   kind: "authoring",
@@ -31,17 +36,18 @@ export const entityMove = defineCommand({
   coalesceKey: ({ table, id }) => `entity.move:${table}:${id}`,
   apply({ document, payload }) {
     // Only `id` and `order` matter here, which every ordered table shares.
-    const table: Readonly<Record<string, Ordered>> = document[payload.table];
-    const moving = table[payload.id];
+    const whole: Readonly<Record<string, Ordered>> = document[payload.table];
+    const moving = whole[payload.id];
     if (moving === undefined)
       return rejected(
         `${labels[payload.table]} “${payload.id}” does not exist.`,
       );
     if (payload.after === payload.id)
       return rejected("An entity cannot be placed after itself.");
+    const table = siblingsOf(payload.table, whole, moving);
     if (payload.after !== null && !(payload.after in table))
       return rejected(
-        `${labels[payload.table]} “${payload.after}” does not exist.`,
+        `${labels[payload.table]} “${payload.after}” is not a sibling of “${payload.id}”.`,
       );
     const siblings = orderedEntries(table).filter(
       (entity) => entity.id !== moving.id,
