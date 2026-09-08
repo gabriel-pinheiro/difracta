@@ -1,6 +1,6 @@
 import type { DocumentView } from "@difracta/client";
 import { autoScrollForElements } from "@atlaskit/pragmatic-drag-and-drop-auto-scroll/element";
-import { Box } from "lucide-react";
+import { Theater } from "lucide-react";
 import { useEffect, useRef } from "react";
 
 import { PanelHeader } from "@/components/panel-header";
@@ -32,7 +32,7 @@ export function Navigator({ view }: { readonly view: DocumentView }) {
         className="grid flex-1 content-start gap-1 overflow-auto p-1"
       >
         <NavigatorRow
-          icon={Box}
+          icon={Theater}
           label={name}
           depth={0}
           selected={selection?.kind === "installation"}
