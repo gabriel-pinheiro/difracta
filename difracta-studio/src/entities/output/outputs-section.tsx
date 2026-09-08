@@ -2,7 +2,6 @@ import type { DocumentView } from "@difracta/client";
 import { orderedEntries, type Output, type Table } from "@difracta/core";
 import { Monitor, MonitorUp, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 
 import { NameDialog } from "@/components/name-dialog";
 import {
@@ -11,7 +10,7 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { useClient, useDocumentPath } from "@/lib/client";
+import { useCommand, useDocumentPath } from "@/lib/client";
 import { useNow } from "@/lib/use-now";
 import { NavigatorRow } from "@/navigator/navigator-row";
 import { NavigatorSection } from "@/navigator/navigator-section";
@@ -35,25 +34,15 @@ function generateOutputId(): string {
 
 /** Navigator section listing the Outputs; "+" asks for a name, creates one and selects it. */
 export function OutputsSection({ view }: { readonly view: DocumentView }) {
-  const client = useClient();
+  const command = useCommand(view);
   const { selection, select } = useSelection();
   const outputs = useDocumentPath<Table<Output>>(view, ["outputs"]) ?? {};
   const [naming, setNaming] = useState(false);
   const ordered = orderedEntries(outputs);
 
-  function run(name: string, payload: unknown): Promise<unknown> {
-    return client
-      .command(view.documentId, name, payload)
-      .catch((failure: unknown) => {
-        toast.error(
-          failure instanceof Error ? failure.message : String(failure),
-        );
-      });
-  }
-
   function create(name: string): void {
     const id = generateOutputId();
-    void run("output.create", { id, name }).then(() => {
+    void command("output.create", { id, name }).then(() => {
       select({ kind: "output", id });
     });
   }
@@ -63,6 +52,9 @@ export function OutputsSection({ view }: { readonly view: DocumentView }) {
       <NavigatorSection
         storageKey="output"
         label="Outputs"
+        empty={
+          ordered.length === 0 ? "No Outputs. Press + to add one." : undefined
+        }
         onCreate={() => setNaming(true)}
       >
         <SortableList
@@ -70,7 +62,7 @@ export function OutputsSection({ view }: { readonly view: DocumentView }) {
           ids={ordered.map((output) => output.id)}
           selectedId={selection?.kind === "output" ? selection.id : undefined}
           onMove={(id, after) =>
-            void run("entity.move", { table: "outputs", id, after })
+            void command("entity.move", { table: "outputs", id, after })
           }
         >
           {ordered.map((output) => (
@@ -88,7 +80,7 @@ export function OutputsSection({ view }: { readonly view: DocumentView }) {
                   <ContextMenuItem
                     variant="destructive"
                     onClick={() =>
-                      void run("output.remove", { outputId: output.id })
+                      void command("output.remove", { outputId: output.id })
                     }
                   >
                     <Trash2 /> Remove

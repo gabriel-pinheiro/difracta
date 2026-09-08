@@ -6,11 +6,13 @@ import {
 import type { PatchPath } from "@difracta/core";
 import {
   createContext,
+  useCallback,
   useContext,
   useMemo,
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import { toast } from "sonner";
 
 const ClientContext = createContext<DifractaClient | undefined>(undefined);
 
@@ -78,4 +80,24 @@ export function useDocumentPath<TValue>(
     [view, key],
   );
   return useSignal(signal);
+}
+
+/** Sends a command against `view`'s document; a rejection surfaces as a toast, never throws. */
+export function useCommand(
+  view: DocumentView,
+): (name: string, payload: unknown) => Promise<void> {
+  const client = useClient();
+  const { documentId } = view;
+  return useCallback(
+    (name, payload) =>
+      client.command(documentId, name, payload).then(
+        () => undefined,
+        (failure: unknown) => {
+          toast.error(
+            failure instanceof Error ? failure.message : String(failure),
+          );
+        },
+      ),
+    [client, documentId],
+  );
 }

@@ -7,6 +7,7 @@ export type Id<TKind extends string> = string & { readonly __kind: TKind };
 
 export type InstallationId = Id<"installation">;
 export type OutputId = Id<"output">;
+export type SurfaceId = Id<"surface">;
 export type SessionId = Id<"session">;
 export type DocumentId = Id<"document">;
 

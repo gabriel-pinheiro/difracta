@@ -87,14 +87,14 @@ concept.
 
 ### Surface Mapping
 
-The assignment and calibration relationship between one Surface and one Output.
-It transforms Surface Space into the Output's Projection Frame and may include a
-mesh and calibration metadata.
+The calibration of one Surface for one Output: the ordered four-corner
+quadrilateral, in normalized Projection Frame coordinates, where Surface Space
+lands. Corners may extend past the frame's visible bounds.
 
-For the initial engine, a Surface can have zero or one enabled Surface Mapping.
-It may retain dormant mappings for other Outputs so reassignment restores each
-projector's calibration. Changing its enabled Output changes the Installation,
-not its Scenes.
+A Surface holds one mapping per Output it was assigned to, and renders through
+at most one of them, its enabled Output. The others stay dormant so assigning
+the Surface back to an Output restores that projector's calibration. Changing
+the enabled Output changes the Installation, not its Scenes.
 
 ### Calibration
 

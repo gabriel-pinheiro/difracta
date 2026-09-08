@@ -7,11 +7,14 @@ import { isBoolean, useStoredState } from "@/lib/storage";
 export function NavigatorSection({
   storageKey,
   label,
+  empty,
   onCreate,
   children,
 }: {
   readonly storageKey: string;
   readonly label: string;
+  /** Shown in place of rows while the section has none. */
+  readonly empty?: string | undefined;
   readonly onCreate: () => void;
   readonly children: ReactNode;
 }) {
@@ -46,7 +49,14 @@ export function NavigatorSection({
           <Plus className="size-3" />
         </button>
       </div>
-      {expanded && <div className="grid gap-px">{children}</div>}
+      {expanded &&
+        (empty === undefined ? (
+          <div className="grid gap-px">{children}</div>
+        ) : (
+          <p className="h-6 truncate pl-5 text-xs/6 text-muted-foreground/60 italic">
+            {empty}
+          </p>
+        ))}
     </section>
   );
 }

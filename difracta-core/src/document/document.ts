@@ -5,7 +5,9 @@ import {
   type Id,
   type InstallationId,
   type OutputId,
+  type SurfaceId,
 } from "../ids.ts";
+import { QuadSchema } from "./geometry.ts";
 import { DEFAULT_ORDER_KEY } from "./order.ts";
 
 /**
@@ -50,6 +52,32 @@ export const OutputSchema = z
   .strict();
 export type Output = Entity<typeof OutputSchema, OutputId>;
 
+/** How one Surface lands in one Output's Projection Frame. */
+export const SurfaceMappingSchema = z
+  .object({
+    /** Where Surface Space's corners fall, in normalized Projection Frame coordinates. */
+    corners: QuadSchema,
+  })
+  .strict();
+export type SurfaceMapping = z.infer<typeof SurfaceMappingSchema>;
+
+export const SurfaceSchema = z
+  .object({
+    id: z.string().min(1),
+    name: EntityName,
+    /** The Output this Surface renders through, or null while unassigned. */
+    output: z.string().min(1).nullable(),
+    /**
+     * One mapping per Output the Surface was ever assigned to, keyed by Output
+     * id. Only the entry for `output` is used; the others stay dormant so
+     * assigning the Surface back to a projector restores its calibration.
+     */
+    mappings: z.record(z.string(), SurfaceMappingSchema),
+    order: z.string().min(1).default(DEFAULT_ORDER_KEY),
+  })
+  .strict();
+export type Surface = Entity<typeof SurfaceSchema, SurfaceId>;
+
 export const OperationalSchema = z
   .object({
     blackout: z.boolean(),
@@ -65,6 +93,7 @@ export const DocumentSchema = z
   .object({
     installation: InstallationSchema,
     outputs: z.record(z.string(), OutputSchema),
+    surfaces: z.record(z.string(), SurfaceSchema),
     operational: OperationalSchema,
   })
   .strict();
@@ -72,18 +101,21 @@ export const DocumentSchema = z
 export interface Document {
   readonly installation: Installation;
   readonly outputs: Table<Output>;
+  readonly surfaces: Table<Surface>;
   readonly operational: Operational;
 }
 
 /** Entity table schemas, keyed by the table's name in the Document. */
 export const TABLE_SCHEMAS = {
   outputs: OutputSchema,
+  surfaces: SurfaceSchema,
 } as const;
 export type TableName = keyof typeof TABLE_SCHEMAS;
 
 /** Tables whose entities carry an `order` key and can be rearranged. */
 export const ORDERED_TABLES = [
   "outputs",
+  "surfaces",
 ] as const satisfies readonly TableName[];
 export type OrderedTableName = (typeof ORDERED_TABLES)[number];
 
@@ -93,6 +125,7 @@ export function emptyDocument(name: string): Document {
   return {
     installation: { id: generateId("installation"), name },
     outputs: {},
+    surfaces: {},
     operational: defaultOperational,
   };
 }

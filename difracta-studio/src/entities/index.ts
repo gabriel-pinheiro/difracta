@@ -2,6 +2,7 @@ import type { DocumentView } from "@difracta/client";
 import type { ComponentType } from "react";
 
 import { outputEntity } from "./output/output-entity";
+import { surfaceEntity } from "./surface/surface-entity";
 
 /**
  * What one entity kind contributes to Studio: its navigator section and its
@@ -20,6 +21,7 @@ export interface EntityModule {
 
 export const entities = {
   output: outputEntity,
+  surface: surfaceEntity,
 } as const satisfies Record<string, EntityModule>;
 
 export type EntityKind = keyof typeof entities;

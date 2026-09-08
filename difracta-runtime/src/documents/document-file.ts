@@ -27,6 +27,8 @@ const DocumentFileSchema = z
     formatVersion: z.literal(FORMAT_VERSION),
     installation: DocumentSchema.shape.installation,
     outputs: DocumentSchema.shape.outputs,
+    /** Absent in files written before Surfaces existed. */
+    surfaces: DocumentSchema.shape.surfaces.default({}),
   })
   .strict();
 
@@ -46,6 +48,7 @@ export function serializeDocument(document: Document): string {
     formatVersion: FORMAT_VERSION,
     installation: document.installation,
     outputs: document.outputs,
+    surfaces: document.surfaces,
   };
   return `${JSON.stringify(sortKeys(file), null, 2)}\n`;
 }
@@ -75,6 +78,7 @@ export function parseDocumentFile(text: string): ParsedDocumentFile {
     document: {
       installation: parsed.data.installation as Document["installation"],
       outputs: parsed.data.outputs as Document["outputs"],
+      surfaces: parsed.data.surfaces as Document["surfaces"],
       operational: defaultOperational,
     },
   };

@@ -170,6 +170,7 @@ describe("DocumentStore", () => {
       serializeDocument({
         installation: { id: "i" as never, name: "N" },
         outputs: {},
+        surfaces: {},
         operational: { blackout: true },
       }),
     );

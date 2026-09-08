@@ -2,10 +2,17 @@ import { z } from "zod";
 
 import { accepted, defineCommand, rejected } from "../command/command.ts";
 import { ORDERED_TABLES, type OrderedTableName } from "../document/document.ts";
-import { orderedEntries, orderKeysForMove } from "../document/order.ts";
+import {
+  orderedEntries,
+  orderKeysForMove,
+  type Ordered,
+} from "../document/order.ts";
 import type { Patch } from "../document/patch.ts";
 
-const labels: Record<OrderedTableName, string> = { outputs: "Output" };
+const labels: Record<OrderedTableName, string> = {
+  outputs: "Output",
+  surfaces: "Surface",
+};
 
 /** Places an entity right after a sibling (or first) within its table. */
 export const entityMove = defineCommand({
@@ -23,7 +30,8 @@ export const entityMove = defineCommand({
   label: ({ table }) => `Move ${labels[table]}`,
   coalesceKey: ({ table, id }) => `entity.move:${table}:${id}`,
   apply({ document, payload }) {
-    const table = document[payload.table];
+    // Only `id` and `order` matter here, which every ordered table shares.
+    const table: Readonly<Record<string, Ordered>> = document[payload.table];
     const moving = table[payload.id];
     if (moving === undefined)
       return rejected(

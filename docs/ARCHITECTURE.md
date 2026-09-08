@@ -55,6 +55,7 @@ A Document is one Installation as entity tables keyed by id plus a small
 Document
 ├── installation { id, name }
 ├── outputs { [id]: Output }
+├── surfaces { [id]: Surface }        output, mappings per Output
 └── operational { blackout }          replicated, never saved
 ```
 
@@ -74,6 +75,32 @@ sort with `orderedEntries`; the file's sorted keys say nothing about order.
 the whole Installation. Flat tables keyed by id make a change one patch, keep
 validation local to the touched entity, and let ordering be a parent id plus an
 order key rather than array positions.
+
+### Surfaces and mappings
+
+A Surface names a real-world projection target. Its `output` is the Output it
+renders through, or null while unassigned, and `mappings` holds one Surface
+Mapping per Output it was ever assigned to, keyed by Output id. A mapping is the
+quadrilateral where Surface Space's corners land, in normalized Projection Frame
+coordinates (`document/geometry.ts`); corners may lie outside the unit square
+when a Surface overshoots the projector's edge. Only the mapping for `output` is
+used. `surface.assign` reuses a mapping the Surface already has for the chosen
+Output and otherwise creates one covering the whole frame; `surface.create`
+picks the only Output when the Installation has exactly one. Removing an Output
+removes its mapping from every Surface and unassigns the ones using it.
+
+Corners are edited by `surface.corner.set` (absolute) and `surface.corner.nudge`
+(relative). Both coalesce under one key per corner, so a drag or a held arrow
+key is one undo step, and both round to a millionth of the frame so files stay
+free of float noise.
+
+**Why mappings live on the Surface:** a mapping is calibration, and calibration
+is what an operator loses when a projector is swapped and swapped back. Keeping
+the dormant mappings on the Surface makes reassigning it to an earlier Output
+restore its corners for free, without a table or navigator row per Surface and
+Output pair. **Why a relative nudge command:** a held key sends commands faster
+than replies return; an absolute position computed from the view would repeat or
+lose steps, whereas deltas apply in full in any order.
 
 ## Commands and patches
 
@@ -213,7 +240,8 @@ right column is the inspector, showing the settings of whatever is selected. The
 center holds tabs; the Outputs tab shows one card per Output. Selection is
 Studio-local state and never reaches the runtime; the selected row and card
 carry an outline so the inspector's subject is visible at a glance. Column sizes
-and section open states are remembered per browser in localStorage.
+and section open states are remembered per browser in localStorage. An empty
+section says how to add its first entity.
 
 Why per-entity folders: every entity kind contributes the same two pieces, a
 navigator section and an inspector, and they change together. Each kind lives in
@@ -225,3 +253,11 @@ uniform.
 Blackout sits in the menu bar because it is the one control a performer must
 reach without looking; it writes `installation/blackout` through the input
 channel and is not undoable.
+
+The Surface inspector places the Surface in its Output's frame with a small SVG:
+the quad with draggable corner handles, other Surfaces on the same Output as
+outlines, and the frame's aspect taken from the Output's session telemetry when
+one is reporting. Corner buttons take arrow keys for nudging and two fields show
+the selected corner as percentages of the frame. Dragging shows the handle at
+the pointer and sends absolute sets with one in flight at a time
+(`lib/use-latest-wins.ts`); everything else shows confirmed document values.
