@@ -124,6 +124,7 @@ export function MaskInspector({
                     : "border-input text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                 )}
                 onClick={() => setSelected(index)}
+                onFocus={() => setSelected(index)}
                 onKeyDown={nudgeKeyHandler(index, nudge)}
               >
                 {index + 1}
@@ -169,7 +170,9 @@ export function MaskInspector({
 
 /**
  * Surface Space has no aspect of its own; the enabled mapping's bounding box
- * gives the preview a shape close to what the projector shows.
+ * gives the preview a shape close to what the projector shows, within limits:
+ * a Surface that is a thin band in the frame (a ceiling seen at an angle)
+ * still needs an editor tall enough to place points in.
  */
 function surfaceAspect(surface: Surface | undefined): number {
   const mapping =
@@ -181,5 +184,6 @@ function surfaceAspect(surface: Surface | undefined): number {
   const ys = quadPoints(mapping.corners).map((point) => point.y);
   const width = Math.max(...xs) - Math.min(...xs);
   const height = Math.max(...ys) - Math.min(...ys);
-  return width > 0 && height > 0 ? (width / height) * (16 / 9) : 1;
+  if (width <= 0 || height <= 0) return 1;
+  return Math.min(2, Math.max(0.5, (width / height) * (16 / 9)));
 }

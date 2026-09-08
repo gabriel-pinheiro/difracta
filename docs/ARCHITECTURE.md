@@ -337,8 +337,12 @@ uniform.
 
 The Surface and Mask inspectors carry a Calibrate toggle and, while active, the
 view for the other Surfaces; the corner or point selected in the inspector is
-mirrored to the Output as it changes. The status strip shows what is being
-calibrated with an exit link, so a forgotten Calibration Mode stays visible.
+mirrored to the Output as it changes, and focusing a corner or point button
+selects it, so Tab and the arrow keys agree. While the mode is on, selecting
+another Surface or Mask moves the pattern to it; selecting anything else leaves
+it on. The status strip shows what is being calibrated with an exit link, so a
+forgotten Calibration Mode stays visible. Escape clears the selection outside
+text fields and dialogs.
 
 Blackout sits in the menu bar because it is the one control a performer must
 reach without looking; it writes `installation/blackout` through the input

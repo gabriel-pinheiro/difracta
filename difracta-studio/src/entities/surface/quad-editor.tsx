@@ -89,6 +89,7 @@ export function QuadEditor({
               corner === "bottomRight" && "order-last",
             )}
             onClick={() => onSelect(index)}
+            onFocus={() => onSelect(index)}
             onKeyDown={nudgeKeyHandler(index, nudgeAt)}
           >
             {cornerLabels[corner]}

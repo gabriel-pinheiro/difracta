@@ -158,6 +158,7 @@ export function PolygonEditor({
                   event.currentTarget.releasePointerCapture(event.pointerId);
                   setDragging(undefined);
                 }}
+                onFocus={() => onSelect(index)}
                 onKeyDown={(event) => keyDown(index, event)}
               />
               <text

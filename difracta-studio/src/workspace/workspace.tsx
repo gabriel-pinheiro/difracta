@@ -9,8 +9,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Inspector } from "@/inspector/inspector";
 import { readStored, writeStored } from "@/lib/storage";
 import { Navigator } from "@/navigator/navigator";
+import { CalibrationFollowsSelection } from "@/lib/calibration-follows-selection";
 import { ExpansionProvider } from "@/navigator/expansion";
 import { SelectionProvider } from "@/selection/selection";
+import { SelectionKeys } from "@/selection/selection-keys";
 
 import { OutputsTab } from "./outputs-tab";
 
@@ -30,6 +32,8 @@ export function Workspace({ view }: { readonly view: DocumentView }) {
   return (
     <SelectionProvider key={view.documentId}>
       <ExpansionProvider>
+        <SelectionKeys />
+        <CalibrationFollowsSelection view={view} />
         <ResizablePanelGroup
           orientation="horizontal"
           className="min-h-0 flex-1"
