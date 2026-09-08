@@ -1,6 +1,7 @@
 import type { CommandDefinition } from "../command/command.ts";
 import { CommandRegistry } from "../command/registry.ts";
 import { addressSet, addressToggle } from "./address.set.ts";
+import { calibrationExit, calibrationSet } from "./calibration.ts";
 import { entityMove } from "./entity.move.ts";
 import { installationRename } from "./installation.rename.ts";
 import { maskCreate } from "./mask.create.ts";
@@ -46,6 +47,8 @@ export const builtInCommands: readonly CommandDefinition<never>[] = [
   maskRemove,
   addressSet,
   addressToggle,
+  calibrationSet,
+  calibrationExit,
   entityMove,
 ] as unknown as readonly CommandDefinition<never>[];
 

@@ -1,8 +1,12 @@
+import type { Document } from "@difracta/core";
+import { createCompositor, type Compositor } from "@difracta/render";
+
 /**
- * Placeholder Projection Frame: black in Blackout, otherwise a dim field with
- * the Output's label. The renderer replaces the body of `draw`. The loop also
- * measures itself, cheaply: one timestamp per frame and two around the draw,
- * folded into rolling averages that the page reports once a second.
+ * The Projection Frame: sizes the canvas to the display, runs the animation
+ * loop and hands each frame to the compositor. The loop also measures
+ * itself, cheaply: one timestamp per frame and two around the draw, folded
+ * into rolling averages that the page reports once a second. Frames the
+ * compositor skips (nothing changed) count as zero work, which is the truth.
  */
 export interface FrameMetrics {
   readonly width: number;
@@ -17,10 +21,10 @@ const SMOOTHING = 0.1;
 
 export class FrameCanvas {
   readonly #canvas: HTMLCanvasElement;
-  readonly #context: CanvasRenderingContext2D;
-  #blackout = false;
+  readonly #compositor: Compositor;
+  #document: Document | undefined;
+  #outputId = "";
   #limitPixelRatio = false;
-  #label = "";
   #animationFrame: number | undefined;
   #lastFrameAt: number | undefined;
   #frameIntervalMs: number | null = null;
@@ -29,19 +33,17 @@ export class FrameCanvas {
 
   constructor(canvas: HTMLCanvasElement) {
     this.#canvas = canvas;
-    const context = canvas.getContext("2d");
-    if (context === null) throw new Error("Canvas 2D is unavailable.");
-    this.#context = context;
+    this.#compositor = createCompositor(canvas);
   }
 
   update(state: {
-    readonly blackout: boolean;
-    readonly limitPixelRatio: boolean;
-    readonly label: string;
+    readonly document: Document;
+    readonly outputId: string;
   }): void {
-    this.#blackout = state.blackout;
-    this.#limitPixelRatio = state.limitPixelRatio;
-    this.#label = state.label;
+    this.#document = state.document;
+    this.#outputId = state.outputId;
+    this.#limitPixelRatio =
+      state.document.outputs[state.outputId]?.limitPixelRatio ?? false;
   }
 
   metrics(): FrameMetrics {
@@ -86,21 +88,14 @@ export class FrameCanvas {
   #draw(): void {
     const ratio = this.#limitPixelRatio ? 1 : window.devicePixelRatio || 1;
     this.#pixelRatio = ratio;
-    const width = Math.round(this.#canvas.clientWidth * ratio);
-    const height = Math.round(this.#canvas.clientHeight * ratio);
+    const width = Math.max(1, Math.round(this.#canvas.clientWidth * ratio));
+    const height = Math.max(1, Math.round(this.#canvas.clientHeight * ratio));
     if (this.#canvas.width !== width || this.#canvas.height !== height) {
       this.#canvas.width = width;
       this.#canvas.height = height;
     }
-    const context = this.#context;
-    context.fillStyle = "#000";
-    context.fillRect(0, 0, width, height);
-    if (this.#blackout) return;
-    context.fillStyle = "#101418";
-    context.fillRect(0, 0, width, height);
-    context.fillStyle = "#3b4652";
-    context.font = `${Math.round(16 * ratio)}px system-ui, sans-serif`;
-    context.fillText(this.#label, 24 * ratio, height - 24 * ratio);
+    if (this.#document === undefined) return;
+    this.#compositor.render(this.#document, this.#outputId, width, height);
   }
 }
 

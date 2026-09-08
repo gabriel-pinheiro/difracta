@@ -98,7 +98,17 @@ export class LiveServer {
     socket.on("close", () => {
       this.#sessions.delete(session);
       this.#presence.detach(session.id);
+      this.#releaseCalibration(session);
     });
+  }
+
+  /** A Studio that entered Calibration Mode and went away must not leave the Output on a pattern. */
+  #releaseCalibration(session: ClientSession): void {
+    const documentSession = this.#options.store.currentSession();
+    if (documentSession === undefined) return;
+    if (documentSession.document.operational.calibration?.owner !== session.id)
+      return;
+    documentSession.execute("calibration.exit", {}, session.actor);
   }
 
   /** Follows the store's current document; presence belongs to it. */

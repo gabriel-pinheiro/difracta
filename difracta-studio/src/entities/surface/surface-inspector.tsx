@@ -1,5 +1,6 @@
 import type { DocumentView } from "@difracta/client";
 import {
+  CORNERS,
   orderedEntries,
   tableEntries,
   type Mask,
@@ -8,11 +9,13 @@ import {
   type Table,
 } from "@difracta/core";
 import { SquareDashed } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
+import { CalibrationControls } from "@/inspector/fields/calibration-controls";
 import { InspectorHeading } from "@/inspector/fields/inspector-heading";
 import { NameField } from "@/inspector/fields/name-field";
 import { SelectField } from "@/inspector/fields/select-field";
+import { calibrationFor, useCalibration } from "@/lib/calibration";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useExpansion } from "@/navigator/expansion";
 import { useSelection } from "@/selection/selection";
@@ -72,9 +75,19 @@ export function SurfaceInspector({
           }
         />
         {surface.output === null ? (
-          <p className="text-[0.6875rem]/relaxed text-muted-foreground">
-            Assign an Output to place this Surface in its frame.
-          </p>
+          <div className="grid gap-2">
+            <p className="text-[0.6875rem]/relaxed text-muted-foreground">
+              Assign an Output to place this Surface in its frame.
+            </p>
+            <CalibrationControls
+              view={view}
+              surfaceId={surface.id}
+              maskId={null}
+              corner={null}
+              point={null}
+              disabled
+            />
+          </div>
         ) : (
           <Mapping view={view} surface={surface} outputId={surface.output} />
         )}
@@ -139,6 +152,12 @@ function Mapping({
     telemetry === undefined || telemetry === null
       ? DEFAULT_ASPECT
       : telemetry.width / telemetry.height;
+  const { calibration } = useCalibration(view);
+  // Open on the corner the Output already highlights, if it does.
+  const [selected, setSelected] = useState(() => {
+    const corner = calibrationFor(calibration, surface.id, null)?.corner;
+    return corner == null ? 0 : CORNERS.indexOf(corner);
+  });
   const mapping = surface.mappings[outputId];
   if (mapping === undefined) return null;
   const others = tableEntries(surfaces).flatMap((other) => {
@@ -154,6 +173,8 @@ function Mapping({
         corners={mapping.corners}
         others={others}
         aspect={aspect}
+        selected={selected}
+        onSelect={setSelected}
         onSet={(corner, point) =>
           command("surface.corner.set", {
             surfaceId: surface.id,
@@ -168,6 +189,13 @@ function Mapping({
             by,
           })
         }
+      />
+      <CalibrationControls
+        view={view}
+        surfaceId={surface.id}
+        maskId={null}
+        corner={CORNERS[selected] ?? "topLeft"}
+        point={null}
       />
     </div>
   );

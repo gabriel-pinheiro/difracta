@@ -8,7 +8,7 @@ import {
   type OutputId,
   type SurfaceId,
 } from "../ids.ts";
-import { PointSchema, QuadSchema } from "./geometry.ts";
+import { CornerNameSchema, PointSchema, QuadSchema } from "./geometry.ts";
 import { DEFAULT_ORDER_KEY } from "./order.ts";
 
 /**
@@ -107,9 +107,34 @@ export const MaskSchema = z
 export type Mask = Entity<typeof MaskSchema, MaskId>;
 export type MaskMode = Mask["mode"];
 
+export const CALIBRATION_VIEWS = ["selected", "outlines", "patterns"] as const;
+export const CalibrationViewSchema = z.enum(CALIBRATION_VIEWS);
+export type CalibrationView = z.infer<typeof CalibrationViewSchema>;
+
+/**
+ * Calibration Mode: one Surface (or one of its Masks) shown as a pattern on
+ * its Output instead of the dim fill. `owner` is the live session that
+ * entered it, so the runtime can clear it when that session goes away.
+ */
+export const CalibrationSchema = z
+  .object({
+    surfaceId: z.string().min(1),
+    /** Mask being aligned, with its Masks applied; null aligns the quad. */
+    maskId: z.string().min(1).nullable(),
+    /** Corner or Mask point highlighted on the Output. */
+    corner: CornerNameSchema.nullable(),
+    point: z.number().int().min(0).nullable(),
+    /** What the other Surfaces of the Output show meanwhile. */
+    view: CalibrationViewSchema,
+    owner: z.string().min(1),
+  })
+  .strict();
+export type Calibration = z.infer<typeof CalibrationSchema>;
+
 export const OperationalSchema = z
   .object({
     blackout: z.boolean(),
+    calibration: CalibrationSchema.nullable(),
   })
   .strict();
 export type Operational = z.infer<typeof OperationalSchema>;
@@ -177,7 +202,10 @@ export function siblingsOf<TEntity extends { readonly id: string }>(
   );
 }
 
-export const defaultOperational: Operational = { blackout: false };
+export const defaultOperational: Operational = {
+  blackout: false,
+  calibration: null,
+};
 
 export function emptyDocument(name: string): Document {
   return {

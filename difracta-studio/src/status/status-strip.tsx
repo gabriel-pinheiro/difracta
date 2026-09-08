@@ -1,8 +1,9 @@
 import type { DocumentView } from "@difracta/client";
-import type { Output, Table } from "@difracta/core";
+import type { Mask, Output, Surface, Table } from "@difracta/core";
 import type { LiveState } from "@difracta/protocol";
 
 import { useDocumentCommands } from "@/documents/document-commands";
+import { useCalibration } from "@/lib/calibration";
 import { useClient, useDocumentPath, useSignal } from "@/lib/client";
 import { cn } from "@/lib/utils";
 
@@ -65,11 +66,41 @@ function DocumentStatus({ view }: { readonly view: DocumentView }) {
         {String(connected)} of {String(count)}{" "}
         {count === 1 ? "Output" : "Outputs"} connected
       </span>
+      <CalibrationStatus view={view} />
       {blackout && (
         <span className="rounded-sm bg-destructive px-1.5 font-semibold tracking-wider text-white uppercase">
           Blackout
         </span>
       )}
     </>
+  );
+}
+
+/** A forgotten Calibration Mode would leave a pattern on stage; it stays visible here with its exit. */
+function CalibrationStatus({ view }: { readonly view: DocumentView }) {
+  const { calibration, exit } = useCalibration(view);
+  const surfaces = useDocumentPath<Table<Surface>>(view, ["surfaces"]);
+  const masks = useDocumentPath<Table<Mask>>(view, ["masks"]);
+  const outputs = useDocumentPath<Table<Output>>(view, ["outputs"]);
+  if (calibration === null) return null;
+  // Same checks as the Output makes: a stale entry shows nothing.
+  const surface = surfaces?.[calibration.surfaceId];
+  if (surface?.output == null) return null;
+  const mask =
+    calibration.maskId === null ? undefined : masks?.[calibration.maskId];
+  if (calibration.maskId !== null && mask?.surfaceId !== surface.id)
+    return null;
+  const output = outputs?.[surface.output]?.name ?? surface.output;
+  return (
+    <span className="flex items-center gap-1.5 rounded-sm bg-amber-500/20 px-1.5 text-amber-300">
+      Calibrating {mask?.name ?? surface.name} on {output}
+      <button
+        type="button"
+        className="underline underline-offset-2 hover:text-amber-100"
+        onClick={exit}
+      >
+        exit
+      </button>
+    </span>
   );
 }

@@ -38,7 +38,8 @@ consistent.
 | `difracta-protocol` | Wire schemas for the live socket and runtime requests                                                                   | core                    |
 | `difracta-client`   | Connection, snapshot plus delta replica (`DocumentView`), acknowledged commands, coalesced inputs                       | core, protocol          |
 | `difracta-runtime`  | Node host: document sessions, files and autosave, live server, static serving                                           | core, protocol, fastify |
-| `difracta-output`   | One display's page; no React                                                                                            | client                  |
+| `difracta-render`   | WebGL2 compositor: homographies, Mask textures, calibration patterns                                                    | core                    |
+| `difracta-output`   | One display's page; no React                                                                                            | client, render          |
 | `difracta-studio`   | React authoring and performance UI                                                                                      | client                  |
 | `difracta-cli`      | `difracta` command for shells and agents                                                                                | client                  |
 
@@ -57,7 +58,7 @@ Document
 ├── outputs { [id]: Output }
 ├── surfaces { [id]: Surface }        output, mappings per Output
 ├── masks { [id]: Mask }              surfaceId, mode, points, feather
-└── operational { blackout }          replicated, never saved
+└── operational { blackout, calibration }   replicated, never saved
 ```
 
 Entity names inside one table are unique, or, for child entities such as Masks,
@@ -123,6 +124,23 @@ restore its corners for free, without a table or navigator row per Surface and
 Output pair. **Why a relative nudge command:** a held key sends commands faster
 than replies return; an absolute position computed from the view would repeat or
 lose steps, whereas deltas apply in full in any order.
+
+### Calibration Mode
+
+`operational.calibration` names one Surface, or one Mask of it, plus the
+highlighted corner or point, the view for the Output's other Surfaces (hidden,
+outlines, patterns) and the live session that entered it. `calibration.set`
+replaces the whole entry and `calibration.exit` clears it; both are performance
+commands, so they replicate at once and never enter undo history. The runtime
+clears the entry when its owner's session closes. Authoring commands do not
+touch it, so removing or unassigning the calibrated Surface leaves a stale entry
+behind briefly; readers go through `resolveCalibration`, which treats a dangling
+entry as no calibration, and the next `set` or `exit` overwrites it.
+
+**Why:** the Output only needs the whole state, and one small object written
+atomically is easier to reason about than corner, view and Mask arriving as
+separate patches. Owner tracking exists because a Studio tab closed
+mid-alignment would otherwise leave a pattern on stage.
 
 ## Commands and patches
 
@@ -250,6 +268,44 @@ coalesce window and limit, autosave delay, default host and port, client
 reconnect backoff, CLI connect timeout. Packages import from there instead of
 carrying their own literals.
 
+## Rendering
+
+`difracta-render` draws one Output's frame into a canvas behind a two-method
+interface: `render(document, outputId, width, height)` and `dispose()`. The
+Output page owns the animation loop, the canvas size and telemetry; the
+compositor only draws, and skips the frame entirely when the document, Output
+and size are the ones it drew last, so a static Installation costs nothing
+between edits.
+
+`planFrame` is the pure part: given a document and an Output it lists what each
+Surface shows this frame. Outside Calibration Mode every assigned Surface is a
+dim fill cut by its Masks. In Calibration Mode on that Output the calibrated
+Surface is a pattern (grid, diagonals, border, name, corner labels, the selected
+corner marked) and the others follow the view. Masks apply to the pattern only
+while a Mask is being aligned, and that Mask is then outlined with its points
+marked.
+
+Geometry: every vertex is a Surface Space position pushed through the Surface's
+homography in the vertex shader, with clip-space `w` carrying the projective
+term, so the GPU interpolates Surface Space perspective-correctly and every
+later shape drawn in Surface Space (Regions, Guides) inherits the mapping for
+free. The homography is computed once per mapping change and cached by the
+corners object's identity. The pattern is computed in the fragment shader from
+Surface Space coordinates and their screen-space derivatives, so its lines are
+about one pixel wide at any projection and cost no geometry. Labels are text
+rendered once per string into a small texture.
+
+Masks: one alpha texture per Surface at a fixed 512×512, rebuilt only when that
+Surface's Masks change (identity comparison, since the document is immutable per
+revision), sampled once per fragment. Feather is drawn inward from the polygon
+edge and clipped to it, so no Mask changes coverage outside its own boundary.
+
+**Why WebGL2 only:** the projector machines and smart TVs this runs on all have
+it, WebGPU still does not reach every such browser, and one engine is half the
+code of two. Why a fixed-size Mask texture: Masks are fractions of Surface
+Space, so the texture does not depend on the frame; a full-resolution texture
+would be rebuilt on every drag of a point and uploaded at megabytes a step.
+
 ## Studio
 
 Per-path subscriptions: `useDocumentPath(view, path)` re-renders one component
@@ -278,6 +334,11 @@ navigator section and an inspector, and they change together. Each kind lives in
 navigator and inspector iterate that registry rather than knowing kinds. Shared
 field components under `src/inspector/fields/` keep inspectors short and
 uniform.
+
+The Surface and Mask inspectors carry a Calibrate toggle and, while active, the
+view for the other Surfaces; the corner or point selected in the inspector is
+mirrored to the Output as it changes. The status strip shows what is being
+calibrated with an exit link, so a forgotten Calibration Mode stays visible.
 
 Blackout sits in the menu bar because it is the one control a performer must
 reach without looking; it writes `installation/blackout` through the input

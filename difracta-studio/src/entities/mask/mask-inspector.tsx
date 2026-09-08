@@ -9,6 +9,7 @@ import { Minus, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { CalibrationControls } from "@/inspector/fields/calibration-controls";
 import { InspectorHeading } from "@/inspector/fields/inspector-heading";
 import { NameField } from "@/inspector/fields/name-field";
 import { NumberField } from "@/inspector/fields/number-field";
@@ -18,6 +19,7 @@ import {
   PolygonEditor,
 } from "@/inspector/fields/polygon-editor";
 import { SelectField } from "@/inspector/fields/select-field";
+import { calibrationFor, useCalibration } from "@/lib/calibration";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { cn } from "@/lib/utils";
 import { useSelection } from "@/selection/selection";
@@ -41,7 +43,11 @@ export function MaskInspector({
   const mask = useDocumentPath<Mask>(view, ["masks", id]);
   const surfaces = useDocumentPath<Table<Surface>>(view, ["surfaces"]) ?? {};
   const masks = useDocumentPath<Table<Mask>>(view, ["masks"]) ?? {};
-  const [selected, setSelected] = useState(0);
+  const { calibration } = useCalibration(view);
+  // Open on the point the Output already highlights, if it does.
+  const [selected, setSelected] = useState(
+    () => calibrationFor(calibration, mask?.surfaceId ?? "", id)?.point ?? 0,
+  );
 
   useEffect(() => {
     if (mask === undefined) select({ kind: "installation" });
@@ -148,6 +154,14 @@ export function MaskInspector({
             </Button>
           </div>
         </div>
+        <CalibrationControls
+          view={view}
+          surfaceId={mask.surfaceId}
+          maskId={mask.id}
+          corner={null}
+          point={point}
+          disabled={surface?.output == null}
+        />
       </div>
     </>
   );

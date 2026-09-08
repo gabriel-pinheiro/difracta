@@ -118,7 +118,9 @@ calibrating a Surface's quadrilateral, where a Mask would hide the corners being
 dragged.
 
 Calibration Mode is operational Runtime state. It is not persisted and clears
-when Studio exits it or disconnects.
+when Studio exits it or the Studio session that entered it disconnects. While it
+is active, the other Surfaces of the Output are hidden, drawn as outlines, or
+drawn as dimmer patterns, as the operator chooses.
 
 ### Region
 

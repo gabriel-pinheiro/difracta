@@ -172,7 +172,7 @@ describe("DocumentStore", () => {
         outputs: {},
         surfaces: {},
         masks: {},
-        operational: { blackout: true },
+        operational: { blackout: true, calibration: null },
       }),
     );
     expect(round.ok && round.document.operational.blackout).toBe(false);

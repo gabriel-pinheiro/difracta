@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { executeCommand } from "../command/execute.ts";
+import { resolveCalibration } from "../document/calibration.ts";
 import { emptyDocument, type Document } from "../document/document.ts";
 import { orderedEntries } from "../document/order.ts";
 import { applyPatches } from "../document/patch.ts";
@@ -496,6 +497,90 @@ describe("built-in commands", () => {
     expect(applyPatches(removed.document, removed.inverse)).toEqual(document);
     const gone = run(removed.document, "mask.remove", { maskId: "mask_c" });
     expect(gone.document.masks).toEqual({});
+  });
+
+  it("enters, changes and leaves Calibration Mode without touching history", () => {
+    let document = withSurface();
+    document = run(document, "mask.create", {
+      id: "mask_a",
+      surfaceId: "sur_a",
+      name: "A",
+    }).document;
+    const entered = run(document, "calibration.set", {
+      surfaceId: "sur_a",
+      maskId: null,
+      corner: "topLeft",
+      point: null,
+      view: "selected",
+      owner: "session_1",
+    });
+    expect(entered.definition.kind).toBe("performance");
+    expect(resolveCalibration(entered.document)).toMatchObject({
+      outputId: "out_a",
+      surface: { id: "sur_a" },
+      mask: undefined,
+      point: undefined,
+    });
+    const onMask = run(entered.document, "calibration.set", {
+      surfaceId: "sur_a",
+      maskId: "mask_a",
+      corner: null,
+      point: 3,
+      view: "outlines",
+      owner: "session_1",
+    });
+    expect(resolveCalibration(onMask.document)?.point).toBe(3);
+    expect(
+      executeCommand(registry, entered.document, "calibration.set", {
+        surfaceId: "sur_a",
+        maskId: "mask_a",
+        corner: null,
+        point: 4,
+        view: "outlines",
+        owner: "session_1",
+      }).ok,
+    ).toBe(false);
+    expect(
+      executeCommand(registry, entered.document, "calibration.set", {
+        surfaceId: "sur_b",
+        maskId: "mask_a",
+        corner: null,
+        point: null,
+        view: "selected",
+        owner: "session_1",
+      }).ok,
+    ).toBe(false);
+    const left = run(entered.document, "calibration.exit", {});
+    expect(left.document.operational.calibration).toBeNull();
+    expect(run(left.document, "calibration.exit", {}).patches).toEqual([]);
+  });
+
+  it("resolves a stale calibration as none", () => {
+    const entered = run(withSurface(), "calibration.set", {
+      surfaceId: "sur_a",
+      maskId: null,
+      corner: null,
+      point: null,
+      view: "selected",
+      owner: "session_1",
+    }).document;
+    const unassigned = run(entered, "surface.assign", {
+      surfaceId: "sur_a",
+      output: null,
+    }).document;
+    expect(resolveCalibration(unassigned)).toBeUndefined();
+    const removed = run(entered, "surface.remove", { surfaceId: "sur_a" });
+    expect(resolveCalibration(removed.document)).toBeUndefined();
+    expect(
+      executeCommand(registry, entered, "calibration.set", {
+        surfaceId: "sur_a",
+        maskId: null,
+        corner: null,
+        point: null,
+        view: "selected",
+        owner: "session_1",
+      }).ok,
+    ).toBe(true);
   });
 
   it("rejects malformed payloads before apply runs", () => {

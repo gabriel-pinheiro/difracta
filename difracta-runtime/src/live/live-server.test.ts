@@ -126,6 +126,56 @@ describe("live protocol", () => {
     output.close();
   });
 
+  it("clears Calibration Mode when the session that entered it closes", async () => {
+    const studio = new DifractaClient({
+      url,
+      kind: "studio",
+      reconnect: false,
+    });
+    const watcher = new DifractaClient({
+      url,
+      kind: "studio",
+      reconnect: false,
+    });
+    await waitFor(() =>
+      studio.phase.get() === "connected" ? true : undefined,
+    );
+    await waitFor(() =>
+      watcher.phase.get() === "connected" ? true : undefined,
+    );
+    const created = await studio.request<{ id: string }>("documents.new", {
+      name: "Living",
+    });
+    await studio.command(created.id, "output.create", {
+      id: "out_a",
+      name: "TV",
+    });
+    await studio.command(created.id, "surface.create", {
+      id: "sur_a",
+      name: "Wall",
+    });
+    await studio.command(created.id, "calibration.set", {
+      surfaceId: "sur_a",
+      maskId: null,
+      corner: "topLeft",
+      point: null,
+      view: "selected",
+      owner: studio.sessionId.get(),
+    });
+    await waitFor(() => watcher.document.get() ?? undefined);
+    const view = watcher.openDocument(created.id);
+    await waitFor(() =>
+      view.get()?.operational.calibration?.surfaceId === "sur_a"
+        ? true
+        : undefined,
+    );
+    studio.close();
+    await waitFor(() =>
+      view.get()?.operational.calibration === null ? true : undefined,
+    );
+    watcher.close();
+  });
+
   it("tracks Output Sessions in the live root for live subscribers only", async () => {
     const studio = new DifractaClient({
       url,

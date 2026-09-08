@@ -4,8 +4,6 @@ import {
   type Point,
   type Quad,
 } from "@difracta/core";
-import { useState } from "react";
-
 import {
   nudgeKeyHandler,
   PolygonEditor,
@@ -39,6 +37,8 @@ export function QuadEditor({
   corners,
   others,
   aspect,
+  selected,
+  onSelect,
   onSet,
   onNudge,
 }: {
@@ -47,10 +47,12 @@ export function QuadEditor({
   readonly others: readonly Outline[];
   /** Projection Frame width divided by height. */
   readonly aspect: number;
+  /** Index into CORNERS of the corner the buttons and keys act on. */
+  readonly selected: number;
+  readonly onSelect: (index: number) => void;
   readonly onSet: (corner: CornerName, point: Point) => Promise<unknown>;
   readonly onNudge: (corner: CornerName, by: Point) => void;
 }) {
-  const [selected, setSelected] = useState(0);
   const cornerAt = (index: number): CornerName => CORNERS[index] ?? "topLeft";
   const nudgeAt = (index: number, by: Point): void =>
     onNudge(cornerAt(index), by);
@@ -62,7 +64,7 @@ export function QuadEditor({
         outlines={others}
         aspect={aspect}
         selected={selected}
-        onSelect={setSelected}
+        onSelect={onSelect}
         onSet={(index, point) => onSet(cornerAt(index), point)}
         onNudge={nudgeAt}
         spaceLabel="Surface corners in the Output's frame"
@@ -86,7 +88,7 @@ export function QuadEditor({
                 : "border-input text-muted-foreground hover:bg-accent hover:text-accent-foreground",
               corner === "bottomRight" && "order-last",
             )}
-            onClick={() => setSelected(index)}
+            onClick={() => onSelect(index)}
             onKeyDown={nudgeKeyHandler(index, nudgeAt)}
           >
             {cornerLabels[corner]}

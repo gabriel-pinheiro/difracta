@@ -11,7 +11,8 @@
   "dependencies": {
     "@difracta/client": "0.0.0",
     "@difracta/core": "0.0.0",
-    "@difracta/protocol": "0.0.0"
+    "@difracta/protocol": "0.0.0",
+    "@difracta/render": "0.0.0"
   },
   "devDependencies": {
     "vite": "^8.1.5"

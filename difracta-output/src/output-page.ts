@@ -75,12 +75,7 @@ export class OutputPage {
       const render = (): void => {
         const document = view.get();
         if (document === undefined) return;
-        const output = document.outputs[outputId];
-        this.#frame.update({
-          blackout: document.operational.blackout,
-          limitPixelRatio: output?.limitPixelRatio ?? false,
-          label: `${document.installation.name} · ${output?.name ?? outputId}`,
-        });
+        this.#frame.update({ document, outputId });
       };
       this.#unsubscribeView = view.subscribePath([], render);
       render();

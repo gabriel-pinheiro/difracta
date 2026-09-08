@@ -11,6 +11,7 @@
     "difracta-protocol",
     "difracta-client",
     "difracta-runtime",
+    "difracta-render",
     "difracta-output",
     "difracta-studio",
     "difracta-cli"
