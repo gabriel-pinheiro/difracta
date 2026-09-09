@@ -9,6 +9,8 @@ export type InstallationId = Id<"installation">;
 export type OutputId = Id<"output">;
 export type SurfaceId = Id<"surface">;
 export type MaskId = Id<"mask">;
+export type SceneId = Id<"scene">;
+export type LayerId = Id<"layer">;
 export type SessionId = Id<"session">;
 export type DocumentId = Id<"document">;
 

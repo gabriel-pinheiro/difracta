@@ -7,7 +7,8 @@ import type { Patch } from "../document/patch.ts";
 export const surfaceRemove = defineCommand({
   name: "surface.remove",
   kind: "authoring",
-  description: "Remove a Surface with its mappings and Masks.",
+  description:
+    "Remove a Surface with its mappings and Masks; Layers targeting it lose their Target.",
   payload: z.object({ surfaceId: z.string().min(1) }).strict(),
   label: () => "Remove Surface",
   apply({ document, payload }) {
@@ -16,6 +17,13 @@ export const surfaceRemove = defineCommand({
     const patches: Patch[] = tableEntries(document.masks)
       .filter((mask) => mask.surfaceId === payload.surfaceId)
       .map((mask) => ({ op: "remove", path: ["masks", mask.id] }));
+    for (const layer of tableEntries(document.layers))
+      if (layer.kind === "visual" && layer.target === payload.surfaceId)
+        patches.push({
+          op: "set",
+          path: ["layers", layer.id, "target"],
+          value: null,
+        });
     patches.push({ op: "remove", path: ["surfaces", payload.surfaceId] });
     return accepted(patches);
   },

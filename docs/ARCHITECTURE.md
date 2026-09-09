@@ -54,10 +54,12 @@ A Document is one Installation as entity tables keyed by id plus a small
 
 ```text
 Document
-├── installation { id, name }
+├── installation { id, name, activeScene }
 ├── outputs { [id]: Output }
 ├── surfaces { [id]: Surface }        output, mappings per Output
 ├── masks { [id]: Mask }              surfaceId, mode, points, feather
+├── scenes { [id]: Scene }            name, order
+├── layers { [id]: Layer }            kind, sceneId, parentId, enabled, order, + per kind
 └── operational { blackout, calibration }   replicated, never saved
 ```
 
@@ -125,6 +127,33 @@ Output pair. **Why a relative nudge command:** a held key sends commands faster
 than replies return; an absolute position computed from the view would repeat or
 lose steps, whereas deltas apply in full in any order.
 
+### Scenes and Layers
+
+A Scene is an ordered stack of Layers, and everything in the stack is a Layer: a
+Visual Layer (a Visual on a Target, with opacity and blend mode), a Filter Layer
+(a Filter with a mix) or a Group (a container). One `layers` table holds all
+three with a `kind`, a `sceneId`, a `parentId` (null at the Scene root, a Group
+otherwise) and an `order` key; document order is navigator order, top first, and
+rendering will walk it bottom up. Siblings are the Layers sharing `sceneId` and
+`parentId` (`PARENT_FIELDS`), so names and order keys are scoped to one parent.
+`layer.move` places a Layer under any root or Group of any Scene, carrying a
+Group's contents along and refusing cycles; `entity.move` still covers
+reordering among siblings. `layer.group` wraps a Layer in a new Group at its
+position and `layer.ungroup` dissolves one; duplicating a Scene or a Group
+copies everything inside with fresh ids. A Visual Layer starts without a Visual
+or Target, a Filter Layer without a Filter: both are picked afterwards. Removing
+a Surface clears the Target of Layers using it. The first Scene created becomes
+`installation.activeScene`; the active Scene cannot be removed.
+
+**Why one table for three kinds:** the stack is one ordering across kinds, and
+the words followed the data. Having "Layer" mean only "Visual instance" left
+Filters and Groups as second-class items with their own names, moves and menus;
+with every entry a Layer, adding a Visual and adding a Filter are the same
+gesture, and Filters and Groups reorder, group and hide through the same
+commands. **Why a nullable Visual:** a Layer's place in the stack, its name, its
+Group and its enabled state are worth authoring before any pixels exist, and the
+choice of Visual is a separate gesture with its own picker.
+
 ### Calibration Mode
 
 `operational.calibration` names one Surface, or one Mask of it, plus the
@@ -149,9 +178,19 @@ Every change is a command: name, Zod payload schema, pure
 validates the payload, runs apply, applies the patches, validates only the
 touched entities (`document/validate.ts`), and computes the inverse patches.
 
-- `authoring` commands enter undo history and dirty the document.
-- `performance` commands are show input: replicated, never undoable, never
-  dirtying. `address.set` and `address.toggle` are the generic ones.
+- `authoring` commands enter undo history.
+- `performance` commands are show input: replicated, never undoable.
+  `address.set` and `address.toggle` are the generic ones; `scene.play` and the
+  calibration commands are others.
+
+Dirty is decided separately from the kind: the document is dirty when any patch
+touched something outside `operational`, whichever command made it. A played
+Scene or an opacity moved from OSC is saved state and counts; Blackout and
+Calibration Mode are never saved and never count.
+
+**Why:** the file must reflect what the Outputs show, and busking changes it
+through performance commands all night; the undo stack, by contrast, is for
+authoring gestures a person wants to take back.
 
 Commands are registered by one import line in `commands/index.ts`. The registry
 is the only source for the runtime handler and the CLI's `commands`, `describe`
@@ -334,6 +373,15 @@ navigator section and an inspector, and they change together. Each kind lives in
 navigator and inspector iterate that registry rather than knowing kinds. Shared
 field components under `src/inspector/fields/` keep inspectors short and
 uniform.
+
+The Scenes section lists each Scene as a collapsible row with a play button and,
+when active, a green dot; its Layers nest under it and Groups nest further, each
+Layer row with an eye and rows under a disabled Group faded. Rows drag among
+siblings, into a Group or a Scene by dropping on the row's middle, and to other
+Scenes. Selecting a Scene never plays it. The "+" on a Scene or Group row opens
+a menu of the three kinds, and new Layers land at the top with a default name,
+ready to rename in the inspector. The Layer inspector shows the fields of the
+Layer's kind; the Visual or Filter is picked elsewhere.
 
 The Surface and Mask inspectors carry a Calibrate toggle and, while active, the
 view for the other Surfaces; the corner or point selected in the inspector is

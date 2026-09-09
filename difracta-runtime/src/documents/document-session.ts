@@ -170,8 +170,11 @@ export class DocumentSession {
         inverse: result.inverse,
         coalesceKey: result.coalesceKey,
       });
-      this.#markDirty();
     }
+    // Dirty means the saved part differs from the file, whichever channel
+    // changed it: a played Scene or an OSC opacity counts, Blackout does not.
+    if (result.patches.some((patch) => patch.path[0] !== "operational"))
+      this.#markDirty();
     return {
       ok: true,
       revision: this.#revision,

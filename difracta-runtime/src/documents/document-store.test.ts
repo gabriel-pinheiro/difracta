@@ -135,7 +135,7 @@ describe("DocumentStore", () => {
         {
           op: "set",
           path: ["installation"],
-          value: { id: documentId, name: "Living" },
+          value: { id: documentId, name: "Living", activeScene: null },
         },
         { op: "set", path: ["outputs"], value: {} },
       ],
@@ -168,10 +168,12 @@ describe("DocumentStore", () => {
     expect(parseDocumentFile("nope").ok).toBe(false);
     const round = parseDocumentFile(
       serializeDocument({
-        installation: { id: "i" as never, name: "N" },
+        installation: { id: "i" as never, name: "N", activeScene: null },
         outputs: {},
         surfaces: {},
         masks: {},
+        scenes: {},
+        layers: {},
         operational: { blackout: true, calibration: null },
       }),
     );

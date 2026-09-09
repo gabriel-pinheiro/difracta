@@ -190,8 +190,8 @@ inside a Scene. A Filter transforms the Projection Frame accumulated globally
 below its position and has an enabled value, universal mix, and complete
 Parameter Values. It has no Visual, Target, opacity, blend mode, or random seed.
 
-A Filter nested in a Layer Group still affects globally lower content outside
-that Group. It is disabled when it or any ancestor Group is disabled. At mix
+A Filter nested in a Group still affects globally lower content outside that
+Group. It is disabled when its Layer or any Group above it is disabled. At mix
 zero it preserves the accumulated image without a Filter pass. A completely
 transparent input must produce a completely transparent output.
 
@@ -233,9 +233,9 @@ successful final Installation and operational state together. Execution is
 best-effort: a failed action is logged by Runtime and later actions continue.
 
 The initial actions can play a Scene, set a Controller value, show, hide, or
-toggle a Composition Item, set Layer opacity, and enable, disable, or toggle
-Blackout. They can also trigger a Cue declared by a Layer's current Visual.
-Macro is not a synonym for Cue.
+toggle a Layer, set Layer opacity, and enable, disable, or toggle Blackout. They
+can also trigger a Cue declared by a Layer's current Visual. Macro is not a
+synonym for Cue.
 
 ### Pad
 
@@ -308,27 +308,33 @@ and belong to the same Surface as the Layer's Target.
 
 ### Layer
 
-One configured instance of one Visual inside a Scene. A Layer has a Target,
-Parameter Values, Guide Bindings, visibility, opacity, and a position in the
-Scene's global order.
+One entry in a Scene's stack. Every Layer has a name, an enabled state and a
+position among its siblings, under the Scene's root or inside a Group. A Layer
+is one of three kinds: a Visual Layer, a Filter Layer or a Group. Adding a
+Visual, a Filter or a Group is the same gesture with a different kind, and all
+three reorder, move, duplicate and hide the same way.
 
-Layers render RGBA content over transparent backgrounds. Their order controls
-composition where rendered pixels overlap.
+### Visual Layer
 
-### Layer Group
+A Layer that renders one Visual into a Target, with Parameter Values, an opacity
+and a blend mode. It renders RGBA content over a transparent background; the
+order of Layers controls composition where pixels overlap. A Visual Layer may
+exist without a Visual or a Target yet, in which case it renders nothing.
 
-An organizational item that contains an ordered recursive composition of Layers,
-Filters, and other Layer Groups. A Layer Group has a stable identity, name, and
-authored visibility gate. It is not a Layer: it has no Visual, Target, opacity,
-blend mode, or rendering boundary.
+### Filter Layer
 
-Disabling a Layer Group hides its descendants without changing their authored
-visibility. Studio may label a Layer Group simply `Group`.
+A Layer that holds one Filter and transforms the Projection Frame accumulated
+below its position, with a mix from zero through one. It has no Target, opacity
+or blend mode. A Filter Layer inside a Group still affects content below that
+Group. A Filter Layer may exist without a Filter yet, in which case the frame
+passes through it unchanged.
 
-### Composition Item
+### Group
 
-The shared union of Layer, Filter, and Layer Group. A Scene and every Layer
-Group own an ordered composition of Composition Items.
+A Layer that contains an ordered stack of Layers, Groups included. A Group has
+no Visual, Target, opacity or blend mode, and is not a compositing boundary: its
+contents draw as if they sat at its position in the Scene. Disabling a Group
+hides everything inside it without changing what those Layers have authored.
 
 ### Target
 
@@ -337,17 +343,17 @@ clipping, and Surface Space; it is not an Output.
 
 ### Scene
 
-A saved, ordered recursive composition of Layers, Filters, and Layer Groups for
-an Installation. For example, a Live Set Scene places Stars and Lightning Bolts
-on the Ceiling and Sun on the Plafond.
+A saved, ordered stack of Layers for an Installation, topmost first. For
+example, a Live Set Scene places Stars and Lightning Bolts on the Ceiling and
+Sun on the Plafond.
 
 Scenes are independent of Output assignment.
 
 ### Scene Background
 
-The fixed transparent base over which a Scene's Composition Items are evaluated.
-It is not an editable Scene color. After composition, unresolved transparency
-becomes black when the final Projection Frame is produced.
+The fixed transparent base over which a Scene's Layers are evaluated. It is not
+an editable Scene color. After composition, unresolved transparency becomes
+black when the final Projection Frame is produced.
 
 Use a bottom `Solid Color` Layer when an explicit colored or black background is
 needed.
@@ -356,7 +362,9 @@ needed.
 
 The Scene currently rendered by an Installation's Outputs. Studio may select and
 edit a different Scene without changing the Active Scene. Playing a Scene makes
-it active with an immediate cut.
+it active with an immediate cut. The first Scene created becomes active; the
+Active Scene cannot be removed until another is played. It is saved with the
+Installation, so a show reopens where it left off.
 
 ### Blackout
 

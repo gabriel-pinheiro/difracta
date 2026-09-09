@@ -37,7 +37,7 @@ describe("DocumentSession", () => {
     expect(doc.summary().outputs).toEqual([{ id: "out_a", name: "TV" }]);
   });
 
-  it("does not dirty the document or record history for performance commands", () => {
+  it("dirties only for saved state, and records history only for authoring", () => {
     const { doc } = session();
     const result = doc.execute(
       "address.set",
@@ -47,6 +47,18 @@ describe("DocumentSession", () => {
     expect(result.ok).toBe(true);
     expect(doc.dirty).toBe(false);
     expect(doc.document.operational.blackout).toBe(true);
+    expect(doc.execute("history.undo", {}, "osc")).toEqual({
+      ok: false,
+      error: "Nothing to undo.",
+    });
+    // A played Scene is saved with the file: dirty, still not undoable.
+    doc.execute("scene.create", { id: "s1", name: "One" }, "studio");
+    doc.execute("scene.create", { id: "s2", name: "Two" }, "studio");
+    doc.markSaved();
+    expect(doc.dirty).toBe(false);
+    expect(doc.execute("scene.play", { sceneId: "s2" }, "osc").ok).toBe(true);
+    expect(doc.dirty).toBe(true);
+    expect(doc.document.installation.activeScene).toBe("s2");
     expect(doc.execute("history.undo", {}, "osc")).toEqual({
       ok: false,
       error: "Nothing to undo.",

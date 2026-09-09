@@ -17,6 +17,8 @@ const labels: Record<OrderedTableName, string> = {
   outputs: "Output",
   surfaces: "Surface",
   masks: "Mask",
+  scenes: "Scene",
+  layers: "Layer",
 };
 
 /** Places an entity right after a sibling (or first) among its siblings: its table, or its parent's children. */

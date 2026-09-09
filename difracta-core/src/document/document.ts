@@ -4,7 +4,9 @@ import {
   generateId,
   type Id,
   type InstallationId,
+  type LayerId,
   type MaskId,
+  type SceneId,
   type OutputId,
   type SurfaceId,
 } from "../ids.ts";
@@ -28,15 +30,21 @@ const EntityName = z.string().trim().min(1).max(120);
  * narrowed to the entity's branded id. Schemas keep `id` as a plain string
  * because ids arrive from files and the wire as text.
  */
-export type Entity<TSchema extends ZodType, TId extends Id<string>> = Omit<
+export type Entity<TSchema extends ZodType, TId extends Id<string>> = Branded<
   z.infer<TSchema>,
-  "id"
-> & { readonly id: TId };
+  TId
+>;
+/** Distributes over unions, so a discriminated entity keeps its variants. */
+type Branded<TValue, TId> = TValue extends unknown
+  ? Omit<TValue, "id"> & { readonly id: TId }
+  : never;
 
 export const InstallationSchema = z
   .object({
     id: z.string().min(1),
     name: EntityName,
+    /** The Scene the Outputs render; saved, so a show reopens where it left off. */
+    activeScene: z.string().min(1).nullable().default(null),
   })
   .strict();
 export type Installation = Entity<typeof InstallationSchema, InstallationId>;
@@ -131,6 +139,69 @@ export const CalibrationSchema = z
   .strict();
 export type Calibration = z.infer<typeof CalibrationSchema>;
 
+export const SceneSchema = z
+  .object({
+    id: z.string().min(1),
+    name: EntityName,
+    order: z.string().min(1).default(DEFAULT_ORDER_KEY),
+  })
+  .strict();
+export type Scene = Entity<typeof SceneSchema, SceneId>;
+
+/** Fields every Layer has, whatever its kind. */
+const LayerBase = {
+  id: z.string().min(1),
+  name: EntityName,
+  sceneId: z.string().min(1),
+  /** The Group containing the Layer, or null at the Scene's root. */
+  parentId: z.string().min(1).nullable(),
+  enabled: z.boolean(),
+  /** Position among the Layers of the same parent; first is topmost. */
+  order: z.string().min(1).default(DEFAULT_ORDER_KEY),
+};
+
+export const BLEND_MODES = ["normal", "additive"] as const;
+export const BlendModeSchema = z.enum(BLEND_MODES);
+export type BlendMode = z.infer<typeof BlendModeSchema>;
+
+export const LAYER_KINDS = ["visual", "filter", "group"] as const;
+export type LayerKind = (typeof LAYER_KINDS)[number];
+
+/**
+ * Everything in a Scene's stack is a Layer: a Visual Layer renders one
+ * Visual on a Target, a Filter Layer transforms everything below it, a
+ * Group contains Layers. One table, one ordering, one move.
+ */
+export const LayerSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      ...LayerBase,
+      kind: z.literal("visual"),
+      /** Visual definition id; null until one is picked. */
+      visual: z.string().min(1).nullable(),
+      /** Surface the Layer renders into; null renders nowhere. */
+      target: z.string().min(1).nullable(),
+      opacity: z.number().min(0).max(1),
+      blendMode: BlendModeSchema,
+    })
+    .strict(),
+  z
+    .object({
+      ...LayerBase,
+      kind: z.literal("filter"),
+      /** Filter definition id; null until one is picked. */
+      filter: z.string().min(1).nullable(),
+      /** How much of the Filter's result replaces its input. */
+      mix: z.number().min(0).max(1),
+    })
+    .strict(),
+  z.object({ ...LayerBase, kind: z.literal("group") }).strict(),
+]);
+export type Layer = Entity<typeof LayerSchema, LayerId>;
+export type VisualLayer = Extract<Layer, { kind: "visual" }>;
+export type FilterLayer = Extract<Layer, { kind: "filter" }>;
+export type GroupLayer = Extract<Layer, { kind: "group" }>;
+
 export const OperationalSchema = z
   .object({
     blackout: z.boolean(),
@@ -149,6 +220,8 @@ export const DocumentSchema = z
     outputs: z.record(z.string(), OutputSchema),
     surfaces: z.record(z.string(), SurfaceSchema),
     masks: z.record(z.string(), MaskSchema),
+    scenes: z.record(z.string(), SceneSchema),
+    layers: z.record(z.string(), LayerSchema),
     operational: OperationalSchema,
   })
   .strict();
@@ -158,6 +231,8 @@ export interface Document {
   readonly outputs: Table<Output>;
   readonly surfaces: Table<Surface>;
   readonly masks: Table<Mask>;
+  readonly scenes: Table<Scene>;
+  readonly layers: Table<Layer>;
   readonly operational: Operational;
 }
 
@@ -166,6 +241,8 @@ export const TABLE_SCHEMAS = {
   outputs: OutputSchema,
   surfaces: SurfaceSchema,
   masks: MaskSchema,
+  scenes: SceneSchema,
+  layers: LayerSchema,
 } as const;
 export type TableName = keyof typeof TABLE_SCHEMAS;
 
@@ -174,15 +251,20 @@ export const ORDERED_TABLES = [
   "outputs",
   "surfaces",
   "masks",
+  "scenes",
+  "layers",
 ] as const satisfies readonly TableName[];
 export type OrderedTableName = (typeof ORDERED_TABLES)[number];
 
 /**
- * Ordered tables whose entities are children: siblings share the value of
- * this field, and order keys and names are unique only among siblings.
+ * Ordered tables whose entities are children: siblings share the values of
+ * these fields, and order keys and names are unique only among siblings.
  */
-export const PARENT_FIELDS: Partial<Record<OrderedTableName, string>> = {
-  masks: "surfaceId",
+export const PARENT_FIELDS: Partial<
+  Record<OrderedTableName, readonly string[]>
+> = {
+  masks: ["surfaceId"],
+  layers: ["sceneId", "parentId"],
 };
 
 /** The entities of `table` that share `entity`'s parent, `entity` included. */
@@ -191,13 +273,15 @@ export function siblingsOf<TEntity extends { readonly id: string }>(
   table: Table<TEntity>,
   entity: TEntity,
 ): Table<TEntity> {
-  const field = PARENT_FIELDS[tableName];
-  if (field === undefined) return table;
-  const parent = (entity as Record<string, unknown>)[field];
+  const fields = PARENT_FIELDS[tableName];
+  if (fields === undefined) return table;
+  const record = entity as Record<string, unknown>;
   return Object.fromEntries(
-    Object.entries(table).filter(
-      ([, candidate]) =>
-        (candidate as Record<string, unknown>)[field] === parent,
+    Object.entries(table).filter(([, candidate]) =>
+      fields.every(
+        (field) =>
+          (candidate as Record<string, unknown>)[field] === record[field],
+      ),
     ),
   );
 }
@@ -209,10 +293,12 @@ export const defaultOperational: Operational = {
 
 export function emptyDocument(name: string): Document {
   return {
-    installation: { id: generateId("installation"), name },
+    installation: { id: generateId("installation"), name, activeScene: null },
     outputs: {},
     surfaces: {},
     masks: {},
+    scenes: {},
+    layers: {},
     operational: defaultOperational,
   };
 }

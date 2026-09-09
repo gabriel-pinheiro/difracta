@@ -30,6 +30,8 @@ const DocumentFileSchema = z
     /** Absent in files written before Surfaces existed. */
     surfaces: DocumentSchema.shape.surfaces.default({}),
     masks: DocumentSchema.shape.masks.default({}),
+    scenes: DocumentSchema.shape.scenes.default({}),
+    layers: DocumentSchema.shape.layers.default({}),
   })
   .strict();
 
@@ -51,6 +53,8 @@ export function serializeDocument(document: Document): string {
     outputs: document.outputs,
     surfaces: document.surfaces,
     masks: document.masks,
+    scenes: document.scenes,
+    layers: document.layers,
   };
   return `${JSON.stringify(sortKeys(file), null, 2)}\n`;
 }
@@ -82,6 +86,8 @@ export function parseDocumentFile(text: string): ParsedDocumentFile {
       outputs: parsed.data.outputs as Document["outputs"],
       surfaces: parsed.data.surfaces as Document["surfaces"],
       masks: parsed.data.masks as Document["masks"],
+      scenes: parsed.data.scenes as Document["scenes"],
+      layers: parsed.data.layers as Document["layers"],
       operational: defaultOperational,
     },
   };

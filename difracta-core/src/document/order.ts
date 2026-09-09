@@ -35,6 +35,39 @@ export function appendOrderKey(
   return generateKeyBetween(last?.order ?? null, null);
 }
 
+/** A key that sorts before everything in `table`. */
+export function prependOrderKey(
+  table: Readonly<Record<string, Ordered>>,
+): string {
+  const first = orderedEntries(table)[0];
+  return generateKeyBetween(null, first?.order ?? null);
+}
+
+/**
+ * `count` keys that sort right after `after` (null for first) among
+ * `siblings`, which is already ordered. Undefined when the neighbours leave
+ * no room, which only legacy keys can cause; callers then move one by one.
+ */
+export function orderKeysAfter(
+  siblings: readonly Ordered[],
+  after: string | null,
+  count: number,
+): readonly string[] | undefined {
+  const index =
+    after === null ? -1 : siblings.findIndex((entity) => entity.id === after);
+  const previous = index === -1 ? undefined : siblings[index];
+  const next = siblings[index + 1];
+  try {
+    return generateNKeysBetween(
+      previous?.order ?? null,
+      next?.order ?? null,
+      count,
+    );
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Keys for placing `moving` right after `after` (null for first) among
  * `siblings`, which excludes `moving` and is already ordered. Returns the new

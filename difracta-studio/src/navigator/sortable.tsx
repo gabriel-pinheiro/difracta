@@ -24,17 +24,37 @@ import { cn } from "@/lib/utils";
 
 interface SortableContext {
   readonly kind: string;
+  readonly listId: string;
+}
+
+/** What a dragged row carries; drop targets add `listId` and an edge or `inside`. */
+interface DragData {
+  readonly kind: string;
+  readonly id: string;
+  readonly listId: string;
+}
+
+function dragData(data: Record<string, unknown>): DragData | undefined {
+  const { kind, id, listId } = data;
+  return typeof kind === "string" &&
+    typeof id === "string" &&
+    typeof listId === "string"
+    ? { kind, id, listId }
+    : undefined;
 }
 
 const Context = createContext<SortableContext | undefined>(undefined);
 
 /**
- * Reordering by drag and drop within one list, plus Alt+Up / Alt+Down on the
- * selected row. `onMove(id, after)` reports the wanted position; the list
- * itself re-renders only when the runtime's delta arrives.
+ * Reordering by drag and drop, plus Alt+Up / Alt+Down on the selected row.
+ * `onMove(id, after)` reports the wanted position; the list itself re-renders
+ * only when the runtime's delta arrives. Lists of one kind accept each
+ * other's rows: `id` may then belong to another list, and `after` names a
+ * row of this one.
  */
 export function SortableList({
   kind,
+  listId = kind,
   ids,
   selectedId,
   onMove,
@@ -42,6 +62,8 @@ export function SortableList({
 }: {
   /** Drags only land on lists of the same kind. */
   readonly kind: string;
+  /** Tells lists of one kind apart; defaults to the kind for a single list. */
+  readonly listId?: string;
   /** Ids in current display order. */
   readonly ids: readonly string[];
   readonly selectedId: string | undefined;
@@ -58,9 +80,11 @@ export function SortableList({
     const move = (id: string, after: string | null): void => {
       const { ids: current, onMove: report } = latest.current;
       const index = current.indexOf(id);
-      if (index === -1 || after === id) return;
-      const currentAfter = current[index - 1] ?? null;
-      if (after === currentAfter) return;
+      if (after === id) return;
+      if (index !== -1) {
+        const currentAfter = current[index - 1] ?? null;
+        if (after === currentAfter) return;
+      }
       report(id, after);
     };
 
@@ -69,11 +93,15 @@ export function SortableList({
       onDrop: ({ source, location }) => {
         const target = location.current.dropTargets[0];
         if (target === undefined) return;
+        // Drops inside a row are the row's own business.
+        if (target.data.inside === true) return;
+        const targetData = dragData(target.data);
+        const sourceData = dragData(source.data);
+        if (targetData === undefined || sourceData === undefined) return;
+        if (targetData.listId !== listId) return;
         const edge = extractClosestEdge(target.data);
-        const targetId = target.data.id;
-        const sourceId = source.data.id;
-        if (typeof targetId !== "string" || typeof sourceId !== "string")
-          return;
+        const targetId = targetData.id;
+        const sourceId = sourceData.id;
         const current = latest.current.ids;
         const after =
           edge === "top"
@@ -112,34 +140,54 @@ export function SortableList({
       stopMonitoring();
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [kind]);
+  }, [kind, listId]);
 
-  return <Context.Provider value={{ kind }}>{children}</Context.Provider>;
+  return (
+    <Context.Provider value={{ kind, listId }}>{children}</Context.Provider>
+  );
+}
+
+/** Rows that take a dropped row into themselves: a Group, a Scene. */
+export interface DropInside {
+  /** Source kinds accepted, such as "layer" on a Scene row. */
+  readonly kinds: readonly string[];
+  readonly onDrop: (sourceId: string) => void;
 }
 
 /** One draggable row and drop target; shows a line on the edge a drop would land on. */
 export function SortableItem({
   id,
+  inside,
   children,
 }: {
   readonly id: string;
+  /** Accepts drops onto the row's middle, shown as an outline. */
+  readonly inside?: DropInside | undefined;
   readonly children: ReactNode;
 }) {
   const context = useContext(Context);
   if (context === undefined)
     throw new Error("SortableItem needs a SortableList.");
-  const { kind } = context;
+  const { kind, listId } = context;
   const ref = useRef<HTMLDivElement>(null);
-  const [edge, setEdge] = useState<Edge | null>(null);
+  const [edge, setEdge] = useState<Edge | "inside" | null>(null);
   const [dragging, setDragging] = useState(false);
+  const latestInside = useRef(inside);
+  useEffect(() => {
+    latestInside.current = inside;
+  });
+  const insideKinds = inside?.kinds.join(" ") ?? "";
 
   useEffect(() => {
     const element = ref.current;
     if (element === null) return;
+    const acceptsInside = (sourceKind: unknown): boolean =>
+      typeof sourceKind === "string" &&
+      insideKinds.split(" ").includes(sourceKind);
     return combine(
       draggable({
         element,
-        getInitialData: () => ({ kind, id }),
+        getInitialData: () => ({ kind, id, listId }),
         // A translucent copy of the row follows the pointer, so the drop line
         // underneath stays readable.
         onGenerateDragPreview: ({ nativeSetDragImage, location }) => {
@@ -165,23 +213,67 @@ export function SortableItem({
       dropTargetForElements({
         element,
         canDrop: ({ source }) =>
-          source.data.kind === kind && source.data.id !== id,
-        getData: ({ input, element: self }) =>
-          attachClosestEdge(
-            { kind, id },
-            { input, element: self, allowedEdges: ["top", "bottom"] },
+          source.data.id !== id &&
+          (source.data.kind === kind || acceptsInside(source.data.kind)),
+        getData: ({ input, element: self, source }) => {
+          const sameKind = source.data.kind === kind;
+          const data = { kind, id, listId };
+          // The row is the first child; an open Group's wrapper also holds
+          // its children's rows, which must not count as the row.
+          const row = self.firstElementChild ?? self;
+          if (!acceptsInside(source.data.kind)) {
+            return attachClosestEdge(data, {
+              input,
+              element: row,
+              allowedEdges: ["top", "bottom"],
+            });
+          }
+          // The middle half of a row that takes children means "inside";
+          // the edges keep meaning "before" or "after" for rows of its kind.
+          const rect = row.getBoundingClientRect();
+          const y = (input.clientY - rect.top) / Math.max(1, rect.height);
+          if (!sameKind || (y > 0.25 && y < 0.75))
+            return { ...data, inside: true };
+          return attachClosestEdge(data, {
+            input,
+            element: row,
+            allowedEdges: ["top", "bottom"],
+          });
+        },
+        // Every row up the chain hears the drag; only the innermost shows it.
+        onDrag: ({ self, location }) =>
+          setEdge(
+            location.current.dropTargets[0]?.element !== element
+              ? null
+              : self.data.inside === true
+                ? "inside"
+                : extractClosestEdge(self.data),
           ),
-        onDrag: ({ self }) => setEdge(extractClosestEdge(self.data)),
         onDragLeave: () => setEdge(null),
-        onDrop: () => setEdge(null),
+        onDrop: ({ self, source, location }) => {
+          setEdge(null);
+          // Every row up the chain gets the drop (a Scene row wraps its
+          // Layers); only the innermost one takes it.
+          if (location.current.dropTargets[0]?.element !== element) return;
+          const sourceId = source.data.id;
+          if (self.data.inside === true && typeof sourceId === "string")
+            latestInside.current?.onDrop(sourceId);
+        },
       }),
     );
-  }, [kind, id]);
+  }, [kind, id, listId, insideKinds]);
 
   return (
-    <div ref={ref} className={cn("relative", dragging && "opacity-40")}>
+    <div
+      ref={ref}
+      className={cn(
+        "relative",
+        dragging && "opacity-40",
+        edge === "inside" && "rounded-sm ring-1 ring-selection ring-inset",
+      )}
+    >
       {children}
-      {edge !== null && (
+      {edge !== null && edge !== "inside" && (
         <div
           className={cn(
             "pointer-events-none absolute right-1 left-1 h-0.5 rounded-full bg-selection",

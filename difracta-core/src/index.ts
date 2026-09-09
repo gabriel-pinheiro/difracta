@@ -3,6 +3,7 @@ export * from "./settings.ts";
 export * from "./document/calibration.ts";
 export * from "./document/document.ts";
 export * from "./document/geometry.ts";
+export * from "./document/layers.ts";
 export * from "./document/names.ts";
 export * from "./document/order.ts";
 export * from "./document/patch.ts";
