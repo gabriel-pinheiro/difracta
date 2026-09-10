@@ -163,6 +163,10 @@ const LayerBase = {
 
 export const BLEND_MODES = ["normal", "additive"] as const;
 export const BlendModeSchema = z.enum(BLEND_MODES);
+export const BLEND_MODE_LABELS: Readonly<Record<BlendMode, string>> = {
+  normal: "Normal",
+  additive: "Additive",
+};
 export type BlendMode = z.infer<typeof BlendModeSchema>;
 
 export const LAYER_KINDS = ["visual", "filter", "group"] as const;

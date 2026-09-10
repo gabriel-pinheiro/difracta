@@ -31,8 +31,11 @@ export interface CommandDefinition<TPayload = unknown> {
   readonly kind: CommandKind;
   readonly description: string;
   readonly payload: ZodType<TPayload>;
-  /** Undo label, e.g. "Rename Output". */
-  readonly label?: (payload: TPayload) => string;
+  /** Undo label, e.g. "Rename Output"; the document is the one before the command. */
+  readonly label?: (
+    payload: TPayload,
+    context: Omit<CommandContext<TPayload>, "payload">,
+  ) => string;
   /** Consecutive commands with the same key from one session merge into one undo step. */
   readonly coalesceKey?: (payload: TPayload) => string | undefined;
   apply(context: CommandContext<TPayload>): CommandOutcome;

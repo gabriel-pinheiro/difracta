@@ -1,31 +1,48 @@
 import type { DocumentView } from "@difracta/client";
 import {
-  BLEND_MODES,
+  layerAddresses,
   orderedEntries,
-  type BlendMode,
+  sameAddressValue,
+  type AddressValue,
   type Layer,
+  type ResolvedAddress,
   type Surface,
   type Table,
 } from "@difracta/core";
 import { useEffect } from "react";
 
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { AddressRow } from "@/inspector/fields/address-row";
+import { FieldRow } from "@/inspector/fields/field-row";
 import { InspectorHeading } from "@/inspector/fields/inspector-heading";
+import { InspectorSection } from "@/inspector/fields/inspector-section";
 import { NameField } from "@/inspector/fields/name-field";
-import { fromPercent, toPercent } from "@/inspector/fields/points";
-import { SelectField } from "@/inspector/fields/select-field";
-import { SliderField } from "@/inspector/fields/slider-field";
-import { SwitchField } from "@/inspector/fields/switch-field";
+import { catalog, definitionOf } from "@/lib/catalog";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useSelection } from "@/selection/selection";
 
 import { DefinitionBlock } from "./definition-block";
 
-const blendLabels: Record<BlendMode, string> = {
-  normal: "Normal",
-  additive: "Additive",
-};
+/** The value an Address points at inside its Layer: the path minus `layers/<id>`. */
+function valueAt(layer: Layer, resolved: ResolvedAddress): AddressValue {
+  let current: unknown = layer;
+  for (const segment of resolved.path.slice(2))
+    current = (current as Record<string, unknown> | undefined)?.[segment];
+  return current as AddressValue;
+}
 
-/** What the Layer is made of, then its name, enabled state and the fields of its kind. */
+/**
+ * What the Layer is made of and its name, then its settings and Parameters
+ * as Address rows in two collapsible sections. Every row is one Address,
+ * so opacity and a Visual's Parameter are edited through the same command.
+ */
 export function LayerInspector({
   view,
   id,
@@ -42,13 +59,31 @@ export function LayerInspector({
     if (layer === undefined) select({ kind: "installation" });
   }, [layer, select]);
   if (layer === undefined) return null;
-  const percent = (value: number): number =>
-    Math.min(1, Math.max(0, fromPercent(value)));
+
+  const addresses = layerAddresses(layer, catalog);
+  const settings = addresses.filter((entry) => !isParameter(entry));
+  const parameters = addresses.filter(isParameter);
+  const definition =
+    layer.kind === "group" ? undefined : definitionOf(layer).definition;
+  const row = (resolved: ResolvedAddress) => (
+    <AddressRow
+      key={resolved.address}
+      resolved={resolved}
+      value={valueAt(layer, resolved)}
+      description={definition?.parameters[parameterName(resolved)]?.description}
+      onEdit={(value) =>
+        command("address.edit", { address: resolved.address, value })
+      }
+    />
+  );
+  const allDefault = parameters.every((entry) =>
+    sameAddressValue(valueAt(layer, entry), entry.default),
+  );
 
   return (
     <>
       <InspectorHeading name={layer.name} id={layer.id} />
-      <div className="grid gap-4 p-3">
+      <div className="grid gap-3 p-3">
         {layer.kind !== "group" && <DefinitionBlock layer={layer} />}
         <NameField
           label="Name"
@@ -57,63 +92,73 @@ export function LayerInspector({
             void command("layer.rename", { layerId: id, name })
           }
         />
-        <SwitchField
-          label="Enabled"
-          checked={layer.enabled}
-          onCheckedChange={(enabled) =>
-            void command("layer.update", { layerId: id, enabled })
-          }
-        />
-        {layer.kind === "visual" && (
-          <>
-            <SelectField
-              label="Target"
-              value={layer.target}
-              noneLabel="None"
-              options={orderedEntries(surfaces).map((surface) => ({
-                value: surface.id,
-                label: surface.name,
-              }))}
-              onValueChange={(target) =>
-                void command("layer.update", { layerId: id, target })
-              }
-            />
-            <SliderField
-              label="Opacity"
-              unit="%"
-              value={toPercent(layer.opacity)}
-              onChange={(value) =>
-                command("layer.update", {
-                  layerId: id,
-                  opacity: percent(value),
-                })
-              }
-            />
-            <SelectField
-              label="Blend mode"
-              value={layer.blendMode}
-              options={BLEND_MODES.map((mode) => ({
-                value: mode,
-                label: blendLabels[mode],
-              }))}
-              onValueChange={(blendMode) => {
-                if (blendMode !== null)
-                  void command("layer.update", { layerId: id, blendMode });
-              }}
-            />
-          </>
-        )}
-        {layer.kind === "filter" && (
-          <SliderField
-            label="Mix"
-            unit="%"
-            value={toPercent(layer.mix)}
-            onChange={(value) =>
-              command("layer.update", { layerId: id, mix: percent(value) })
-            }
-          />
-        )}
       </div>
+      <InspectorSection storageKey="layer" label="Layer">
+        {settings.flatMap((resolved) =>
+          resolved.address.endsWith("/opacity") && layer.kind === "visual"
+            ? [
+                <FieldRow key="target" label="Target">
+                  <Select
+                    value={layer.target}
+                    items={[
+                      { value: null, label: "None" },
+                      ...orderedEntries(surfaces).map((surface) => ({
+                        value: surface.id,
+                        label: surface.name,
+                      })),
+                    ]}
+                    onValueChange={(target: string | null) =>
+                      void command("layer.update", { layerId: id, target })
+                    }
+                  >
+                    <SelectTrigger aria-label="Target" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={null}>None</SelectItem>
+                      {orderedEntries(surfaces).map((surface) => (
+                        <SelectItem key={surface.id} value={surface.id}>
+                          {surface.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FieldRow>,
+                row(resolved),
+              ]
+            : [row(resolved)],
+        )}
+      </InspectorSection>
+      {definition !== undefined && (
+        <InspectorSection
+          storageKey="parameters"
+          label="Parameters"
+          actions={
+            <Button
+              variant="ghost"
+              size="xs"
+              disabled={allDefault}
+              onClick={() => void command("layer.reset", { layerId: id })}
+            >
+              Reset all
+            </Button>
+          }
+        >
+          {parameters.length === 0 ? (
+            <p className="text-[0.6875rem]/relaxed text-muted-foreground">
+              {definition.name} has no Parameters.
+            </p>
+          ) : (
+            parameters.map(row)
+          )}
+        </InspectorSection>
+      )}
     </>
   );
 }
+
+const isParameter = (resolved: ResolvedAddress): boolean =>
+  resolved.path[2] === "parameters";
+
+const parameterName = (resolved: ResolvedAddress): string =>
+  isParameter(resolved) ? (resolved.path[3] ?? "") : "";

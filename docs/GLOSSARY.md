@@ -434,8 +434,11 @@ resubscribes. Revision is distinct from the file format version.
 ### Address
 
 The name of one controllable property or trigger in an Installation, such as
-`installation/blackout` or `layer/<id>/opacity`. Controllers, Parameter Links,
-Macros, Pads, Color Pickers, OSC, and the CLI all read and write Addresses.
+`installation/blackout` or `layer/<id>/opacity`. An Address resolves to a value
+type, a default and, for numbers, a range. Layer enabled, opacity, blend mode,
+mix and every Parameter have one. Controllers, Parameter Links, Macros, Pads,
+Color Pickers, OSC, and the CLI all read and write Addresses; the Inspector
+edits them through undoable commands.
 
 ### Command
 
@@ -466,7 +469,9 @@ Frame. It helps diagnose Frame Interval but is not a precise GPU measurement.
 
 The Studio panel for the selected object, especially a selected Layer. A Layer
 Inspector starts with what the Layer is made of and the way into the Library,
-then general Layer settings, Visual Parameters, and Guide Bindings.
+then its name, then collapsible sections of Address rows: Layer settings,
+Parameters, and later Guide Bindings. Each row has a label, a Control and a
+reset to the default when the value differs from it.
 
 ### Library
 
@@ -480,7 +485,9 @@ previous one back.
 
 One UI widget used to edit a value, such as a slider, color picker, checkbox, or
 select. The containing application is Studio and the containing panel is an
-Inspector.
+Inspector. The Control for an Address follows its value type: a slider with a
+typed readout for numbers, a color input with hex and alpha for colors, a select
+for choices, a switch for booleans.
 
 ## Documents and files
 

@@ -238,12 +238,30 @@ too if optimistic application is ever wanted.
 
 An Address names a controllable property or trigger, such as
 `installation/blackout` or `layer/<id>/opacity`. `resolveAddress` maps it to a
-document path and a value type; `listAddresses` enumerates every reachable one.
-Controllers, Macros, Pads, OSC, and the CLI all read and write Addresses.
+document path, a value type (boolean, number, color, choice or trigger), a
+default, and for numbers a range and for choices the options; `listAddresses`
+enumerates every reachable one. The entries today are Blackout and, per Layer,
+`enabled`, `opacity` and `blend` (Visual Layers), `mix` (Filter Layers) and
+`param/<name>` for every Parameter of the Layer's definition, typed from the
+Catalog. Controllers, Macros, Pads, OSC, and the CLI all read and write
+Addresses.
+
+Two commands write one: `address.edit` is the authoring write the inspector
+sends, undoable, labelled by the property ("Change Opacity", "Change Speed") and
+coalescing per Address so a drag is one step; `address.set` is the same write
+for show control, never undone. Both share one reducer, which refuses an unknown
+Address and a value the type does not accept. A Parameter Link will add one more
+refusal there: an Address a Controller drives cannot be written directly, by
+anyone.
 
 **Why:** hand-written target unions mean every new controllable thing needs
 changes in the domain, protocol, inspector, OSC router and discovery tree. With
 one Address table a new entry is reachable from every control surface at once.
+
+**Why the resolved Address carries range, options and default:** a control needs
+exactly those to draw itself, so the inspector renders one row per Address
+without knowing whether it is looking at a Layer setting or a Visual Parameter,
+and a Link's mapping and an OSCQuery range come from the same place.
 
 ## Live protocol
 
@@ -415,7 +433,15 @@ Scenes. Selecting a Scene never plays it. The "+" on a Scene or Group row opens
 a menu of the three kinds, and new Layers land at the top with a default name,
 ready to rename in the inspector. The Layer inspector starts with what the Layer
 is made of, its name, description and trait badges, and a button into the
-Library, then the fields of the Layer's kind, with opacity and mix on sliders.
+Library, then the name, then two collapsible sections of Address rows: Layer
+(enabled, Target, opacity and blend mode, or mix) and Parameters. A row is a
+label, the control for the Address's type and, when the value is not the
+default, a reset button; numbers are a slider with a readout that turns into an
+input when clicked (typed values clamp to the range), colors are the browser's
+color input with an editable hex and an alpha slider, choices a select, booleans
+a switch. Sliders and the color input stream every position through
+`address.edit`, one send in flight at a time. The Parameters header has Reset
+all, one `layer.reset` step. Section open states are remembered per section.
 
 The Library is the picker for Visuals and Filters. It is bound to one Visual or
 Filter Layer and takes over the center column while open: a search box, three

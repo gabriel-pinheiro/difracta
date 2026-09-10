@@ -1,4 +1,16 @@
-import type { Document } from "../document/document.ts";
+import { emptyCatalog, type Catalog } from "../catalog/catalog.ts";
+import {
+  ColorSchema,
+  type ParameterDefinition,
+  type ParameterValue,
+} from "../catalog/parameters.ts";
+import {
+  BLEND_MODE_LABELS,
+  BLEND_MODES,
+  type Document,
+  type Layer,
+} from "../document/document.ts";
+import { orderedEntries } from "../document/order.ts";
 import type { PatchPath } from "../document/patch.ts";
 
 /**
@@ -6,33 +18,204 @@ import type { PatchPath } from "../document/patch.ts";
  * as `installation/blackout` or `layer/<id>/opacity`. Controllers,
  * Macros, Pads, OSC and the CLI all read and write Addresses, so adding an
  * entry here makes a property reachable from every control surface at once.
+ *
+ * A resolved Address carries everything a control needs: the value type,
+ * the default, and for numbers the range and for choices the options. The
+ * Studio inspector draws one row per Address from this alone, so a Layer's
+ * opacity and a Visual's Parameter look and behave the same.
  */
-export type AddressValueType = "boolean" | "number" | "trigger";
+export type AddressValueType =
+  "boolean" | "number" | "color" | "choice" | "trigger";
+
+export type AddressValue = ParameterValue;
+
+export interface NumberRange {
+  readonly min: number;
+  readonly max: number;
+  readonly step?: number;
+  readonly unit?: string;
+  /** Shown as 0 to 100 with a percent sign; the value itself stays 0 to 1. */
+  readonly percent?: boolean;
+}
+
+export interface ChoiceOption {
+  readonly value: string;
+  readonly label: string;
+}
 
 export interface ResolvedAddress {
   readonly address: string;
+  /** The property's own name, such as "Opacity" or "Speed". */
   readonly label: string;
+  /** What the property belongs to, such as the Layer's name; absent for Installation-wide ones. */
+  readonly owner?: string;
   readonly path: PatchPath;
   readonly type: AddressValueType;
+  /** What the property starts at; a trigger has none. */
+  readonly default?: AddressValue;
+  readonly range?: NumberRange;
+  readonly options?: readonly ChoiceOption[];
 }
 
+/** What resolving needs from a Document: only the Layers so far. */
+export type AddressSource = Pick<Document, "layers">;
+
 interface AddressPattern {
-  /** Segments; `*` captures one id. */
+  /** Segments; `*` captures one id or name. */
   readonly pattern: readonly string[];
-  readonly type: AddressValueType;
   resolve(
-    document: Document,
+    source: AddressSource,
+    catalog: Catalog,
     captures: readonly string[],
-  ): Omit<ResolvedAddress, "address" | "type"> | undefined;
-  list(document: Document): readonly (readonly string[])[];
+  ): Omit<ResolvedAddress, "address"> | undefined;
+  list(source: AddressSource, catalog: Catalog): readonly (readonly string[])[];
 }
+
+function layerDefinition(layer: Layer, catalog: Catalog) {
+  if (layer.kind === "visual")
+    return layer.visual === null
+      ? undefined
+      : catalog.definition("visual", layer.visual);
+  if (layer.kind === "filter")
+    return layer.filter === null
+      ? undefined
+      : catalog.definition("filter", layer.filter);
+  return undefined;
+}
+
+function fromParameter(
+  layer: Layer,
+  name: string,
+  definition: ParameterDefinition,
+): Omit<ResolvedAddress, "address"> {
+  const base = {
+    label: definition.label,
+    owner: layer.name,
+    path: ["layers", layer.id, "parameters", name] as const,
+    default: definition.default,
+  };
+  switch (definition.kind) {
+    case "number": {
+      const range: NumberRange = {
+        min: definition.min,
+        max: definition.max,
+        ...(definition.step === undefined ? {} : { step: definition.step }),
+        ...(definition.unit === undefined ? {} : { unit: definition.unit }),
+      };
+      return { ...base, type: "number", range };
+    }
+    case "color":
+      return { ...base, type: "color" };
+    case "choice":
+      return { ...base, type: "choice", options: definition.options };
+    case "boolean":
+      return { ...base, type: "boolean" };
+  }
+}
+
+const layerIds = (document: AddressSource): readonly (readonly string[])[] =>
+  orderedEntries(document.layers).map((layer) => [layer.id]);
+
+const layersOfKind =
+  (kind: Layer["kind"]) =>
+  (document: AddressSource): readonly (readonly string[])[] =>
+    orderedEntries(document.layers)
+      .filter((layer) => layer.kind === kind)
+      .map((layer) => [layer.id]);
 
 const patterns: readonly AddressPattern[] = [
   {
     pattern: ["installation", "blackout"],
-    type: "boolean",
-    resolve: () => ({ label: "Blackout", path: ["operational", "blackout"] }),
+    resolve: () => ({
+      label: "Blackout",
+      path: ["operational", "blackout"],
+      type: "boolean",
+      default: false,
+    }),
     list: () => [[]],
+  },
+  {
+    pattern: ["layer", "*", "enabled"],
+    resolve: (document, _catalog, [id = ""]) => {
+      const layer = document.layers[id];
+      if (layer === undefined) return undefined;
+      return {
+        label: "Enabled",
+        owner: layer.name,
+        path: ["layers", id, "enabled"],
+        type: "boolean",
+        default: true,
+      };
+    },
+    list: layerIds,
+  },
+  {
+    pattern: ["layer", "*", "opacity"],
+    resolve: (document, _catalog, [id = ""]) => {
+      const layer = document.layers[id];
+      if (layer?.kind !== "visual") return undefined;
+      return {
+        label: "Opacity",
+        owner: layer.name,
+        path: ["layers", id, "opacity"],
+        type: "number",
+        default: 1,
+        range: { min: 0, max: 1, step: 0.01, percent: true },
+      };
+    },
+    list: layersOfKind("visual"),
+  },
+  {
+    pattern: ["layer", "*", "blend"],
+    resolve: (document, _catalog, [id = ""]) => {
+      const layer = document.layers[id];
+      if (layer?.kind !== "visual") return undefined;
+      return {
+        label: "Blend mode",
+        owner: layer.name,
+        path: ["layers", id, "blendMode"],
+        type: "choice",
+        default: "normal",
+        options: BLEND_MODES.map((mode) => ({
+          value: mode,
+          label: BLEND_MODE_LABELS[mode],
+        })),
+      };
+    },
+    list: layersOfKind("visual"),
+  },
+  {
+    pattern: ["layer", "*", "mix"],
+    resolve: (document, _catalog, [id = ""]) => {
+      const layer = document.layers[id];
+      if (layer?.kind !== "filter") return undefined;
+      return {
+        label: "Mix",
+        owner: layer.name,
+        path: ["layers", id, "mix"],
+        type: "number",
+        default: 1,
+        range: { min: 0, max: 1, step: 0.01, percent: true },
+      };
+    },
+    list: layersOfKind("filter"),
+  },
+  {
+    pattern: ["layer", "*", "param", "*"],
+    resolve: (document, catalog, [id = "", name = ""]) => {
+      const layer = document.layers[id];
+      if (layer === undefined) return undefined;
+      const parameter = layerDefinition(layer, catalog)?.parameters[name];
+      return parameter === undefined
+        ? undefined
+        : fromParameter(layer, name, parameter);
+    },
+    list: (document, catalog) =>
+      orderedEntries(document.layers).flatMap((layer) =>
+        Object.keys(layerDefinition(layer, catalog)?.parameters ?? {}).map(
+          (name) => [layer.id, name],
+        ),
+      ),
   },
 ];
 
@@ -41,8 +224,9 @@ export function formatAddress(segments: readonly string[]): string {
 }
 
 export function resolveAddress(
-  document: Document,
+  document: AddressSource,
   address: string,
+  catalog: Catalog = emptyCatalog,
 ): ResolvedAddress | undefined {
   const segments = address.split("/");
   for (const candidate of patterns) {
@@ -58,41 +242,100 @@ export function resolveAddress(
       }
     }
     if (!matched) continue;
-    const resolved = candidate.resolve(document, captures);
-    return resolved === undefined
-      ? undefined
-      : { ...resolved, address, type: candidate.type };
+    const resolved = candidate.resolve(document, catalog, captures);
+    return resolved === undefined ? undefined : { ...resolved, address };
   }
   return undefined;
 }
 
 /** Every Address currently reachable in the Document, for OSCQuery and the CLI. */
-export function listAddresses(document: Document): readonly ResolvedAddress[] {
+export function listAddresses(
+  document: AddressSource,
+  catalog: Catalog = emptyCatalog,
+): readonly ResolvedAddress[] {
   const result: ResolvedAddress[] = [];
   for (const candidate of patterns) {
-    for (const captures of candidate.list(document)) {
+    for (const captures of candidate.list(document, catalog)) {
       let captureIndex = 0;
       const segments = candidate.pattern.map((segment) =>
         segment === "*" ? (captures[captureIndex++] ?? "") : segment,
       );
       const address = formatAddress(segments);
-      const resolved = resolveAddress(document, address);
+      const resolved = resolveAddress(document, address, catalog);
       if (resolved !== undefined) result.push(resolved);
     }
   }
   return result;
 }
 
+/** The Addresses of one Layer, in inspector order: its own settings, then its Parameters. */
+export function layerAddresses(
+  layer: Layer,
+  catalog: Catalog = emptyCatalog,
+): readonly ResolvedAddress[] {
+  const document: AddressSource = { layers: { [layer.id]: layer } };
+  const own = ["enabled", "opacity", "blend", "mix"].map((field) =>
+    resolveAddress(
+      document,
+      formatAddress(["layer", layer.id, field]),
+      catalog,
+    ),
+  );
+  const parameters = Object.keys(
+    layerDefinition(layer, catalog)?.parameters ?? {},
+  ).map((name) =>
+    resolveAddress(
+      document,
+      formatAddress(["layer", layer.id, "param", name]),
+      catalog,
+    ),
+  );
+  return [...own, ...parameters].filter(
+    (entry): entry is ResolvedAddress => entry !== undefined,
+  );
+}
+
+/** Why `value` cannot be written to `resolved`, or undefined when it can. */
+export function addressValueProblem(
+  resolved: ResolvedAddress,
+  value: unknown,
+): string | undefined {
+  switch (resolved.type) {
+    case "boolean":
+      return typeof value === "boolean" ? undefined : "expects true or false";
+    case "number": {
+      if (typeof value !== "number" || !Number.isFinite(value))
+        return "expects a number";
+      const range = resolved.range;
+      if (range !== undefined && (value < range.min || value > range.max))
+        return `expects a number between ${range.min} and ${range.max}`;
+      return undefined;
+    }
+    case "color":
+      return ColorSchema.safeParse(value).success
+        ? undefined
+        : "expects a color of four components from 0 to 1";
+    case "choice":
+      return resolved.options?.some((option) => option.value === value)
+        ? undefined
+        : `expects one of ${(resolved.options ?? []).map((option) => option.value).join(", ")}`;
+    case "trigger":
+      return value === undefined || value === null
+        ? undefined
+        : "is a trigger and takes no value";
+  }
+}
+
 export function isValidAddressValue(
-  type: AddressValueType,
+  resolved: ResolvedAddress,
   value: unknown,
 ): boolean {
-  switch (type) {
-    case "boolean":
-      return typeof value === "boolean";
-    case "number":
-      return typeof value === "number" && Number.isFinite(value);
-    case "trigger":
-      return value === undefined || value === null;
-  }
+  return addressValueProblem(resolved, value) === undefined;
+}
+
+/** Whether two Address values are the same; colors compare by component. */
+export function sameAddressValue(a: unknown, b: unknown): boolean {
+  if (Array.isArray(a) && Array.isArray(b))
+    return a.length === b.length && a.every((item, index) => item === b[index]);
+  return a === b;
 }

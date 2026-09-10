@@ -65,7 +65,9 @@ export function executeCommand(
     document: next,
     patches: outcome.patches,
     inverse: invertPatches(document, outcome.patches),
-    label: definition.label?.(payload) ?? definition.name,
+    label:
+      definition.label?.(payload, { document, catalog: registry.catalog }) ??
+      definition.name,
     coalesceKey: definition.coalesceKey?.(payload),
   };
 }

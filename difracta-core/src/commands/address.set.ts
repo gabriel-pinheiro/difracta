@@ -1,8 +1,44 @@
 import { z } from "zod";
 
-import { isValidAddressValue, resolveAddress } from "../address/address.ts";
-import { accepted, defineCommand, rejected } from "../command/command.ts";
+import {
+  addressValueProblem,
+  resolveAddress,
+  sameAddressValue,
+  type ResolvedAddress,
+} from "../address/address.ts";
+import {
+  accepted,
+  defineCommand,
+  rejected,
+  type CommandContext,
+  type CommandOutcome,
+} from "../command/command.ts";
 import { getAtPath } from "../document/patch.ts";
+
+/**
+ * Writing a value to an Address, shared by the performance write here and
+ * the authoring `address.edit`: the Address must exist, be settable and
+ * accept the value. Writing what is already there changes nothing.
+ */
+export function writeAddress(
+  { document, catalog }: CommandContext<unknown>,
+  address: string,
+  value: unknown,
+): CommandOutcome & { readonly resolved?: ResolvedAddress } {
+  const resolved = resolveAddress(document, address, catalog);
+  if (resolved === undefined) return rejected(`Unknown address “${address}”.`);
+  if (resolved.type === "trigger")
+    return rejected(`Address “${address}” is a trigger; use address.trigger.`);
+  const problem = addressValueProblem(resolved, value);
+  if (problem !== undefined)
+    return rejected(`Address “${address}” ${problem}.`);
+  if (sameAddressValue(getAtPath(document, resolved.path), value))
+    return { ...accepted([]), resolved };
+  return {
+    ...accepted([{ op: "set", path: resolved.path, value }]),
+    resolved,
+  };
+}
 
 /**
  * The generic performance write. Everything a show-control surface can move
@@ -16,23 +52,12 @@ export const addressSet = defineCommand({
   payload: z
     .object({ address: z.string().min(1), value: z.unknown() })
     .strict(),
-  apply({ document, payload }) {
-    const resolved = resolveAddress(document, payload.address);
-    if (resolved === undefined)
-      return rejected(`Unknown address “${payload.address}”.`);
-    if (resolved.type === "trigger") {
-      return rejected(
-        `Address “${payload.address}” is a trigger; use address.trigger.`,
-      );
-    }
-    if (!isValidAddressValue(resolved.type, payload.value)) {
-      return rejected(
-        `Address “${payload.address}” expects a ${resolved.type}.`,
-      );
-    }
-    if (getAtPath(document, resolved.path) === payload.value)
-      return accepted([]);
-    return accepted([{ op: "set", path: resolved.path, value: payload.value }]);
+  apply(context) {
+    return writeAddress(
+      context,
+      context.payload.address,
+      context.payload.value,
+    );
   },
 });
 
@@ -41,8 +66,8 @@ export const addressToggle = defineCommand({
   kind: "performance",
   description: "Toggle a boolean Address.",
   payload: z.object({ address: z.string().min(1) }).strict(),
-  apply({ document, payload }) {
-    const resolved = resolveAddress(document, payload.address);
+  apply({ document, payload, catalog }) {
+    const resolved = resolveAddress(document, payload.address, catalog);
     if (resolved === undefined)
       return rejected(`Unknown address “${payload.address}”.`);
     if (resolved.type !== "boolean") {

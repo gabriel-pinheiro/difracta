@@ -1,6 +1,7 @@
 import { emptyCatalog, type Catalog } from "../catalog/catalog.ts";
 import type { CommandDefinition } from "../command/command.ts";
 import { CommandRegistry } from "../command/registry.ts";
+import { addressEdit } from "./address.edit.ts";
 import { addressSet, addressToggle } from "./address.set.ts";
 import { calibrationExit, calibrationSet } from "./calibration.ts";
 import { entityMove } from "./entity.move.ts";
@@ -11,6 +12,7 @@ import { layerFilter, layerVisual } from "./layer.pick.ts";
 import { layerMove } from "./layer.move.ts";
 import { layerRemove } from "./layer.remove.ts";
 import { layerRename } from "./layer.rename.ts";
+import { layerReset } from "./layer.reset.ts";
 import { layerUpdate } from "./layer.update.ts";
 import { installationRename } from "./installation.rename.ts";
 import { maskCreate } from "./mask.create.ts";
@@ -69,11 +71,13 @@ export const builtInCommands: readonly CommandDefinition<never>[] = [
   layerUpdate,
   layerVisual,
   layerFilter,
+  layerReset,
   layerMove,
   layerDuplicate,
   layerGroup,
   layerUngroup,
   layerRemove,
+  addressEdit,
   addressSet,
   addressToggle,
   calibrationSet,

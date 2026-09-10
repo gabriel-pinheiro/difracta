@@ -7,6 +7,7 @@ import { driftingStars } from "./visuals/drifting-stars.ts";
 import { gridPulse } from "./visuals/grid-pulse.ts";
 import { pathRunner } from "./visuals/path-runner.ts";
 import { plasma } from "./visuals/plasma.ts";
+import { ribbonField } from "./visuals/ribbon-field.ts";
 import { solidColor } from "./visuals/solid-color.ts";
 
 /**
@@ -14,7 +15,14 @@ import { solidColor } from "./visuals/solid-color.ts";
  * each. Add a definition by importing it here.
  */
 export const builtInCatalog = new Catalog({
-  visuals: [solidColor, driftingStars, plasma, pathRunner, gridPulse],
+  visuals: [
+    solidColor,
+    driftingStars,
+    plasma,
+    pathRunner,
+    gridPulse,
+    ribbonField,
+  ],
   filters: [blur, hueShift, pixelate],
 });
 
