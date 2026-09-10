@@ -1,8 +1,10 @@
 import { createBuiltInRegistry, settings } from "@difracta/core";
+import { builtInCatalog, thumbnailsRoot } from "@difracta/visuals";
 import fastifyStatic from "@fastify/static";
 import fastifyWebsocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance } from "fastify";
 import { access } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
 import type { RuntimeConfig } from "./config.ts";
 import { DocumentStore } from "./documents/document-store.ts";
@@ -39,7 +41,7 @@ export async function buildRuntime(
   };
   const store = new DocumentStore({
     projectsDir: config.projectsDir,
-    registry: createBuiltInRegistry(),
+    registry: createBuiltInRegistry(builtInCatalog),
     autosaveIntervalMs: config.autosaveIntervalMs,
     log,
   });
@@ -58,6 +60,13 @@ export async function buildRuntime(
   }));
   app.get(settings.runtime.livePath, { websocket: true }, (socket) => {
     live.accept(socket);
+  });
+
+  // Thumbnails of the Catalog, one per definition, for Studio's browser.
+  await app.register(fastifyStatic, {
+    root: fileURLToPath(thumbnailsRoot),
+    prefix: "/catalog/",
+    decorateReply: false,
   });
 
   const studioDist = await existingDir(config.studioDist);

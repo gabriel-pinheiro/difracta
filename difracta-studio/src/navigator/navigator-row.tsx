@@ -36,6 +36,7 @@ export function NavigatorRow({
   expanded,
   onToggle,
   onSelect,
+  onOpen,
   onCreate,
   createItems,
   actions,
@@ -52,6 +53,8 @@ export function NavigatorRow({
   /** Makes the row collapsible: shows a chevron that flips `expanded`. */
   readonly onToggle?: ((next: boolean) => void) | undefined;
   readonly onSelect: () => void;
+  /** Double-click: opens what the row stands for, such as the Library for a Layer. */
+  readonly onOpen?: (() => void) | undefined;
   /** Adds a child; shows a "+" at the row's end, as section headers have. */
   readonly onCreate?: () => void;
   /** Several kinds of children: the "+" opens a menu of these instead. */
@@ -111,6 +114,7 @@ export function NavigatorRow({
             : "pr-1",
         )}
         onClick={onSelect}
+        onDoubleClick={onOpen}
         onKeyDown={onKeyDown}
       >
         <Icon className="size-3.5 shrink-0" />

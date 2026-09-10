@@ -1,3 +1,4 @@
+import { emptyCatalog, type Catalog } from "../catalog/catalog.ts";
 import type { CommandDefinition } from "../command/command.ts";
 import { CommandRegistry } from "../command/registry.ts";
 import { addressSet, addressToggle } from "./address.set.ts";
@@ -6,6 +7,7 @@ import { entityMove } from "./entity.move.ts";
 import { layerCreate } from "./layer.create.ts";
 import { layerDuplicate } from "./layer.duplicate.ts";
 import { layerGroup, layerUngroup } from "./layer.group.ts";
+import { layerFilter, layerVisual } from "./layer.pick.ts";
 import { layerMove } from "./layer.move.ts";
 import { layerRemove } from "./layer.remove.ts";
 import { layerRename } from "./layer.rename.ts";
@@ -65,6 +67,8 @@ export const builtInCommands: readonly CommandDefinition<never>[] = [
   layerCreate,
   layerRename,
   layerUpdate,
+  layerVisual,
+  layerFilter,
   layerMove,
   layerDuplicate,
   layerGroup,
@@ -77,6 +81,9 @@ export const builtInCommands: readonly CommandDefinition<never>[] = [
   entityMove,
 ] as unknown as readonly CommandDefinition<never>[];
 
-export function createBuiltInRegistry(): CommandRegistry {
-  return new CommandRegistry(builtInCommands);
+/** Every built-in command over `catalog`; a runtime passes the Catalog it ships. */
+export function createBuiltInRegistry(
+  catalog: Catalog = emptyCatalog,
+): CommandRegistry {
+  return new CommandRegistry(builtInCommands, catalog);
 }

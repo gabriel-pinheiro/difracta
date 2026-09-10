@@ -15,6 +15,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { useCommand, useDocumentPath } from "@/lib/client";
+import { useBrowser } from "@/library/browser-state";
 import { useExpansion } from "@/navigator/expansion";
 import {
   NavigatorEmptyRow,
@@ -48,6 +49,7 @@ export function LayerRows({
   const { selection, select } = useSelection();
   const { isExpanded, setExpanded } = useExpansion();
   const { createItems } = useLayerActions(view);
+  const browser = useBrowser();
   const layers = useDocumentPath<Table<Layer>>(view, ["layers"]) ?? {};
   const rows = childLayers(layers, sceneId, parentId);
   const moveInto = (layerId: string, target: Layer): void =>
@@ -103,6 +105,14 @@ export function LayerRows({
                       : undefined
                   }
                   onSelect={() => select({ kind: "layer", id: layer.id })}
+                  onOpen={
+                    group
+                      ? undefined
+                      : () => {
+                          select({ kind: "layer", id: layer.id });
+                          browser.open(layer.id);
+                        }
+                  }
                   createItems={
                     group ? createItems(sceneId, layer.id) : undefined
                   }

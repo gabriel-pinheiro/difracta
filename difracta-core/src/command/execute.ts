@@ -43,7 +43,11 @@ export function executeCommand(
   }
   const payload = parsed.data;
 
-  const outcome = definition.apply({ document, payload });
+  const outcome = definition.apply({
+    document,
+    payload,
+    catalog: registry.catalog,
+  });
   if (!outcome.ok) return outcome;
 
   const next = applyPatches(document, outcome.patches);

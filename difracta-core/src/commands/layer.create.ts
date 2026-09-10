@@ -62,12 +62,13 @@ export const layerCreate = defineCommand({
             ...base,
             kind: "visual",
             visual: null,
+            parameters: {},
             target: null,
             opacity: 1,
             blendMode: "normal",
           }
         : payload.kind === "filter"
-          ? { ...base, kind: "filter", filter: null, mix: 1 }
+          ? { ...base, kind: "filter", filter: null, parameters: {}, mix: 1 }
           : { ...base, kind: "group" };
     return accepted([{ op: "set", path: ["layers", layerId], value: layer }]);
   },

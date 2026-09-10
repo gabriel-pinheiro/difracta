@@ -1,5 +1,6 @@
 import type { ZodType } from "zod";
 
+import type { Catalog } from "../catalog/catalog.ts";
 import type { Document } from "../document/document.ts";
 import type { Patch } from "../document/patch.ts";
 
@@ -17,6 +18,8 @@ export type CommandKind = "authoring" | "performance";
 export interface CommandContext<TPayload> {
   readonly document: Document;
   readonly payload: TPayload;
+  /** The Visuals and Filters this runtime knows, for commands that refer to them. */
+  readonly catalog: Catalog;
 }
 
 export type CommandOutcome =

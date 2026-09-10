@@ -10,6 +10,7 @@ import {
   type OutputId,
   type SurfaceId,
 } from "../ids.ts";
+import { ParameterValuesSchema } from "../catalog/parameters.ts";
 import { CornerNameSchema, PointSchema, QuadSchema } from "./geometry.ts";
 import { DEFAULT_ORDER_KEY } from "./order.ts";
 
@@ -179,6 +180,8 @@ export const LayerSchema = z.discriminatedUnion("kind", [
       kind: z.literal("visual"),
       /** Visual definition id; null until one is picked. */
       visual: z.string().min(1).nullable(),
+      /** Values for the Visual's Parameters, by name; empty without a Visual. */
+      parameters: ParameterValuesSchema.default({}),
       /** Surface the Layer renders into; null renders nowhere. */
       target: z.string().min(1).nullable(),
       opacity: z.number().min(0).max(1),
@@ -191,6 +194,7 @@ export const LayerSchema = z.discriminatedUnion("kind", [
       kind: z.literal("filter"),
       /** Filter definition id; null until one is picked. */
       filter: z.string().min(1).nullable(),
+      parameters: ParameterValuesSchema.default({}),
       /** How much of the Filter's result replaces its input. */
       mix: z.number().min(0).max(1),
     })

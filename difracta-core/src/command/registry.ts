@@ -1,9 +1,15 @@
+import { emptyCatalog, type Catalog } from "../catalog/catalog.ts";
 import type { CommandDefinition } from "./command.ts";
 
 export class CommandRegistry {
   readonly #commands = new Map<string, CommandDefinition<never>>();
+  readonly catalog: Catalog;
 
-  constructor(definitions: readonly CommandDefinition<never>[] = []) {
+  constructor(
+    definitions: readonly CommandDefinition<never>[] = [],
+    catalog: Catalog = emptyCatalog,
+  ) {
+    this.catalog = catalog;
     for (const definition of definitions) this.register(definition);
   }
 

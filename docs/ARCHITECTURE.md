@@ -32,16 +32,17 @@ consistent.
 
 ## Packages
 
-| Package             | Role                                                                                                                    | Depends on              |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------- | ----------------------- |
-| `difracta-core`     | Document model (normalized tables), patches, Addresses, command registry, pure command reducers, undo history, settings | zod                     |
-| `difracta-protocol` | Wire schemas for the live socket and runtime requests                                                                   | core                    |
-| `difracta-client`   | Connection, snapshot plus delta replica (`DocumentView`), acknowledged commands, coalesced inputs                       | core, protocol          |
-| `difracta-runtime`  | Node host: document sessions, files and autosave, live server, static serving                                           | core, protocol, fastify |
-| `difracta-render`   | WebGL2 compositor: homographies, Mask textures, calibration patterns                                                    | core                    |
-| `difracta-output`   | One display's page; no React                                                                                            | client, render          |
-| `difracta-studio`   | React authoring and performance UI                                                                                      | client                  |
-| `difracta-cli`      | `difracta` command for shells and agents                                                                                | client                  |
+| Package             | Role                                                                                                                                                 | Depends on                       |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| `difracta-core`     | Document model (normalized tables), patches, Addresses, Catalog and Parameter types, command registry, pure command reducers, undo history, settings | zod                              |
+| `difracta-visuals`  | The built-in Catalog: Visual and Filter definitions and their thumbnails                                                                             | core                             |
+| `difracta-protocol` | Wire schemas for the live socket and runtime requests                                                                                                | core                             |
+| `difracta-client`   | Connection, snapshot plus delta replica (`DocumentView`), acknowledged commands, coalesced inputs                                                    | core, protocol                   |
+| `difracta-runtime`  | Node host: document sessions, files and autosave, live server, static serving                                                                        | core, protocol, visuals, fastify |
+| `difracta-render`   | WebGL2 compositor: homographies, Mask textures, calibration patterns                                                                                 | core                             |
+| `difracta-output`   | One display's page; no React                                                                                                                         | client, render                   |
+| `difracta-studio`   | React authoring and performance UI                                                                                                                   | client, visuals                  |
+| `difracta-cli`      | `difracta` command for shells and agents                                                                                                             | client                           |
 
 **Why:** Studio and Output are separate packages because an Output page runs in
 smart-TV browsers and must stay tiny. Everything that can be pure lives in
@@ -60,6 +61,8 @@ Document
 ├── masks { [id]: Mask }              surfaceId, mode, points, feather
 ├── scenes { [id]: Scene }            name, order
 ├── layers { [id]: Layer }            kind, sceneId, parentId, enabled, order, + per kind
+│                                     visual: visual, parameters, target, opacity, blendMode
+│                                     filter: filter, parameters, mix
 └── operational { blackout, calibration }   replicated, never saved
 ```
 
@@ -141,9 +144,10 @@ Group's contents along and refusing cycles; `entity.move` still covers
 reordering among siblings. `layer.group` wraps a Layer in a new Group at its
 position and `layer.ungroup` dissolves one; duplicating a Scene or a Group
 copies everything inside with fresh ids. A Visual Layer starts without a Visual
-or Target, a Filter Layer without a Filter: both are picked afterwards. Removing
-a Surface clears the Target of Layers using it. The first Scene created becomes
-`installation.activeScene`; the active Scene cannot be removed.
+or Target, a Filter Layer without a Filter: both are picked afterwards from the
+Catalog. Removing a Surface clears the Target of Layers using it. The first
+Scene created becomes `installation.activeScene`; the active Scene cannot be
+removed.
 
 **Why one table for three kinds:** the stack is one ordering across kinds, and
 the words followed the data. Having "Layer" mean only "Visual instance" left
@@ -153,6 +157,35 @@ gesture, and Filters and Groups reorder, group and hide through the same
 commands. **Why a nullable Visual:** a Layer's place in the stack, its name, its
 Group and its enabled state are worth authoring before any pixels exist, and the
 choice of Visual is a separate gesture with its own picker.
+
+### Catalog and Parameters
+
+The Catalog is the set of Visual and Filter definitions a runtime knows
+(`core/catalog/`). A definition is code with a stable id, a name, a description,
+a backend (`canvas` or `shader`), an optional `recommended` flag, a Parameter
+schema, and for Visuals the Paths they need and the Cues they answer to. Core
+owns the types and the validation; `difracta-visuals` owns the entries and their
+thumbnails, one file per definition (a Filter's is a gray checkerboard through
+that Filter, so Filters compare against the same picture), and the runtime
+passes that Catalog to the command registry. Every command's `apply` receives
+it, so `layer.visual` and `layer.filter` can refuse an unknown id and check
+values.
+
+A Parameter is declared once, in the definition, as one of four kinds: number
+(with min, max, step and unit), color (four components from 0 to 1), choice
+(named options) or boolean. Values live on the Layer in `parameters`, keyed by
+Parameter name; picking a definition writes its id and the defaults in one
+command, and a complete set of values can come along instead, which is how a
+pick is put back. A Layer whose id the Catalog no longer has keeps it: the
+inspector shows the id as unavailable and the Output draws nothing for that
+Layer.
+
+**Why the Catalog is injected rather than imported by core:** the same commands
+run wherever the registry does, including a CLI with no Visuals at hand, and a
+runtime built with a different Catalog validates against exactly what it can
+render. **Why an unknown id is a warning and not an error:** a Catalog changes
+between versions and between machines; a file that opened yesterday must open
+today, with one Layer flagged, rather than refuse as a whole.
 
 ### Calibration Mode
 
@@ -380,8 +413,34 @@ Layer row with an eye and rows under a disabled Group faded. Rows drag among
 siblings, into a Group or a Scene by dropping on the row's middle, and to other
 Scenes. Selecting a Scene never plays it. The "+" on a Scene or Group row opens
 a menu of the three kinds, and new Layers land at the top with a default name,
-ready to rename in the inspector. The Layer inspector shows the fields of the
-Layer's kind; the Visual or Filter is picked elsewhere.
+ready to rename in the inspector. The Layer inspector starts with what the Layer
+is made of, its name, description and trait badges, and a button into the
+Library, then the fields of the Layer's kind, with opacity and mix on sliders.
+
+The Library is the picker for Visuals and Filters. It is bound to one Visual or
+Filter Layer and takes over the center column while open: a search box, three
+facets (backend, Path, Cues) and a grid of tiles with thumbnails and badges.
+Search is fuzzy and ranked: a name starting with the query beats a name with a
+word starting with it, which beats the letters in order, and any name match
+beats a description with a word starting with the query (letters in order are
+tried on names only, since over a description they match nearly everything);
+recommended entries come first among equals and lead the list when nothing is
+typed. Clicking a tile or moving with the arrow keys applies the definition to
+the Layer through `layer.visual` or `layer.filter`, so the Outputs are the
+preview; Enter keeps it, Escape discards the browse and puts back what the Layer
+had when the Library opened, and the browse undoes as one step because the
+commands coalesce per Layer. Adding a Visual or Filter Layer opens the Library
+for it, since picking is the next thing to do; double-clicking a Layer row or
+the inspector's button opens it later. Selecting another Visual or Filter Layer
+rebinds the Library, selecting anything else closes it. A Layer still carrying
+its generated name takes the name of what it picks.
+
+**Why apply on highlight rather than preview locally:** the projector is the
+only honest preview of a Visual on a real Surface, and Studio has no renderer of
+its own; applying to the runtime shows every candidate where it will be seen.
+**Why the center column rather than a dialog:** the navigator and the inspector
+stay usable, so a Layer's other settings can change while candidates are
+compared.
 
 The Surface and Mask inspectors carry a Calibrate toggle and, while active, the
 view for the other Surfaces; the corner or point selected in the inspector is

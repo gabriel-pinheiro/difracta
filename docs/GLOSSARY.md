@@ -170,12 +170,24 @@ A point-shaped Guide, such as the center of the Plafond or an emission origin.
 
 ### Visual
 
-A reusable, code-defined rendering behavior such as `Sun`, `Stars`,
-`Lightning Bolts`, or `Solid Color`.
+A reusable, code-defined rendering behavior such as `Drifting Stars`, `Plasma`
+or `Solid Color`, listed in the Catalog.
 
-A Visual is authored as a TypeScript module. It declares its Parameter Schema
-and required Guide Bindings and implements rendering; it is not created inside
-Studio.
+A Visual is authored as a TypeScript module. It declares its Parameter Schema,
+the Paths it needs and the Cues it answers to, and implements rendering; it is
+not created inside Studio.
+
+### Catalog
+
+The set of Visual and Filter definitions a Runtime knows, each with a stable id.
+Studio picks from the Catalog in the Library, and commands validate ids and
+Parameter Values against it. A Layer referring to an id the Catalog no longer
+has is shown as unavailable and renders nothing; the file stays valid.
+
+### Recommended
+
+A flag a definition in the Catalog may carry: a good default for most
+Installations. Recommended definitions sort first in the Library.
 
 ### Visual Backend
 
@@ -201,7 +213,9 @@ future behavior that is neither a Visual nor a Filter.
 ### Parameter
 
 A typed, definition-specific adjustable value such as color, speed, density, or
-bolt width. Each Layer Visual and Filter stores its own Parameter Values.
+bolt width. A Parameter is one of four kinds: number, color, choice or boolean.
+Each Visual Layer and Filter Layer stores its own Parameter Values, keyed by
+Parameter name; picking a definition sets them to the definition's defaults.
 
 ### Controller
 
@@ -451,8 +465,16 @@ Frame. It helps diagnose Frame Interval but is not a precise GPU measurement.
 ### Inspector
 
 The Studio panel for the selected object, especially a selected Layer. A Layer
-Inspector contains general Layer settings, Visual Parameters, and Guide
-Bindings.
+Inspector starts with what the Layer is made of and the way into the Library,
+then general Layer settings, Visual Parameters, and Guide Bindings.
+
+### Library
+
+The Studio view for picking a Visual or Filter from the Catalog. It is bound to
+one Layer and takes the center column while open, with search, facets and a grid
+of thumbnails. Picking applies to the Layer at once, so the Outputs are the
+preview; Enter keeps the pick and Escape discards the browse, putting the
+previous one back.
 
 ### Control
 

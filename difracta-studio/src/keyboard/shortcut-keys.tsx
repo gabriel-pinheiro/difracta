@@ -5,7 +5,8 @@ import { shortcuts, type ShortcutName } from "@/shortcuts";
 
 /**
  * Global key handler. Undo and redo stay out of text fields, where the
- * browser's own editing history applies; the file shortcuts work everywhere.
+ * browser's own editing history applies (a slider or a checkbox has none);
+ * the file shortcuts work everywhere.
  */
 export function ShortcutKeys() {
   const commands = useDocumentCommands();
@@ -15,9 +16,11 @@ export function ShortcutKeys() {
         (candidate) => shortcuts[candidate].matches(event),
       );
       if (name === undefined) return;
-      const target = event.target as HTMLElement | null;
+      const target = event.target;
       const editing =
-        target?.tagName === "INPUT" || target?.tagName === "TEXTAREA";
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLInputElement &&
+          !["range", "checkbox", "radio"].includes(target.type));
       if (editing && (name === "undo" || name === "redo")) return;
       event.preventDefault();
       commands[name]();
