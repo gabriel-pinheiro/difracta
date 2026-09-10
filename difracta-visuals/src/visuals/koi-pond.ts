@@ -72,6 +72,8 @@ export const koiPond = defineVisual({
   name: "Koi Pond",
   description:
     "Stylized koi meander along smooth paths, each with its own patches. Swim Speed changes take effect mid-stroke without a jump.",
+  notes:
+    "Calm, figurative, and readable from far away: a few large fish on a dark Surface reads as a pond, many small ones as a school. The background is transparent, so put a Solid Color or a darker Visual below it. Fish Size is in Layer pixels and sets both the body and the wake of the tail; on a small or distant Surface keep it above 20 or the patches vanish. Swim Speed scales every fish's pace together and can be swept live. Body Color with a low alpha turns the fish into ghosts, and the same Patch Color as the ground hides the patches. Each fish costs a few filled curves, so even the maximum count is cheap.",
   parameters: {
     body: { kind: "color", label: "Body Color", default: [1, 0.957, 0.922, 1] },
     patch: {

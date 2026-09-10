@@ -169,9 +169,15 @@ thumbnails, one file per definition (a Filter's is a gray checkerboard through
 that Filter, so Filters compare against the same picture), and the runtime
 passes that Catalog to the command registry. A Visual's file also carries its
 implementation, written against the SDK in `difracta-render` (see Visuals
-below); the runtime and Studio only read the metadata. Every command's `apply`
-receives it, so `layer.visual` and `layer.filter` can refuse an unknown id and
-check values.
+below); the runtime and Studio only read the metadata. A definition may carry
+`notes`: paragraphs for whoever composes with it, human or agent, saying what
+the code cannot (how it reads on a Surface, which Parameters interact, what it
+costs, what to stack it with). The runtime answers `catalog.list` with its
+definitions minus their functions, which is how the CLI's `catalog` prints the
+notes and a reference generated from the schema, and how its `addresses`
+resolves Parameters without shipping the Visuals package. Every command's
+`apply` receives it, so `layer.visual` and `layer.filter` can refuse an unknown
+id and check values.
 
 A Parameter is declared once, in the definition, as one of four kinds: number
 (with min, max, step and unit), color (four components from 0 to 1), choice
@@ -229,8 +235,11 @@ authoring gestures a person wants to take back.
 
 Commands are registered by one import line in `commands/index.ts`. The registry
 is the only source for the runtime handler and the CLI's `commands`, `describe`
-and `run`. Runtime-scoped operations (documents, files) are not commands; they
-are `request` messages defined in `difracta-protocol`.
+and `run`. Runtime-scoped operations (documents, files, the Catalog) are not
+commands; they are `request` messages defined in `difracta-protocol`. Together
+they are the whole of what Studio does, so the CLI can do everything Studio can:
+`run` for any command, `documents` for the requests, and shortcuts for the
+everyday ones (`get`, `addresses`, `edit`, `set`, `catalog`, `undo`).
 
 **Why:** with one definition per command there is nothing central to edit when a
 feature is added, and the reducer is pure and shared, so any client can run it
@@ -297,7 +306,7 @@ subscribed to; the client drops views of a replaced one.
   frame on the client; the runtime applies it as `address.set`.
 - `request` covers runtime-scoped operations: `documents.new/open` (replace the
   document; refused while it has unsaved changes unless `discard`),
-  `documents.save/revert/close` and `files.list`.
+  `documents.save/revert/close`, `files.list` and `catalog.list`.
 
 **Why a live root instead of a second channel:** telemetry, calibration state
 and playback all need per-path subscriptions exactly like document values, so

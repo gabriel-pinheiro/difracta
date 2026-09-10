@@ -2,7 +2,9 @@ import {
   createBuiltInRegistry,
   getAtPath,
   listAddresses,
+  type Definition,
   type Document,
+  type ParameterDefinition,
 } from "@difracta/core";
 import type { DocumentSummary, FileEntry } from "@difracta/protocol";
 import { Command } from "commander";
@@ -12,6 +14,7 @@ import {
   connect,
   currentDocument,
   DEFAULT_URL,
+  fetchCatalog,
   parseJsonArgument,
   parseValue,
 } from "./connection.ts";
@@ -19,8 +22,10 @@ import {
 /**
  * The `difracta` command. Everything an agent or a shell needs: list and
  * describe commands straight from the registry, run any of them, read the
- * document, write addresses, undo. `--json` makes every output machine
- * readable.
+ * document, browse the Catalog, write Addresses, undo. `--json` makes every
+ * output machine readable. Anything a person can do in Studio is reachable
+ * here: Studio's gestures are commands and requests, and this runs any of
+ * them.
  */
 const program = new Command("difracta")
   .description("Control a Difracta runtime from the shell.")
@@ -173,11 +178,16 @@ program
 
 program
   .command("addresses")
-  .description("List every controllable Address in the Installation.")
+  .description(
+    "List every controllable Address in the Installation, Parameters included.",
+  )
   .action(() =>
     withDocument(async (client, summary) => {
-      const document = await readDocument(client, summary.id);
-      const items = listAddresses(document).map((entry) => ({
+      const [document, catalog] = await Promise.all([
+        readDocument(client, summary.id),
+        fetchCatalog(client),
+      ]);
+      const items = listAddresses(document, catalog).map((entry) => ({
         ...entry,
         value: getAtPath(document, entry.path),
       }));
@@ -192,22 +202,103 @@ program
     }),
   );
 
+for (const [name, command, purpose] of [
+  [
+    "set",
+    "address.set",
+    "Write a performance value to an Address, e.g. set installation/blackout true. Not undoable.",
+  ],
+  [
+    "edit",
+    "address.edit",
+    "Change an Address while authoring, e.g. edit layer/lay_1/param/speed 2. Undoable, like the inspector.",
+  ],
+] as const) {
+  program
+    .command(`${name} <address> <value>`)
+    .description(purpose)
+    .action((address: string, value: string) =>
+      withDocument(async (client, summary) => {
+        const result = await client.command<{
+          revision: number;
+          changed: boolean;
+        }>(summary.id, command, { address, value: parseValue(value) });
+        print(result, () =>
+          result.changed ? `${address} = ${value}` : "No change.",
+        );
+      }),
+    );
+}
+
 program
-  .command("set <address> <value>")
+  .command("catalog [id]")
   .description(
-    "Write a performance value to an Address, e.g. set installation/blackout true.",
+    "List the Visuals and Filters the runtime renders, or describe one: notes, Parameters, Cues.",
   )
-  .action((address: string, value: string) =>
-    withDocument(async (client, summary) => {
-      const result = await client.command<{
-        revision: number;
-        changed: boolean;
-      }>(summary.id, "address.set", { address, value: parseValue(value) });
-      print(result, () =>
-        result.changed ? `${address} = ${value}` : "No change.",
-      );
+  .action((id: string | undefined) =>
+    withClient(async (client) => {
+      const catalog = await fetchCatalog(client);
+      if (id === undefined) {
+        const items = [...catalog.visuals(), ...catalog.filters()];
+        print(items, () =>
+          items
+            .map(
+              (item) =>
+                `${item.id.padEnd(20)} ${item.kind.padEnd(8)} ${item.backend.padEnd(8)} ${item.recommended === true ? "★ " : "  "}${item.description}`,
+            )
+            .join("\n"),
+        );
+        return;
+      }
+      const definition = catalog.visual(id) ?? catalog.filter(id);
+      if (definition === undefined)
+        throw new Error(
+          `Unknown definition “${id}”. Try \`difracta catalog\`.`,
+        );
+      print(definition, () => describeDefinition(definition));
     }),
   );
+
+function describeDefinition(definition: Definition): string {
+  const lines = [
+    `${definition.name}  (${definition.kind}, ${definition.backend}${definition.recommended === true ? ", recommended" : ""})  id: ${definition.id}`,
+    definition.description,
+  ];
+  if (definition.notes !== undefined) lines.push("", definition.notes);
+  lines.push("", "Parameters");
+  for (const [name, parameter] of Object.entries(definition.parameters))
+    lines.push(`  ${name.padEnd(12)} ${describeParameter(parameter)}`);
+  if (definition.cues !== undefined && definition.cues.length > 0) {
+    lines.push("", "Cues");
+    for (const cue of definition.cues)
+      lines.push(
+        `  ${cue.key.padEnd(12)} ${cue.label}${cue.description === undefined ? "" : `  ${cue.description}`}`,
+      );
+  }
+  if (definition.kind === "visual" && definition.guides !== undefined) {
+    lines.push("", "Guides");
+    for (const guide of definition.guides)
+      lines.push(
+        `  ${guide.key.padEnd(12)} ${guide.kind} ${guide.label}${guide.description === undefined ? "" : `  ${guide.description}`}`,
+      );
+  }
+  return lines.join("\n");
+}
+
+function describeParameter(parameter: ParameterDefinition): string {
+  const tail =
+    parameter.description === undefined ? "" : `  ${parameter.description}`;
+  switch (parameter.kind) {
+    case "number":
+      return `${parameter.label.padEnd(16)} number   default ${parameter.default}  ${parameter.min} to ${parameter.max}${parameter.step === undefined ? "" : ` step ${parameter.step}`}${parameter.unit === undefined ? "" : ` ${parameter.unit}`}${tail}`;
+    case "color":
+      return `${parameter.label.padEnd(16)} color    default [${parameter.default.join(", ")}] (r, g, b, a from 0 to 1)${tail}`;
+    case "choice":
+      return `${parameter.label.padEnd(16)} choice   default ${parameter.default}  one of ${parameter.options.map((option) => option.value).join(", ")}${tail}`;
+    case "boolean":
+      return `${parameter.label.padEnd(16)} boolean  default ${parameter.default}${tail}`;
+  }
+}
 
 for (const direction of ["undo", "redo"] as const) {
   program

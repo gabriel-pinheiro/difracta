@@ -6,6 +6,8 @@ export const solidColor = defineVisual({
   description:
     "One flat color over the whole Target. The plainest way to light a Surface, and a base for Filters above it.",
   recommended: true,
+  notes:
+    "Fills the Target edge to edge with Color, alpha included, so it is the base of most stacks: a wash under Filters, a colored ground under an additive Visual, or a light on its own when a Surface only needs to be lit. It costs nothing between changes. Drive Color from a Color Picker for a palette that changes per song, or use two Layers with different colors and fade between them with opacity.",
   parameters: {
     color: { kind: "color", label: "Color", default: [1, 0.85, 0.6, 1] },
   },

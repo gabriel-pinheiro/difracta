@@ -31,6 +31,8 @@ export const bubbles = defineVisual({
   name: "Bubbles",
   description:
     "Translucent outlined bubbles wobble and rise, each at its own pace. Rise Speed changes carry every bubble on from where it is.",
+  notes:
+    "A light, airy overlay: the fill is almost transparent and the outline carries the shape, so it works over any other Visual and over Solid Color. Bubbles fade in at the bottom and out at the top of the Target, so nothing pops at the edges. Bubble Size is the largest radius in Layer pixels; Bubbles is how many are in flight at once, and both can change live without disturbing the ones already rising. Rise Speed around 0.3 feels underwater, above 1.5 reads as fizz. Highlight is the small specular dot; set its alpha to zero for flat rings. Additive blend mode makes them glow on dark grounds.",
   parameters: {
     color: {
       kind: "color",

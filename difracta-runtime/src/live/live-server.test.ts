@@ -273,4 +273,30 @@ describe("live protocol", () => {
     expect(second.id).not.toBe(first.id);
     studio.close();
   });
+
+  it("reports the Catalog as metadata without implementations", async () => {
+    const studio = new DifractaClient({
+      url,
+      kind: "studio",
+      reconnect: false,
+    });
+    await waitFor(() =>
+      studio.phase.get() === "connected" ? true : undefined,
+    );
+    const catalog = await studio.request<{
+      visuals: Record<string, unknown>[];
+      filters: Record<string, unknown>[];
+    }>("catalog.list", {});
+    expect(catalog.visuals.map((visual) => visual.id)).toEqual([
+      "bubbles",
+      "koi-pond",
+      "solid-color",
+    ]);
+    expect(catalog.filters).toHaveLength(3);
+    const koi = catalog.visuals[1]!;
+    expect(koi.parameters).toHaveProperty("speed");
+    expect(koi).not.toHaveProperty("create");
+    expect(typeof koi.notes).toBe("string");
+    studio.close();
+  });
 });

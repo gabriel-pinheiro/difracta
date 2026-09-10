@@ -188,9 +188,10 @@ where things are now.
 ### Catalog
 
 The set of Visual and Filter definitions a Runtime knows, each with a stable id.
-Studio picks from the Catalog in the Library, and commands validate ids and
-Parameter Values against it. A Layer referring to an id the Catalog no longer
-has is shown as unavailable and renders nothing; the file stays valid.
+Studio picks from the Catalog in the Library, the CLI lists and describes it,
+and commands validate ids and Parameter Values against it. A definition may
+carry notes for whoever composes with it. A Layer referring to an id the Catalog
+no longer has is shown as unavailable and renders nothing; the file stays valid.
 
 ### Recommended
 

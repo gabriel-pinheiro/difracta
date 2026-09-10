@@ -47,6 +47,7 @@ export async function buildRuntime(
   });
   const live = new LiveServer({
     store,
+    catalog: builtInCatalog,
     runtimeName: "Difracta Runtime",
     runtimeVersion: RUNTIME_VERSION,
     log,

@@ -1,9 +1,10 @@
 import { z } from "zod";
 
 /**
- * Runtime-scoped requests: the document and files. These are not Document
- * commands; they manage which Document the runtime has open. Names and
- * payload schemas live here so the runtime, Studio and CLI agree.
+ * Runtime-scoped requests: the document, files and the Catalog. These are
+ * not Document commands; they manage which Document the runtime has open,
+ * or read what the runtime is built with. Names and payload schemas live
+ * here so the runtime, Studio and CLI agree.
  */
 export const RuntimeRequestSchemas = {
   /** Replaces the open document with a new, unsaved one. */
@@ -39,6 +40,8 @@ export const RuntimeRequestSchemas = {
     .object({ documentId: z.string().min(1), discard: z.boolean().optional() })
     .strict(),
   "files.list": z.object({}).strict(),
+  /** The Visual and Filter definitions this runtime renders, metadata only. */
+  "catalog.list": z.object({}).strict(),
 } as const;
 
 export type RuntimeRequestName = keyof typeof RuntimeRequestSchemas;

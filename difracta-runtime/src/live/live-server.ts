@@ -1,4 +1,4 @@
-import { generateId, type Patch } from "@difracta/core";
+import { generateId, type Catalog, type Patch } from "@difracta/core";
 import {
   ClientMessageSchema,
   PROTOCOL_VERSION,
@@ -37,6 +37,8 @@ type ReplyOutcome =
 
 export interface LiveServerOptions {
   readonly store: DocumentStore;
+  /** What this runtime can render; `catalog.list` reports it to clients. */
+  readonly catalog: Catalog;
   readonly runtimeName: string;
   readonly runtimeVersion: string;
   readonly log: (message: string) => void;
@@ -412,6 +414,16 @@ export class LiveServer {
             result: {
               items: await store.listFiles(),
               projectsDir: store.projectsDir,
+            },
+          });
+          break;
+        case "catalog.list":
+          // Definitions carry their implementation; the wire drops functions.
+          reply({
+            ok: true,
+            result: {
+              visuals: this.#options.catalog.visuals(),
+              filters: this.#options.catalog.filters(),
             },
           });
           break;

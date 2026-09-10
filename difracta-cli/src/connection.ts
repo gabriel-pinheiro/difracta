@@ -1,5 +1,10 @@
 import { DifractaClient } from "@difracta/client";
-import { settings } from "@difracta/core";
+import {
+  Catalog,
+  settings,
+  type FilterDefinition,
+  type VisualDefinition,
+} from "@difracta/core";
 import type { DocumentSummary } from "@difracta/protocol";
 import { hostname, userInfo } from "node:os";
 
@@ -53,6 +58,15 @@ export function currentDocument(client: DifractaClient): DocumentSummary {
       "No Installation is open. Use `difracta documents open <file>`.",
     );
   return summary;
+}
+
+/** The runtime's Catalog, as metadata: what its Visual and Filter ids mean. */
+export async function fetchCatalog(client: DifractaClient): Promise<Catalog> {
+  const { visuals, filters } = await client.request<{
+    visuals: VisualDefinition[];
+    filters: FilterDefinition[];
+  }>("catalog.list", {});
+  return new Catalog({ visuals, filters });
 }
 
 export function parseJsonArgument(text: string | undefined): unknown {

@@ -30,6 +30,13 @@ interface DefinitionBase {
   readonly name: string;
   /** One or two sentences a person reads while choosing. */
   readonly description: string;
+  /**
+   * For whoever composes with it, human or agent: how it reads on a Surface,
+   * which Parameters interact, what it costs, what to stack it with.
+   * Paragraphs of plain text; the Catalog reference is generated from the
+   * rest of the definition, so this is only what code cannot say.
+   */
+  readonly notes?: string;
   readonly backend: VisualBackend;
   /** Sorted first when picking: a good default for most Installations. */
   readonly recommended?: boolean;

@@ -44,6 +44,13 @@ near-synonyms.
 - A runtime holds one Installation at a time; open and new replace it.
 - Runtime is authoritative. Studio, Output and the CLI are clients of the same
   `@difracta/client`.
+- Everything a person can do in Studio must be doable from the CLI. Studio
+  gestures are commands and requests, so a new one is reachable through
+  `difracta run` or `difracta documents` at once; give the everyday ones a
+  shortcut and check `difracta --help` reads well to an agent.
+- A Visual's `notes` are what an agent reads before using it. Write them when
+  adding a Visual: how it reads on a Surface, which Parameters interact, cost,
+  what to stack it with.
 - Comments and docs describe what the code does now. Planned work belongs in a
   contributor's `research/` notes, not in "later" remarks in source.
 
