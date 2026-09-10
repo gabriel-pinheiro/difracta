@@ -3,11 +3,8 @@ import { Catalog } from "@difracta/core";
 import { blur } from "./filters/blur.ts";
 import { hueShift } from "./filters/hue-shift.ts";
 import { pixelate } from "./filters/pixelate.ts";
-import { driftingStars } from "./visuals/drifting-stars.ts";
-import { gridPulse } from "./visuals/grid-pulse.ts";
-import { pathRunner } from "./visuals/path-runner.ts";
-import { plasma } from "./visuals/plasma.ts";
-import { ribbonField } from "./visuals/ribbon-field.ts";
+import { bubbles } from "./visuals/bubbles.ts";
+import { koiPond } from "./visuals/koi-pond.ts";
 import { solidColor } from "./visuals/solid-color.ts";
 
 /**
@@ -15,14 +12,7 @@ import { solidColor } from "./visuals/solid-color.ts";
  * each. Add a definition by importing it here.
  */
 export const builtInCatalog = new Catalog({
-  visuals: [
-    solidColor,
-    driftingStars,
-    plasma,
-    pathRunner,
-    gridPulse,
-    ribbonField,
-  ],
+  visuals: [solidColor, koiPond, bubbles],
   filters: [blur, hueShift, pixelate],
 });
 

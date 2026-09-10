@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@difracta/core": "0.0.0"
+    "@difracta/core": "0.0.0",
+    "@difracta/render": "0.0.0"
   }
 }

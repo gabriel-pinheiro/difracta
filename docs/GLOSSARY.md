@@ -170,12 +170,20 @@ A point-shaped Guide, such as the center of the Plafond or an emission origin.
 
 ### Visual
 
-A reusable, code-defined rendering behavior such as `Drifting Stars`, `Plasma`
-or `Solid Color`, listed in the Catalog.
+A reusable, code-defined rendering behavior such as `Koi Pond`, `Bubbles` or
+`Solid Color`, listed in the Catalog.
 
 A Visual is authored as a TypeScript module. It declares its Parameter Schema,
-the Paths it needs and the Cues it answers to, and implements rendering; it is
-not created inside Studio.
+the Paths it needs and the Cues it answers to, and provides `create`, which
+makes a Visual Instance; it is not created inside Studio.
+
+### Visual Instance
+
+One running copy of a Visual for one Layer on one Output. It holds its own state
+and is stepped every frame with the time elapsed since the previous frame and
+the Layer's current Parameter Values, then draws that state. Because it
+integrates time itself, a Parameter change alters what happens next and never
+where things are now.
 
 ### Catalog
 
@@ -293,9 +301,10 @@ the transient Cue occurrence remain distinct concepts.
 
 A number Parameter used by event-based Visuals to request an average number of
 Cue-equivalent automatic occurrences per second. Zero means automatic
-occurrences are Off. Automatic timing is deterministically jittered from
-playback time and the Layer seed; per-occurrence counts such as Bursts per
-Launch remain separate Parameters.
+occurrences are Off. Every Visual declares it the same way, and the Visual
+Instance spaces occurrences around the mean with some jitter, carrying its
+progress toward the next one across rate changes; per-occurrence counts such as
+Bursts per Launch remain separate Parameters.
 
 ### Parameter Schema
 

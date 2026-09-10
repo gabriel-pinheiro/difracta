@@ -35,11 +35,11 @@ consistent.
 | Package             | Role                                                                                                                                                 | Depends on                       |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
 | `difracta-core`     | Document model (normalized tables), patches, Addresses, Catalog and Parameter types, command registry, pure command reducers, undo history, settings | zod                              |
-| `difracta-visuals`  | The built-in Catalog: Visual and Filter definitions and their thumbnails                                                                             | core                             |
+| `difracta-visuals`  | The built-in Catalog: Visual and Filter definitions, their implementations and thumbnails                                                            | core, render                     |
 | `difracta-protocol` | Wire schemas for the live socket and runtime requests                                                                                                | core                             |
 | `difracta-client`   | Connection, snapshot plus delta replica (`DocumentView`), acknowledged commands, coalesced inputs                                                    | core, protocol                   |
 | `difracta-runtime`  | Node host: document sessions, files and autosave, live server, static serving                                                                        | core, protocol, visuals, fastify |
-| `difracta-render`   | WebGL2 compositor: homographies, Mask textures, calibration patterns                                                                                 | core                             |
+| `difracta-render`   | Visual SDK (instances, player, helpers) and the WebGL2 compositor: homographies, Mask textures, calibration patterns                                 | core                             |
 | `difracta-output`   | One display's page; no React                                                                                                                         | client, render                   |
 | `difracta-studio`   | React authoring and performance UI                                                                                                                   | client, visuals                  |
 | `difracta-cli`      | `difracta` command for shells and agents                                                                                                             | client                           |
@@ -167,9 +167,11 @@ schema, and for Visuals the Paths they need and the Cues they answer to. Core
 owns the types and the validation; `difracta-visuals` owns the entries and their
 thumbnails, one file per definition (a Filter's is a gray checkerboard through
 that Filter, so Filters compare against the same picture), and the runtime
-passes that Catalog to the command registry. Every command's `apply` receives
-it, so `layer.visual` and `layer.filter` can refuse an unknown id and check
-values.
+passes that Catalog to the command registry. A Visual's file also carries its
+implementation, written against the SDK in `difracta-render` (see Visuals
+below); the runtime and Studio only read the metadata. Every command's `apply`
+receives it, so `layer.visual` and `layer.filter` can refuse an unknown id and
+check values.
 
 A Parameter is declared once, in the definition, as one of four kinds: number
 (with min, max, step and unit), color (four components from 0 to 1), choice
@@ -395,6 +397,58 @@ it, WebGPU still does not reach every such browser, and one engine is half the
 code of two. Why a fixed-size Mask texture: Masks are fractions of Surface
 Space, so the texture does not depend on the frame; a full-resolution texture
 would be rebuilt on every drag of a point and uploaded at megabytes a step.
+
+### Visuals
+
+A Visual is a definition plus `create`, which makes one **instance** per Layer
+per Output (`render/sdk/`). An instance is a closure over its own state with two
+methods the player calls every animation frame: `update(frame)` advances the
+state by `frame.dt` seconds, and `render(canvas)` draws the state onto the
+Layer's 2D context. `frame` carries the current Parameter values, the size and a
+`changed` flag (true on the first frame and whenever a Parameter differs from
+the previous frame); `create` gets the same plus a `random` source seeded from
+the Layer id. Time only ever arrives as a delta, clamped to 100 ms so a tab that
+slept does not fast-forward.
+
+The one rule of the SDK is that a Visual **integrates, it never samples**:
+anything time-derived (a phase, a position, a clock) lives in the instance and
+advances by `dt` times the current rate, so changing Swim Speed only changes
+what happens next. A Parameter that is not integrated (a color, a size) is read
+from `frame.params` every frame and applies at once. Counts go through `fit`,
+which grows or shrinks an entity list at its end, so the entities already on
+screen stay where they are. `smooth` eases a value toward a target at a rate per
+second for the cases where snapping would look wrong, and `rateTimer` turns an
+Automatic Rate into firings by accumulating `dt * rate`, jittered around the
+mean, so a rate change carries the progress toward the next firing instead of
+rescheduling it. `automaticRate()` is the Parameter every event-driven Visual
+declares for that, always with the same label and range.
+
+`update` may return a report. `changed: false` means the previous drawing is
+still right: the player leaves the Layer's canvas alone and the compositor
+re-uses the texture it uploaded last. `blank: true` means there is nothing to
+draw: the player skips `render` and the compositor skips the Layer; the next
+non-blank frame redraws. Both default to the safe answer, so a Visual that never
+reports is redrawn every frame. Solid Color reports `changed` straight from the
+frame and `blank` at alpha zero, which is why a static Installation costs
+nothing between edits. The player (`createVisualPlayer`) owns this bookkeeping:
+completing a Layer's values with the schema defaults, detecting changes,
+clamping time, clearing the canvas around `render`, and creating or disposing
+the instance. An Output's size or Render Scale change disposes and recreates
+instances; a Visual that wants to keep its state across that can implement
+`resize`, none does yet.
+
+**Why stateful instances and no absolute time:** a frame that is a function of
+elapsed time and Parameters is discontinuous in the Parameters, so every speed,
+rate or count change jumps, and anything emergent (particles, trails, games) has
+nowhere to live. Integrating from `dt` makes stability under live Parameter
+changes the default rather than a per-Visual effort. **Why a seeded random
+source anyway:** it costs a dozen lines and makes a Layer look the same on every
+run and a Visual replayable in a test; nothing user-facing depends on it, and no
+Surface is ever rendered by two Outputs that would need to agree. **Why the
+flags come from `update` and not `render`:** `render` is what they skip. **Why
+Filters are not in the SDK:** every Filter is a fragment shader over the Layer
+below it, run by the compositor's framebuffer chain, and that contract is
+defined with the compositor.
 
 ## Studio
 
