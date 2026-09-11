@@ -2,6 +2,7 @@ import type { FilterDefinition, ParameterSchema } from "@difracta/core";
 
 import type { ParameterValuesOf } from "./parameters.ts";
 import type { Random } from "./random.ts";
+import type { Uniforms } from "./uniforms.ts";
 
 /**
  * The Filter SDK. A Filter is a definition (what the Catalog lists) plus a
@@ -13,23 +14,14 @@ import type { Random } from "./random.ts";
  * shader only samples; nothing in it derives from absolute time.
  *
  * Every uniform a fragment reads is `u_<name>`: the Parameters by their
- * name, and whatever the instance returns by its key. Numbers are floats,
- * pairs to quadruples are vectors, booleans are bools; a choice Parameter
- * is an int option index and a color a vec4. The fragment defines
+ * name, and whatever the instance returns by its key (see `uniforms.ts`
+ * for the shapes); a choice Parameter is an int option index and a color a
+ * vec4. The fragment defines
  * `vec4 filter_image(vec2 uv)` over a prelude that provides `u_resolution`
  * and `u_texel`, `sample_input` (clamped at the edges), `sample_mirrored`
  * (reflected, so displaced pixels never show the frame border), `hash` and
  * `hash2`. Mix is applied by the engine after the fragment runs.
  */
-export type UniformValue =
-  | number
-  | boolean
-  | readonly [number, number]
-  | readonly [number, number, number]
-  | readonly [number, number, number, number];
-
-export type Uniforms = Readonly<Record<string, UniformValue>>;
-
 export interface FilterContext<S extends ParameterSchema> {
   /** The frame size in pixels; it may change later, see the frame. */
   readonly width: number;

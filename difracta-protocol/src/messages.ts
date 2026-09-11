@@ -13,7 +13,9 @@ import { LiveStateSchema, OutputTelemetrySchema } from "./live.ts";
  *   `live` messages afterwards; Output pages never ask for it.
  * - Input: `input` messages are unacknowledged latest-wins writes to an
  *   Address; the runtime coalesces them per tick and replicates the result
- *   as ordinary deltas.
+ *   as ordinary deltas. A fired trigger Address goes out as an `event` to
+ *   every subscriber, after the deltas of the same tick, and is never
+ *   stored or replayed.
  * - Presence: an Output page `attach`es to one Output and reports
  *   `telemetry`; both are unacknowledged.
  *
@@ -164,6 +166,15 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
       fromRevision: z.number().int().nonnegative(),
       revision: z.number().int().nonnegative(),
       patches: z.array(PatchSchema),
+      originSessionId: z.string().optional(),
+    })
+    .strict(),
+  /** A trigger Address fired, such as a Layer's Cue; not revisioned. */
+  z
+    .object({
+      type: z.literal("event"),
+      documentId: DocumentIdSchema,
+      address: z.string().min(1),
       originSessionId: z.string().optional(),
     })
     .strict(),

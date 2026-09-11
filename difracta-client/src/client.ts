@@ -293,6 +293,9 @@ export class DifractaClient {
       case "live":
         this.#views.get(parsed.documentId)?.applyLive(parsed.patches);
         break;
+      case "event":
+        this.#views.get(parsed.documentId)?.receiveEvent(parsed.address);
+        break;
       case "reply": {
         const pending = this.#pending.get(parsed.requestId);
         this.#pending.delete(parsed.requestId);

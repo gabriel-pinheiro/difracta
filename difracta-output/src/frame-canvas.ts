@@ -25,6 +25,12 @@ export interface FrameMetrics {
     readonly running: number;
     readonly planned: number;
   };
+  /** The same for shader Layers. */
+  readonly shaders: {
+    readonly renderedPerFrame: number;
+    readonly running: number;
+    readonly planned: number;
+  };
   /** The same for Filter passes. */
   readonly filters: {
     readonly executedPerFrame: number;
@@ -48,9 +54,11 @@ export class FrameCanvas {
   #renderWorkMs: number | null = null;
   #pixelRatio = 1;
   #renderedPerFrame = 0;
+  #shadersPerFrame = 0;
   #executedPerFrame = 0;
-  #lastReport: Pick<FrameReport, "layers" | "filters"> = {
+  #lastReport: Pick<FrameReport, "layers" | "shaders" | "filters"> = {
     layers: { planned: 0, running: 0, rendered: 0 },
+    shaders: { planned: 0, running: 0, rendered: 0 },
     filters: { planned: 0, running: 0, executed: 0 },
   };
 
@@ -81,12 +89,22 @@ export class FrameCanvas {
         running: this.#lastReport.layers.running,
         planned: this.#lastReport.layers.planned,
       },
+      shaders: {
+        renderedPerFrame: this.#shadersPerFrame,
+        running: this.#lastReport.shaders.running,
+        planned: this.#lastReport.shaders.planned,
+      },
       filters: {
         executedPerFrame: this.#executedPerFrame,
         running: this.#lastReport.filters.running,
         planned: this.#lastReport.filters.planned,
       },
     };
+  }
+
+  /** A Cue fired on a Layer; the next frame's update sees it. */
+  trigger(layerId: string, key: string): void {
+    this.#compositor.trigger(layerId, key);
   }
 
   start(): void {
@@ -139,6 +157,10 @@ export class FrameCanvas {
     this.#renderedPerFrame = smooth(
       this.#renderedPerFrame,
       report.layers.rendered,
+    );
+    this.#shadersPerFrame = smooth(
+      this.#shadersPerFrame,
+      report.shaders.rendered,
     );
     this.#executedPerFrame = smooth(
       this.#executedPerFrame,

@@ -1,13 +1,10 @@
 import type { Catalog, ParameterValues } from "@difracta/core";
 
 import type { FilterDraw } from "./plan.ts";
-import {
-  isShaderFilter,
-  type ShaderFilter,
-  type Uniforms,
-} from "./sdk/filter.ts";
+import { isShaderFilter, type ShaderFilter } from "./sdk/filter.ts";
 import { createFilterPlayer, type FilterPlayer } from "./sdk/filter-player.ts";
 import { resolveParameters } from "./sdk/parameters.ts";
+import type { Uniforms } from "./sdk/uniforms.ts";
 
 /** One Filter pass to run this frame, with everything its program needs. */
 export interface FilterPass {

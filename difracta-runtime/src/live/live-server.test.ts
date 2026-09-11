@@ -274,6 +274,53 @@ describe("live protocol", () => {
     studio.close();
   });
 
+  it("announces fired Cues to every subscriber without touching the document", async () => {
+    const studio = new DifractaClient({
+      url,
+      kind: "studio",
+      reconnect: false,
+    });
+    const output = new DifractaClient({
+      url,
+      kind: "output",
+      reconnect: false,
+    });
+    await waitFor(() =>
+      studio.phase.get() === "connected" && output.phase.get() === "connected"
+        ? true
+        : undefined,
+    );
+    const created = await studio.request<{ id: string }>("documents.new", {
+      name: "Living",
+    });
+    await waitFor(() => output.document.get() ?? undefined);
+    const outputView = output.openDocument(created.id);
+    await waitFor(() => outputView.get());
+    const heard: string[] = [];
+    outputView.subscribeEvents((address) => heard.push(address));
+    for (const [name, payload] of [
+      ["scene.create", { id: "s", name: "Live" }],
+      ["layer.create", { id: "v", sceneId: "s", kind: "visual" }],
+      ["layer.visual", { layerId: "v", visual: "thunder" }],
+    ] as const)
+      await studio.command(created.id, name, payload);
+    const before = await studio.command<{ revision: number }>(
+      created.id,
+      "address.trigger",
+      { address: "layer/v/cue/flash" },
+    );
+    await waitFor(() => (heard.length === 1 ? true : undefined));
+    expect(heard).toEqual(["layer/v/cue/flash"]);
+    expect(before.revision).toBe(outputView.revision.get());
+    await expect(
+      studio.command(created.id, "address.trigger", {
+        address: "layer/v/cue/x",
+      }),
+    ).rejects.toThrow("Unknown address");
+    studio.close();
+    output.close();
+  });
+
   it("reports the Catalog as metadata without implementations", async () => {
     const studio = new DifractaClient({
       url,
@@ -288,9 +335,13 @@ describe("live protocol", () => {
       filters: Record<string, unknown>[];
     }>("catalog.list", {});
     expect(catalog.visuals.map((visual) => visual.id)).toEqual([
+      "beam-web",
+      "blink",
       "bubbles",
       "koi-pond",
       "solid-color",
+      "strobe",
+      "thunder",
     ]);
     expect(catalog.filters.map((filter) => filter.id)).toEqual([
       "impact-shake",
@@ -298,7 +349,7 @@ describe("live protocol", () => {
       "tile-scramble",
     ]);
     expect(catalog.filters[0]).not.toHaveProperty("fragment");
-    const koi = catalog.visuals[1]!;
+    const koi = catalog.visuals[3]!;
     expect(koi.parameters).toHaveProperty("speed");
     expect(koi).not.toHaveProperty("create");
     expect(typeof koi.notes).toBe("string");

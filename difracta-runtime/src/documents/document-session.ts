@@ -21,6 +21,13 @@ export interface DocumentDelta {
   readonly originSessionId: string | undefined;
 }
 
+/** A trigger Address fired by a command; announced, never stored. */
+export interface DocumentEvent {
+  readonly documentId: string;
+  readonly address: string;
+  readonly originSessionId: string | undefined;
+}
+
 export type SessionCommandResult =
   | {
       readonly ok: true;
@@ -45,6 +52,7 @@ export class DocumentSession {
   #history = new History();
   readonly #registry: CommandRegistry;
   readonly #listeners = new Set<(delta: DocumentDelta) => void>();
+  readonly #eventListeners = new Set<(event: DocumentEvent) => void>();
   readonly #metaListeners = new Set<() => void>();
 
   constructor(
@@ -137,6 +145,12 @@ export class DocumentSession {
     return () => this.#listeners.delete(listener);
   }
 
+  /** Fires for every trigger Address a command fires. */
+  onEvent(listener: (event: DocumentEvent) => void): () => void {
+    this.#eventListeners.add(listener);
+    return () => this.#eventListeners.delete(listener);
+  }
+
   /** Fires when name, path or dirty state changes. */
   onMeta(listener: () => void): () => void {
     this.#metaListeners.add(listener);
@@ -158,8 +172,20 @@ export class DocumentSession {
       payload,
     );
     if (!result.ok) return result;
+    for (const address of result.events) {
+      const event: DocumentEvent = {
+        documentId: this.id,
+        address,
+        originSessionId: sessionId,
+      };
+      for (const listener of this.#eventListeners) listener(event);
+    }
     if (result.patches.length === 0)
-      return { ok: true, revision: this.#revision, changed: false };
+      return {
+        ok: true,
+        revision: this.#revision,
+        changed: result.events.length > 0,
+      };
 
     this.#commit(result.document, result.patches, sessionId);
     if (result.definition.kind === "authoring") {

@@ -1,29 +1,52 @@
-import { surfaceCanvasSize, type Catalog } from "@difracta/core";
+import {
+  surfaceCanvasSize,
+  type Catalog,
+  type ParameterValues,
+} from "@difracta/core";
 
 import { createScratchCanvas, createTexture } from "./gl.ts";
 import type { LayerDraw } from "./plan.ts";
+import { resolveParameters } from "./sdk/parameters.ts";
 import { createVisualPlayer, type VisualPlayer } from "./sdk/player.ts";
+import { createShaderPlayer, type ShaderPlayer } from "./sdk/shader-player.ts";
+import { isShaderVisual, type ShaderVisual } from "./sdk/shader-visual.ts";
+import type { Uniforms } from "./sdk/uniforms.ts";
 import { isCanvasVisual, type CanvasVisual } from "./sdk/visual.ts";
 
-/** A Layer whose canvas holds something to composite this frame. */
-export interface LayerFrame {
+/** A Layer with something to composite this frame: a canvas texture or a shader to run. */
+export type LayerFrame = {
   readonly draw: LayerDraw;
   /** Position in the plan, which is where Filter passes are placed. */
   readonly index: number;
-  readonly texture: WebGLTexture;
-}
+} & (
+  | { readonly kind: "canvas"; readonly texture: WebGLTexture }
+  | {
+      readonly kind: "shader";
+      readonly visual: ShaderVisual;
+      readonly params: ParameterValues;
+      readonly uniforms: Uniforms;
+      readonly width: number;
+      readonly height: number;
+    }
+);
 
-export interface StepReport {
-  readonly frames: readonly LayerFrame[];
-  /** True when any Layer's canvas changed, so the frame must be recomposited. */
-  readonly changed: boolean;
-  /** Layers in the plan, Layers with a runnable instance, Layers that drew. */
+/** Layers in the plan, Layers with a runnable instance, Layers that drew anew. */
+export interface Workload {
   readonly planned: number;
   readonly running: number;
   readonly rendered: number;
 }
 
-interface Entry {
+export interface StepReport {
+  readonly frames: readonly LayerFrame[];
+  /** True when any Layer's picture changed, so the frame must be recomposited. */
+  readonly changed: boolean;
+  readonly canvas: Workload;
+  readonly shaders: Workload;
+}
+
+interface CanvasEntry {
+  readonly kind: "canvas";
   readonly visual: string;
   readonly width: number;
   readonly height: number;
@@ -33,12 +56,28 @@ interface Entry {
   blank: boolean;
 }
 
+interface ShaderEntry {
+  readonly kind: "shader";
+  readonly visual: string;
+  readonly player: ShaderPlayer;
+}
+
+type Entry = CanvasEntry | ShaderEntry;
+
+interface Counter {
+  planned: number;
+  running: number;
+  rendered: number;
+}
+
 /**
- * The Visual instances of one Output, one per planned Layer, each on its
- * own canvas and texture. An instance exists exactly while its Layer is in
- * the plan: playing another Scene, disabling the Layer, or losing its
- * Target disposes it, and a Visual or canvas-size change replaces it. The
- * texture is uploaded only on frames the instance drew.
+ * The Visual instances of one Output, one per planned Layer. A canvas
+ * Visual gets its own canvas and texture, uploaded on the frames it drew;
+ * a shader Visual gets a player whose uniforms the compositor draws with.
+ * An instance exists exactly while its Layer is in the plan: playing
+ * another Scene, disabling the Layer, or losing its Target disposes it,
+ * and a Visual or canvas-size change replaces it. Cues reach the instance
+ * of the Layer they were fired on.
  */
 export class LayerPlayers {
   readonly #gl: WebGL2RenderingContext;
@@ -61,23 +100,68 @@ export class LayerPlayers {
     const frames: LayerFrame[] = [];
     const seen = new Set<string>();
     let changed = false;
-    let running = 0;
-    let rendered = 0;
+    const canvas: Counter = { planned: 0, running: 0, rendered: 0 };
+    const shaders: Counter = { planned: 0, running: 0, rendered: 0 };
     draws.forEach((draw, index) => {
       const definition = this.#catalog.visual(draw.visual);
-      if (definition === undefined || !isCanvasVisual(definition)) return;
-      seen.add(draw.layer.id);
-      const entry = this.#entry(draw, definition, outputWidth, outputHeight);
-      running += 1;
-      const result = entry.player.frame(dt, draw.layer.parameters);
-      if (result.rendered) {
-        this.#upload(entry);
-        rendered += 1;
-        changed = true;
+      if (definition === undefined) return;
+      const counter = definition.backend === "canvas" ? canvas : shaders;
+      counter.planned += 1;
+      const size = (renderScale: number) =>
+        surfaceCanvasSize({
+          corners: draw.corners,
+          outputWidth,
+          outputHeight,
+          size: draw.surface.size,
+          renderScale,
+          maxDimension: this.#maxDimension,
+        });
+      if (isCanvasVisual(definition)) {
+        seen.add(draw.layer.id);
+        const entry = this.#canvasEntry(
+          draw,
+          definition,
+          size(draw.surface.renderScale),
+        );
+        counter.running += 1;
+        const result = entry.player.frame(dt, draw.layer.parameters);
+        if (result.rendered) {
+          this.#upload(entry);
+          counter.rendered += 1;
+          changed = true;
+        }
+        if (result.blank !== entry.blank) changed = true;
+        entry.blank = result.blank;
+        if (!result.blank)
+          frames.push({ kind: "canvas", draw, index, texture: entry.texture });
+      } else if (isShaderVisual(definition)) {
+        seen.add(draw.layer.id);
+        const entry = this.#shaderEntry(draw, definition);
+        counter.running += 1;
+        const { width, height } = size(1);
+        const result = entry.player.frame(
+          dt,
+          draw.layer.parameters,
+          width,
+          height,
+        );
+        if (result.changed) changed = true;
+        if (result.blank) return;
+        counter.rendered += 1;
+        frames.push({
+          kind: "shader",
+          draw,
+          index,
+          visual: definition,
+          params: resolveParameters(
+            definition.parameters,
+            draw.layer.parameters,
+          ),
+          uniforms: result.uniforms,
+          width,
+          height,
+        });
       }
-      if (result.blank !== entry.blank) changed = true;
-      entry.blank = result.blank;
-      if (!result.blank) frames.push({ draw, index, texture: entry.texture });
     });
     for (const [id, entry] of this.#entries) {
       if (seen.has(id)) continue;
@@ -85,7 +169,12 @@ export class LayerPlayers {
       this.#entries.delete(id);
       changed = true;
     }
-    return { frames, changed, planned: draws.length, running, rendered };
+    return { frames, changed, canvas, shaders };
+  }
+
+  /** Delivers a Cue fired on a Layer to its instance, if it is running. */
+  cue(layerId: string, key: string): void {
+    this.#entries.get(layerId)?.player.cue(key);
   }
 
   dispose(): void {
@@ -93,30 +182,23 @@ export class LayerPlayers {
     this.#entries.clear();
   }
 
-  #entry(
+  #canvasEntry(
     draw: LayerDraw,
     definition: CanvasVisual,
-    outputWidth: number,
-    outputHeight: number,
-  ): Entry {
-    const { width, height } = surfaceCanvasSize({
-      corners: draw.corners,
-      outputWidth,
-      outputHeight,
-      size: draw.surface.size,
-      renderScale: draw.surface.renderScale,
-      maxDimension: this.#maxDimension,
-    });
+    { width, height }: { readonly width: number; readonly height: number },
+  ): CanvasEntry {
     const current = this.#entries.get(draw.layer.id);
     if (
-      current?.visual === draw.visual &&
+      current?.kind === "canvas" &&
+      current.visual === draw.visual &&
       current.width === width &&
       current.height === height
     )
       return current;
     if (current !== undefined) this.#dispose(current);
     const { canvas, context } = createScratchCanvas(width, height);
-    const entry: Entry = {
+    const entry: CanvasEntry = {
+      kind: "canvas",
       visual: draw.visual,
       width,
       height,
@@ -134,7 +216,25 @@ export class LayerPlayers {
     return entry;
   }
 
-  #upload(entry: Entry): void {
+  #shaderEntry(draw: LayerDraw, definition: ShaderVisual): ShaderEntry {
+    const current = this.#entries.get(draw.layer.id);
+    if (current?.kind === "shader" && current.visual === draw.visual)
+      return current;
+    if (current !== undefined) this.#dispose(current);
+    const entry: ShaderEntry = {
+      kind: "shader",
+      visual: draw.visual,
+      player: createShaderPlayer(definition, {
+        width: 1,
+        height: 1,
+        seed: draw.layer.id,
+      }),
+    };
+    this.#entries.set(draw.layer.id, entry);
+    return entry;
+  }
+
+  #upload(entry: CanvasEntry): void {
     const gl = this.#gl;
     gl.bindTexture(gl.TEXTURE_2D, entry.texture);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
@@ -151,6 +251,6 @@ export class LayerPlayers {
 
   #dispose(entry: Entry): void {
     entry.player.dispose();
-    this.#gl.deleteTexture(entry.texture);
+    if (entry.kind === "canvas") this.#gl.deleteTexture(entry.texture);
   }
 }

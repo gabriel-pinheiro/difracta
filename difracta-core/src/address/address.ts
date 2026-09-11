@@ -237,6 +237,31 @@ const patterns: readonly AddressPattern[] = [
         ),
       ),
   },
+  {
+    pattern: ["layer", "*", "cue", "*"],
+    resolve: (document, catalog, [id = "", key = ""]) => {
+      const layer = document.layers[id];
+      if (layer === undefined) return undefined;
+      const cue = layerDefinition(layer, catalog)?.cues?.find(
+        (candidate) => candidate.key === key,
+      );
+      return cue === undefined
+        ? undefined
+        : {
+            label: cue.label,
+            owner: layer.name,
+            path: ["layers", id, "cue", key],
+            type: "trigger",
+          };
+    },
+    list: (document, catalog) =>
+      orderedEntries(document.layers).flatMap((layer) =>
+        (layerDefinition(layer, catalog)?.cues ?? []).map((cue) => [
+          layer.id,
+          cue.key,
+        ]),
+      ),
+  },
 ];
 
 export function formatAddress(segments: readonly string[]): string {
@@ -288,7 +313,7 @@ export function listAddresses(
   return result;
 }
 
-/** The Addresses of one Layer, in inspector order: its own settings, then its Parameters. */
+/** The Addresses of one Layer, in inspector order: its own settings, its Parameters, then its Cues. */
 export function layerAddresses(
   layer: Layer,
   catalog: Catalog = emptyCatalog,
@@ -304,16 +329,22 @@ export function layerAddresses(
       catalog,
     ),
   );
-  const parameters = Object.keys(
-    layerDefinition(layer, catalog)?.parameters ?? {},
-  ).map((name) =>
+  const definition = layerDefinition(layer, catalog);
+  const parameters = Object.keys(definition?.parameters ?? {}).map((name) =>
     resolveAddress(
       document,
       formatAddress(["layer", layer.id, "param", name]),
       catalog,
     ),
   );
-  return [...own, ...parameters].filter(
+  const cues = (definition?.cues ?? []).map((cue) =>
+    resolveAddress(
+      document,
+      formatAddress(["layer", layer.id, "cue", cue.key]),
+      catalog,
+    ),
+  );
+  return [...own, ...parameters, ...cues].filter(
     (entry): entry is ResolvedAddress => entry !== undefined,
   );
 }

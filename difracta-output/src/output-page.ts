@@ -11,8 +11,6 @@ interface OutputPageOptions {
   readonly outputId: string | null;
 }
 
-const noWorkload = { executedPerFrame: 0, enabled: 0, relevant: 0 };
-
 /**
  * One Output: waits for the runtime's open Installation to contain the
  * Output id, subscribes to the document (without live state, which this page
@@ -77,7 +75,16 @@ export class OutputPage {
         if (document === undefined) return;
         this.#frame.update({ document, outputId });
       };
-      this.#unsubscribeView = view.subscribePath([], render);
+      const unsubscribeRender = view.subscribePath([], render);
+      const unsubscribeEvents = view.subscribeEvents((address) => {
+        const [entity, layerId, field, key] = address.split("/");
+        if (entity === "layer" && field === "cue" && layerId && key)
+          this.#frame.trigger(layerId, key);
+      });
+      this.#unsubscribeView = () => {
+        unsubscribeRender();
+        unsubscribeEvents();
+      };
       render();
     }
     client.attach(outputId);
@@ -90,7 +97,7 @@ export class OutputPage {
   }
 
   #report(): void {
-    const { layers, filters, ...metrics } = this.#frame.metrics();
+    const { layers, shaders, filters, ...metrics } = this.#frame.metrics();
     const telemetry: OutputTelemetry = {
       ...metrics,
       workload: {
@@ -99,7 +106,11 @@ export class OutputPage {
           enabled: layers.running,
           relevant: layers.planned,
         },
-        shaderVisuals: noWorkload,
+        shaderVisuals: {
+          executedPerFrame: shaders.renderedPerFrame,
+          enabled: shaders.running,
+          relevant: shaders.planned,
+        },
         filters: {
           executedPerFrame: filters.executedPerFrame,
           enabled: filters.running,

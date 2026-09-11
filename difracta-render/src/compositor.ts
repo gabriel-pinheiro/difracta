@@ -9,6 +9,7 @@ import { LayerPlayers, type LayerFrame } from "./layer-players.ts";
 import { MaskTextures } from "./masks.ts";
 import { CORNER_INDEX, planFrame, type SurfaceDraw } from "./plan.ts";
 import { MAX_FRAME_SECONDS } from "./sdk/visual.ts";
+import { ShaderVisualPrograms } from "./shader-visuals.ts";
 import { FRAGMENT_SOURCE, MODE, VERTEX_SOURCE } from "./shaders.ts";
 
 export interface Compositor {
@@ -25,14 +26,22 @@ export interface Compositor {
     height: number,
     now: number,
   ): FrameReport;
+  /** Delivers a Cue fired on a Layer to that Layer's Visual instance. */
+  trigger(layerId: string, key: string): void;
   dispose(): void;
 }
 
 export interface FrameReport {
   /** The canvas holds a new frame. */
   readonly drew: boolean;
-  /** Layers in the plan, with a running instance, and that drew this frame. */
+  /** Canvas Layers in the plan, with a running instance, and that drew this frame. */
   readonly layers: {
+    readonly planned: number;
+    readonly running: number;
+    readonly rendered: number;
+  };
+  /** The same for shader Layers; rendered counts the ones drawn. */
+  readonly shaders: {
     readonly planned: number;
     readonly running: number;
     readonly rendered: number;
@@ -88,6 +97,7 @@ interface Resources {
   readonly players: LayerPlayers;
   readonly filters: FilterPlayers;
   readonly chain: FilterChain;
+  readonly shaderPrograms: ShaderVisualPrograms;
   /** Homographies by Surface, valid while the mapping's corners object is the same. */
   readonly matrices: Map<string, { corners: Quad; matrix: Float32Array }>;
 }
@@ -145,7 +155,12 @@ class WebGLCompositor implements Compositor {
     now: number,
   ): FrameReport {
     if (this.#lost)
-      return { drew: false, layers: NO_LAYERS, filters: NO_FILTERS };
+      return {
+        drew: false,
+        layers: NO_LAYERS,
+        shaders: NO_LAYERS,
+        filters: NO_FILTERS,
+      };
     const dt =
       this.#lastNow === undefined
         ? 0
@@ -159,11 +174,8 @@ class WebGLCompositor implements Compositor {
     const plan = planFrame(document, outputId);
     const step = resources.players.step(plan.layers, dt, width, height);
     const chain = resources.filters.step(plan.filters, dt, width, height);
-    const layers = {
-      planned: step.planned,
-      running: step.running,
-      rendered: step.rendered,
-    };
+    const layers = step.canvas;
+    const shaders = step.shaders;
     const filters = {
       planned: chain.planned,
       running: chain.running,
@@ -178,13 +190,18 @@ class WebGLCompositor implements Compositor {
       last.width === width &&
       last.height === height
     )
-      return { drew: false, layers, filters: { ...filters, executed: 0 } };
+      return {
+        drew: false,
+        layers,
+        shaders: { ...shaders, rendered: 0 },
+        filters: { ...filters, executed: 0 },
+      };
     this.#last = { document, outputId, width, height };
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, width, height);
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    if (plan.blackout) return { drew: true, layers, filters };
+    if (plan.blackout) return { drew: true, layers, shaders, filters };
 
     // With a Filter to run, the Layers accumulate in the chain's target
     // instead of the screen, each pass transforms what is there so far,
@@ -213,7 +230,9 @@ class WebGLCompositor implements Compositor {
         frame.draw.masks,
       );
       if (maskTexture !== undefined) masked.add(frame.draw.surface.id);
-      this.#drawLayer(resources, frame, maskTexture);
+      if (frame.kind === "canvas")
+        this.#drawLayer(resources, frame, maskTexture);
+      else this.#drawShader(resources, frame, matrix, maskTexture);
     }
     passesBelow(plan.layers.length);
     if (filtered) {
@@ -229,7 +248,11 @@ class WebGLCompositor implements Compositor {
       this.#drawSurface(resources, draw, maskTexture, matrix, width, height);
     }
     resources.masks.retain(masked);
-    return { drew: true, layers, filters };
+    return { drew: true, layers, shaders, filters };
+  }
+
+  trigger(layerId: string, key: string): void {
+    this.#resources?.players.cue(layerId, key);
   }
 
   dispose(): void {
@@ -242,6 +265,7 @@ class WebGLCompositor implements Compositor {
     resources.players.dispose();
     resources.filters.dispose();
     resources.chain.dispose();
+    resources.shaderPrograms.dispose();
     resources.gl.deleteProgram(resources.program);
     resources.gl.deleteBuffer(resources.quad);
     resources.gl.deleteBuffer(resources.loop);
@@ -302,6 +326,7 @@ class WebGLCompositor implements Compositor {
       players: new LayerPlayers(gl, this.#catalog),
       filters: new FilterPlayers(this.#catalog),
       chain: new FilterChain(gl, quad),
+      shaderPrograms: new ShaderVisualPrograms(gl, quad),
       matrices: new Map(),
     };
   }
@@ -385,10 +410,35 @@ class WebGLCompositor implements Compositor {
     });
   }
 
+  /** A shader Layer run over its Surface, with opacity, blend mode and the Surface's Masks. */
+  #drawShader(
+    resources: Resources,
+    frame: LayerFrame & { kind: "shader" },
+    homography: Float32Array,
+    maskTexture: WebGLTexture | undefined,
+  ): void {
+    const { gl } = resources;
+    const { layer } = frame.draw;
+    if (layer.blendMode === "additive") gl.blendFunc(gl.ONE, gl.ONE);
+    resources.shaderPrograms.draw({
+      visual: frame.visual,
+      params: frame.params,
+      uniforms: frame.uniforms,
+      width: frame.width,
+      height: frame.height,
+      opacity: layer.opacity,
+      homography,
+      maskTexture,
+    });
+    if (layer.blendMode === "additive")
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.useProgram(resources.program);
+  }
+
   /** A Layer's canvas over its Surface, with opacity, blend mode and the Surface's Masks. */
   #drawLayer(
     resources: Resources,
-    frame: LayerFrame,
+    frame: LayerFrame & { kind: "canvas" },
     maskTexture: WebGLTexture | undefined,
   ): void {
     const { gl, uniforms } = resources;

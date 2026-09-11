@@ -191,13 +191,14 @@ shipping the Visuals package.
 
 Thumbnails are rendered, not drawn: `npm run thumbnails` in `difracta-visuals`
 runs each definition through the compositor in a headless Chromium (Playwright),
-a Visual on a full-frame Surface for a few seconds, a Filter over a gray
-checkerboard with a ring, and writes one PNG per definition. **Why rendered:** a
-thumbnail is then what the definition does, and adding a definition costs one
-command rather than an illustration; Filters over the same picture compare with
-each other, and the ring shows displacements a checkerboard alone would hide.
-Every command's `apply` receives it, so `layer.visual` and `layer.filter` can
-refuse an unknown id and check values.
+a Visual on a full-frame Surface for a few seconds with its first Cue fired a
+few times near the end, a Filter over a gray checkerboard with a ring, and
+writes one PNG per definition. **Why rendered:** a thumbnail is then what the
+definition does, and adding a definition costs one command rather than an
+illustration; Filters over the same picture compare with each other, and the
+ring shows displacements a checkerboard alone would hide. Every command's
+`apply` receives it, so `layer.visual` and `layer.filter` can refuse an unknown
+id and check values.
 
 A Parameter is declared once, in the definition, as one of four kinds: number
 (with min, max, step and unit), color (four components from 0 to 1), choice
@@ -271,9 +272,10 @@ An Address names a controllable property or trigger, such as
 `installation/blackout` or `layer/<id>/opacity`. `resolveAddress` maps it to a
 document path, a value type (boolean, number, color, choice or trigger), a
 default, and for numbers a range and for choices the options; `listAddresses`
-enumerates every reachable one. The entries today are Blackout and, per Layer,
-`enabled`, `opacity` and `blend` (Visual Layers), `mix` (Filter Layers) and
-`param/<name>` for every Parameter of the Layer's definition, typed from the
+enumerates every reachable one. The entries today are Blackout, a Surface's
+`render-scale`, and, per Layer, `enabled`, `opacity` and `blend` (Visual
+Layers), `mix` (Filter Layers), `param/<name>` for every Parameter of the
+Layer's definition and `cue/<key>` for every Cue it declares, typed from the
 Catalog. Controllers, Macros, Pads, OSC, and the CLI all read and write
 Addresses.
 
@@ -283,7 +285,12 @@ coalescing per Address so a drag is one step; `address.set` is the same write
 for show control, never undone. Both share one reducer, which refuses an unknown
 Address and a value the type does not accept. A Parameter Link will add one more
 refusal there: an Address a Controller drives cannot be written directly, by
-anyone.
+anyone. A trigger Address is fired rather than written: `address.trigger`
+changes nothing in the document and returns an event instead, which the runtime
+announces to every session subscribed to the document after the deltas of the
+same tick, so a Macro's Parameter changes are in place before its Cue lands. An
+event is never stored, undone or replayed to a session that connects later; an
+Output hands it to the Layer's Visual instance as `cue(key)`.
 
 **Why:** hand-written target unions mean every new controllable thing needs
 changes in the domain, protocol, inspector, OSC router and discovery tree. With
@@ -407,14 +414,17 @@ corner labels, the selected corner marked) and the others follow the view. Masks
 apply to the pattern only while a Mask is being aligned, and that Mask is then
 outlined with its points marked.
 
-Each planned Layer has a Visual instance (`layer-players.ts`) on its own canvas,
-sized by `surfaceCanvasSize` and capped at the GPU's texture limit, with a
-texture uploaded on the frames the instance drew. An instance exists exactly
-while its Layer is planned: playing another Scene, disabling the Layer or a
-Group above it, or clearing its Target disposes it, and a change of Visual or
-canvas size replaces it, so a Scene starts fresh every time it plays. The frame
-is then composited in plan order: every Layer's texture is drawn through its
-Surface's homography with the Surface's Masks, the Layer's opacity, and its
+Each planned Layer has a Visual instance (`layer-players.ts`). A canvas Visual's
+draws on its own canvas, sized by `surfaceCanvasSize` and capped at the GPU's
+texture limit, with a texture uploaded on the frames the instance drew; a shader
+Visual's yields uniforms, and its program (`shader-visuals.ts`, one per Visual,
+kept once compiled) runs over the Surface's quad straight into the frame at
+frame resolution, so Render Scale does not apply to it. An instance exists
+exactly while its Layer is planned: playing another Scene, disabling the Layer
+or a Group above it, or clearing its Target disposes it, and a change of Visual
+or canvas size replaces it, so a Scene starts fresh every time it plays. The
+frame is then composited in plan order: every Layer's texture is drawn through
+its Surface's homography with the Surface's Masks, the Layer's opacity, and its
 blend mode (normal is premultiplied over, additive adds), so Layers stack as the
 navigator shows and overlapping Surfaces combine as their light would in the
 room. The frame is recomposited only when the document, the Output, the size, or
@@ -539,6 +549,24 @@ changes only with its Parameters. **Why the same instance model as Visuals:**
 sampling absolute time in the shader is what made every Rate and Speed change
 jump before, and a fragment that reads a counter cannot tell whether it was
 integrated or sampled.
+
+A shader Visual (`defineShaderVisual`) is the same idea over Surface Space: a
+fragment defining `render_visual(uv)` and an optional `create` whose `update`
+returns `{changed?, blank?, uniforms?}`. The engine applies the Layer's opacity,
+blend mode and Masks and premultiplies the result. An instance may return
+uniform arrays (`Float32Array`, `vec2s`, `vec3s`, `vec4s` in `sdk/uniforms.ts`)
+for a fragment that reads several live events through a fixed-size array; that
+size is the only limit on how many a shader can show at once, and it is the
+Visual's to choose.
+
+Cues reach the instance, canvas or shader, as `cue(key)` before its next
+`update`, and the instance keeps whatever it needs: a list of live envelopes, a
+counter, a beam per hit. An event is dropped by the Visual once it is no longer
+visible, a burst after its last flash, a blink after its fade, so there is no
+engine-owned history and no cap on how many a Visual may hold. **Why no timeline
+store:** handing each instance the event when it happens is the whole feature;
+recording occurrences with ages and delivery orders for a pure renderer to read
+back was the workaround for not having instances.
 
 ## Studio
 

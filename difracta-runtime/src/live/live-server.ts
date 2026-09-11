@@ -13,7 +13,10 @@ import {
 } from "@difracta/protocol";
 import type { RawData, WebSocket } from "ws";
 
-import type { DocumentDelta } from "../documents/document-session.ts";
+import type {
+  DocumentDelta,
+  DocumentEvent,
+} from "../documents/document-session.ts";
 import type { DocumentStore } from "../documents/document-store.ts";
 import { OutputPresence } from "./output-presence.ts";
 
@@ -33,6 +36,7 @@ interface ClientSession {
   readonly subscriptions: Map<string, { readonly live: boolean }>;
   pendingDeltas: DocumentDelta[];
   pendingLive: Patch[];
+  pendingEvents: DocumentEvent[];
   flushScheduled: boolean;
 }
 
@@ -64,6 +68,7 @@ export class LiveServer {
   readonly #unsubscribeStore: () => void;
   readonly #unsubscribePresence: () => void;
   #unsubscribeDeltas: (() => void) | undefined;
+  #unsubscribeEvents: (() => void) | undefined;
   #attachedDocumentId: string | undefined;
 
   constructor(options: LiveServerOptions) {
@@ -83,6 +88,7 @@ export class LiveServer {
     this.#unsubscribeStore();
     this.#unsubscribePresence();
     this.#unsubscribeDeltas?.();
+    this.#unsubscribeEvents?.();
     this.#presence.close();
     for (const session of this.#sessions) session.socket.close();
   }
@@ -96,6 +102,7 @@ export class LiveServer {
       subscriptions: new Map(),
       pendingDeltas: [],
       pendingLive: [],
+      pendingEvents: [],
       flushScheduled: false,
     };
     this.#sessions.add(session);
@@ -123,6 +130,10 @@ export class LiveServer {
     const documentSession = this.#options.store.currentSession();
     if (documentSession?.id === this.#attachedDocumentId) return;
     this.#unsubscribeDeltas?.();
+    this.#unsubscribeEvents?.();
+    this.#unsubscribeEvents = documentSession?.onEvent((event) => {
+      this.#fanOutEvent(event);
+    });
     this.#unsubscribeDeltas = documentSession?.onDelta((delta) => {
       this.#fanOut(delta);
       this.#reconcilePresence();
@@ -139,6 +150,14 @@ export class LiveServer {
     for (const session of this.#sessions) {
       if (!session.subscriptions.has(delta.documentId)) continue;
       session.pendingDeltas.push(delta);
+      this.#scheduleFlush(session);
+    }
+  }
+
+  #fanOutEvent(event: DocumentEvent): void {
+    for (const session of this.#sessions) {
+      if (!session.subscriptions.has(event.documentId)) continue;
+      session.pendingEvents.push(event);
       this.#scheduleFlush(session);
     }
   }
@@ -192,6 +211,20 @@ export class LiveServer {
         type: "live",
         documentId: this.#attachedDocumentId,
         patches: live.map((patch) => ({ ...patch, path: [...patch.path] })),
+      });
+    }
+    // Events follow the deltas of their tick, so a Macro's Parameter
+    // changes are in place before its Cue lands.
+    const events = session.pendingEvents;
+    session.pendingEvents = [];
+    for (const event of events) {
+      this.#send(session, {
+        type: "event",
+        documentId: event.documentId,
+        address: event.address,
+        ...(event.originSessionId === undefined
+          ? {}
+          : { originSessionId: event.originSessionId }),
       });
     }
   }

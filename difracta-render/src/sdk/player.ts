@@ -16,6 +16,8 @@ import {
  */
 export interface VisualPlayer {
   frame(dt: number, values: ParameterValues): FrameResult;
+  /** Delivers a fired Cue to the instance, once there is one. */
+  cue(key: string): void;
   dispose(): void;
 }
 
@@ -80,6 +82,9 @@ export function createVisualPlayer(
       context.restore();
       needsRedraw = false;
       return { rendered: true, blank: false };
+    },
+    cue(key) {
+      instance?.cue?.(key);
     },
     dispose() {
       instance?.dispose?.();

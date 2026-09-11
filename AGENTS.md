@@ -53,9 +53,11 @@ near-synonyms.
   cost, what to stack it with.
 - Visuals and Filters integrate, they never sample: anything time-derived lives
   in the instance `create` returns and advances by `dt`. A Filter's fragment
-  only samples the frame with the uniforms its instance returns. Report
-  `changed: false` when a frame would repeat itself, `blank` (Visual) or
-  `identity` (Filter) when it would draw nothing or do nothing.
+  only samples the frame with the uniforms its instance returns; a shader
+  Visual's fragment only paints with them. Report `changed: false` when a frame
+  would repeat itself, `blank` (Visual) or `identity` (Filter) when it would
+  draw nothing or do nothing. Cues arrive as `cue(key)` on the instance; keep
+  each event only while its effect is visible.
 - Thumbnails are rendered, never drawn. After adding or changing a Visual or
   Filter run `npm run thumbnails -w @difracta/visuals [id…]` and keep the PNG it
   writes in `difracta-visuals/thumbnails/`. It needs Chromium for Playwright

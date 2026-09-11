@@ -297,14 +297,15 @@ Picker is not a Color Controller or a user-authored Palette.
 ### Cue
 
 A named performable behavior declared in a Visual's code metadata and invoked on
-a Layer, such as Blink on Blink or Flash on Thunder. A Cue occurrence is
-transient live input: Runtime gives it a unique identity, Outputs start it on
-local message arrival, and it is neither persisted nor replayed to reconnecting
-Outputs.
+a Layer, such as Blink on Blink or Flash on Thunder. Each Cue of a Layer is a
+trigger Address, `layer/<id>/cue/<key>`. Firing it is transient live input: the
+Runtime announces it to every session, an Output hands it to the Layer's Visual
+Instance, and it is neither persisted nor replayed to reconnecting Outputs.
 
 A Cue has no payload. Its behavior uses the Layer's current ordinary Parameter
-Values. A Macro may contain a Trigger Cue action, but the persisted action and
-the transient Cue occurrence remain distinct concepts.
+Values, and the Visual Instance keeps what it needs of the Cue for as long as
+its effect is visible. A Macro may contain a Trigger Cue action, but the
+persisted action and the transient firing remain distinct concepts.
 
 ### Automatic Rate
 

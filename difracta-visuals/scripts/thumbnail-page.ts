@@ -20,6 +20,14 @@ import { builtInCatalog } from "../src/index.ts";
  */
 export type ThumbnailKind = "visual" | "filter";
 
+/**
+ * A Visual's first Cue fires this many frames before the picture is taken,
+ * several times, so one that accumulates has a few things settled and one
+ * that flashes is caught lit. Only the first: a later Cue is often the one
+ * that clears what the first built.
+ */
+const CUE_LEAD_FRAMES = [120, 80, 40, 3];
+
 const checkerboard = defineVisual({
   id: "thumbnail-checkerboard",
   name: "Checkerboard",
@@ -102,8 +110,13 @@ export function renderThumbnail(
   const compositor = createCompositor(canvas, catalog);
   const scene = installation(kind, id);
   const frames = Math.round(seconds * 60);
-  for (let frame = 0; frame <= frames; frame += 1)
+  const cue =
+    kind === "visual" ? catalog.visual(id)?.cues?.[0]?.key : undefined;
+  for (let frame = 0; frame <= frames; frame += 1) {
+    if (cue !== undefined && CUE_LEAD_FRAMES.includes(frames - frame))
+      compositor.trigger("thumbnail", cue);
     compositor.render(scene, "out", width, height, (frame * 1000) / 60);
+  }
   const png = canvas.toDataURL("image/png");
   compositor.dispose();
   return png;

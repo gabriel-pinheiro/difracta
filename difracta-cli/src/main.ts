@@ -195,7 +195,7 @@ program
         items
           .map(
             (item) =>
-              `${item.address.padEnd(32)} ${item.type.padEnd(8)} ${JSON.stringify(item.value)}  ${item.label}`,
+              `${item.address.padEnd(32)} ${item.type.padEnd(8)} ${item.type === "trigger" ? "-" : JSON.stringify(item.value)}  ${item.label}`,
           )
           .join("\n"),
       );
@@ -229,6 +229,19 @@ for (const [name, command, purpose] of [
       }),
     );
 }
+
+program
+  .command("trigger <address...>")
+  .description(
+    "Fire trigger Addresses, e.g. trigger layer/lay_1/cue/flash; several at once fire together.",
+  )
+  .action((addresses: string[]) =>
+    withDocument(async (client, summary) => {
+      for (const address of addresses)
+        await client.command(summary.id, "address.trigger", { address });
+      print(addresses, () => addresses.map((a) => `${a} fired`).join("\n"));
+    }),
+  );
 
 program
   .command("catalog [id]")

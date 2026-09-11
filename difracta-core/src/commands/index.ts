@@ -3,6 +3,7 @@ import type { CommandDefinition } from "../command/command.ts";
 import { CommandRegistry } from "../command/registry.ts";
 import { addressEdit } from "./address.edit.ts";
 import { addressSet, addressToggle } from "./address.set.ts";
+import { addressTrigger } from "./address.trigger.ts";
 import { calibrationExit, calibrationSet } from "./calibration.ts";
 import { entityMove } from "./entity.move.ts";
 import { layerCreate } from "./layer.create.ts";
@@ -82,6 +83,7 @@ export const builtInCommands: readonly CommandDefinition<never>[] = [
   addressEdit,
   addressSet,
   addressToggle,
+  addressTrigger,
   calibrationSet,
   calibrationExit,
   entityMove,

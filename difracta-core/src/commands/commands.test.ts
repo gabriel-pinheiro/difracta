@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { Catalog } from "../catalog/catalog.ts";
 import { executeCommand } from "../command/execute.ts";
 import { resolveCalibration } from "../document/calibration.ts";
 import { emptyDocument, type Document } from "../document/document.ts";
@@ -615,6 +616,53 @@ describe("built-in commands", () => {
       address: "installation/blackout",
     });
     expect(toggled.document.operational.blackout).toBe(false);
+  });
+
+  it("fires trigger addresses as events and nothing else", () => {
+    const catalog = new Catalog({
+      visuals: [
+        {
+          kind: "visual",
+          id: "flashy",
+          name: "Flashy",
+          description: "Flashes.",
+          backend: "shader",
+          parameters: {},
+          cues: [{ key: "flash", label: "Flash" }],
+        },
+      ],
+    });
+    const withCatalog = createBuiltInRegistry(catalog);
+    let document = emptyDocument("Living");
+    for (const [name, payload] of [
+      ["scene.create", { id: "s", name: "Live" }],
+      ["layer.create", { id: "v", sceneId: "s", kind: "visual" }],
+      ["layer.visual", { layerId: "v", visual: "flashy" }],
+    ] as const) {
+      const result = executeCommand(withCatalog, document, name, payload);
+      if (!result.ok) throw new Error(result.error);
+      document = result.document;
+    }
+    const fired = executeCommand(withCatalog, document, "address.trigger", {
+      address: "layer/v/cue/flash",
+    });
+    expect(fired.ok && fired.events).toEqual(["layer/v/cue/flash"]);
+    expect(fired.ok && fired.patches).toEqual([]);
+    expect(fired.ok && fired.definition.kind).toBe("performance");
+    const notTrigger = executeCommand(
+      withCatalog,
+      document,
+      "address.trigger",
+      {
+        address: "layer/v/opacity",
+      },
+    );
+    expect(notTrigger.ok).toBe(false);
+    const setTrigger = executeCommand(withCatalog, document, "address.set", {
+      address: "layer/v/cue/flash",
+      value: null,
+    });
+    expect(setTrigger.ok).toBe(false);
   });
 
   it("produces no patches for a no-op", () => {

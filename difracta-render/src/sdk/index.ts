@@ -6,9 +6,27 @@ export {
   type FilterInstance,
   type FilterUpdate,
   type ShaderFilter,
+} from "./filter.ts";
+export {
+  vec2s,
+  vec3s,
+  vec4s,
+  type UniformArray,
   type Uniforms,
   type UniformValue,
-} from "./filter.ts";
+} from "./uniforms.ts";
+export {
+  defineShaderVisual,
+  isShaderVisual,
+  type ShaderUpdate,
+  type ShaderVisual,
+  type ShaderVisualInstance,
+} from "./shader-visual.ts";
+export {
+  createShaderPlayer,
+  type ShaderFrameResult,
+  type ShaderPlayer,
+} from "./shader-player.ts";
 export {
   createFilterPlayer,
   type FilterPlayer,

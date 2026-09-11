@@ -9,7 +9,7 @@ import {
   type Surface,
   type Table,
 } from "@difracta/core";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -40,8 +40,10 @@ function valueAt(layer: Layer, resolved: ResolvedAddress): AddressValue {
 
 /**
  * What the Layer is made of and its name, then its settings and Parameters
- * as Address rows in two collapsible sections. Every row is one Address,
- * so opacity and a Visual's Parameter are edited through the same command.
+ * as Address rows in two collapsible sections, and its Cues as buttons in a
+ * third. Every row is one Address, so opacity and a Visual's Parameter are
+ * edited through the same command and a Cue fires through the same Address
+ * a Macro or OSC would.
  */
 export function LayerInspector({
   view,
@@ -61,8 +63,11 @@ export function LayerInspector({
   if (layer === undefined) return null;
 
   const addresses = layerAddresses(layer, catalog);
-  const settings = addresses.filter((entry) => !isParameter(entry));
+  const settings = addresses.filter(
+    (entry) => !isParameter(entry) && !isCue(entry),
+  );
   const parameters = addresses.filter(isParameter);
+  const cues = addresses.filter(isCue);
   const definition =
     layer.kind === "group" ? undefined : definitionOf(layer).definition;
   const row = (resolved: ResolvedAddress) => (
@@ -153,12 +158,56 @@ export function LayerInspector({
           )}
         </InspectorSection>
       )}
+      {cues.length > 0 && (
+        <InspectorSection storageKey="cues" label="Cues">
+          <div className="flex flex-wrap gap-1.5">
+            {cues.map((resolved) => (
+              <CueButton
+                key={resolved.address}
+                label={resolved.label}
+                onFire={() =>
+                  command("address.trigger", { address: resolved.address })
+                }
+              />
+            ))}
+          </div>
+        </InspectorSection>
+      )}
     </>
+  );
+}
+
+/** Fires a Cue; lit for a moment afterwards so a press is seen without an Output. */
+function CueButton({
+  label,
+  onFire,
+}: {
+  readonly label: string;
+  readonly onFire: () => Promise<unknown>;
+}) {
+  const [lit, setLit] = useState(false);
+  return (
+    <Button
+      variant="outline"
+      size="xs"
+      data-lit={lit || undefined}
+      className="data-lit:border-selection data-lit:bg-selection/20"
+      onClick={() => {
+        setLit(true);
+        window.setTimeout(() => setLit(false), 150);
+        void onFire();
+      }}
+    >
+      {label}
+    </Button>
   );
 }
 
 const isParameter = (resolved: ResolvedAddress): boolean =>
   resolved.path[2] === "parameters";
+
+const isCue = (resolved: ResolvedAddress): boolean =>
+  resolved.type === "trigger";
 
 const parameterName = (resolved: ResolvedAddress): string =>
   isParameter(resolved) ? (resolved.path[3] ?? "") : "";

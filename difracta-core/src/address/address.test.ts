@@ -43,6 +43,7 @@ const catalog = new Catalog({
         tint: { kind: "color", label: "Tint", default: [1, 1, 1, 1] },
         mirror: { kind: "boolean", label: "Mirror", default: false },
       },
+      cues: [{ key: "flash", label: "Flash" }],
     },
   ],
   filters: [
@@ -206,6 +207,7 @@ describe("addresses", () => {
       "layer/v/param/palette",
       "layer/v/param/tint",
       "layer/v/param/mirror",
+      "layer/v/cue/flash",
     ]);
   });
 
@@ -224,6 +226,7 @@ describe("addresses", () => {
       "layer/v/param/palette",
       "layer/v/param/tint",
       "layer/v/param/mirror",
+      "layer/v/cue/flash",
     ]);
     expect(layerAddresses(layer("f"), catalog).map((e) => e.address)).toEqual([
       "layer/f/enabled",
@@ -233,6 +236,26 @@ describe("addresses", () => {
     expect(layerAddresses(layer("g"), catalog).map((e) => e.address)).toEqual([
       "layer/g/enabled",
     ]);
+  });
+
+  it("resolves a Layer's Cues as triggers of its Visual", () => {
+    const document = stage();
+    expect(resolveAddress(document, "layer/v/cue/flash", catalog)).toEqual({
+      address: "layer/v/cue/flash",
+      label: "Flash",
+      owner: "Plasma",
+      path: ["layers", "v", "cue", "flash"],
+      type: "trigger",
+    });
+    expect(
+      resolveAddress(document, "layer/v/cue/boom", catalog),
+    ).toBeUndefined();
+    expect(
+      resolveAddress(document, "layer/f/cue/flash", catalog),
+    ).toBeUndefined();
+    expect(
+      listAddresses(document, catalog).filter((e) => e.type === "trigger"),
+    ).toHaveLength(1);
   });
 
   it("checks values against the resolved type", () => {

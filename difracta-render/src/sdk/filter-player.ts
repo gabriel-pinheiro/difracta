@@ -1,6 +1,7 @@
 import { sameAddressValue, type ParameterValues } from "@difracta/core";
 
-import type { FilterInstance, ShaderFilter, Uniforms } from "./filter.ts";
+import type { FilterInstance, ShaderFilter } from "./filter.ts";
+import type { Uniforms } from "./uniforms.ts";
 import { resolveParameters } from "./parameters.ts";
 import { createRandom } from "./random.ts";
 import { MAX_FRAME_SECONDS } from "./visual.ts";

@@ -55,6 +55,8 @@ export interface VisualInstance<S extends ParameterSchema> {
   update(frame: VisualFrame<S>): UpdateResult | void;
   /** Draw the current state. The canvas is cleared before each call. */
   render(canvas: VisualCanvas<S>): void;
+  /** A Cue the Visual declares was fired on this Layer; arrives before the next update. */
+  cue?(key: string): void;
   dispose?(): void;
 }
 

@@ -7,8 +7,7 @@ import {
   PRESENT_FRAGMENT_SOURCE,
   uniformName,
 } from "./filter-shaders.ts";
-import { compileProgram, createTexture, uniform } from "./gl.ts";
-import type { UniformValue } from "./sdk/filter.ts";
+import { compileProgram, createTexture, setUniform, uniform } from "./gl.ts";
 
 interface Target {
   readonly framebuffer: WebGLFramebuffer;
@@ -102,8 +101,10 @@ export class FilterChain {
     gl.uniform1f(entry.mix, pass.draw.layer.mix);
     for (const [name, definition] of Object.entries(pass.filter.parameters))
       this.#setParameter(entry, name, definition, pass.params[name]);
-    for (const [name, value] of Object.entries(pass.uniforms))
-      this.#setUniform(entry, name, value);
+    for (const [name, value] of Object.entries(pass.uniforms)) {
+      const location = this.#location(entry, name);
+      if (location !== null) setUniform(gl, location, value);
+    }
     this.#drawQuad();
     gl.enable(gl.BLEND);
     this.#active = this.#active === 0 ? 1 : 0;
@@ -222,18 +223,6 @@ export class FilterChain {
         gl.uniform4f(location, r, g, b, a);
       }
     }
-  }
-
-  #setUniform(entry: ProgramEntry, name: string, value: UniformValue): void {
-    const location = this.#location(entry, name);
-    if (location === null) return;
-    const gl = this.#gl;
-    if (typeof value === "number") gl.uniform1f(location, value);
-    else if (typeof value === "boolean") gl.uniform1i(location, value ? 1 : 0);
-    else if (value.length === 2) gl.uniform2f(location, value[0], value[1]);
-    else if (value.length === 3)
-      gl.uniform3f(location, value[0], value[1], value[2]);
-    else gl.uniform4f(location, value[0], value[1], value[2], value[3]);
   }
 
   #drawQuad(): void {

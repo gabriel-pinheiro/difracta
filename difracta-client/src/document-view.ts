@@ -28,6 +28,7 @@ export class DocumentView {
   readonly liveState: Signal<LiveState>;
   readonly revision: Signal<number>;
   readonly #pathListeners = new Map<string, Set<() => void>>();
+  readonly #eventListeners = new Set<(address: string) => void>();
 
   constructor(documentId: string, options: { readonly live?: boolean } = {}) {
     this.documentId = documentId;
@@ -62,6 +63,17 @@ export class DocumentView {
       listeners.delete(listener);
       if (listeners.size === 0) this.#pathListeners.delete(key);
     };
+  }
+
+  /** Notifies of every trigger Address fired in this document, such as a Layer's Cue. */
+  subscribeEvents(listener: (address: string) => void): () => void {
+    this.#eventListeners.add(listener);
+    return () => this.#eventListeners.delete(listener);
+  }
+
+  /** @internal The runtime announced a fired trigger Address. */
+  receiveEvent(address: string): void {
+    for (const listener of this.#eventListeners) listener(address);
   }
 
   /** A signal-like view of one path, for framework bindings. */

@@ -1,3 +1,5 @@
+import type { UniformValue } from "./sdk/uniforms.ts";
+
 /** Small WebGL2 helpers; errors carry the shader log so a bad edit is readable. */
 
 export function compileProgram(
@@ -79,4 +81,23 @@ export function createScratchCanvas(
   const context = canvas.getContext("2d");
   if (context === null) throw new Error("Canvas 2D is unavailable.");
   return { canvas, context };
+}
+
+/** Sets a uniform from an instance's value by its shape (see `sdk/uniforms.ts`). */
+export function setUniform(
+  gl: WebGL2RenderingContext,
+  location: WebGLUniformLocation,
+  value: UniformValue,
+): void {
+  if (typeof value === "number") gl.uniform1f(location, value);
+  else if (typeof value === "boolean") gl.uniform1i(location, value ? 1 : 0);
+  else if (value instanceof Float32Array) gl.uniform1fv(location, value);
+  else if ("size" in value) {
+    if (value.size === 2) gl.uniform2fv(location, value.values);
+    else if (value.size === 3) gl.uniform3fv(location, value.values);
+    else gl.uniform4fv(location, value.values);
+  } else if (value.length === 2) gl.uniform2f(location, value[0], value[1]);
+  else if (value.length === 3)
+    gl.uniform3f(location, value[0], value[1], value[2]);
+  else gl.uniform4f(location, value[0], value[1], value[2], value[3]);
 }

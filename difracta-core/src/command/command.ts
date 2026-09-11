@@ -23,7 +23,12 @@ export interface CommandContext<TPayload> {
 }
 
 export type CommandOutcome =
-  | { readonly ok: true; readonly patches: readonly Patch[] }
+  | {
+      readonly ok: true;
+      readonly patches: readonly Patch[];
+      /** Trigger Addresses fired: announced to every subscriber, never stored. */
+      readonly events?: readonly string[];
+    }
   | { readonly ok: false; readonly error: string };
 
 export interface CommandDefinition<TPayload = unknown> {
@@ -56,6 +61,11 @@ export function rejected(error: string): CommandOutcome {
   return { ok: false, error };
 }
 
-export function accepted(patches: readonly Patch[]): CommandOutcome {
-  return { ok: true, patches };
+export function accepted(
+  patches: readonly Patch[],
+  events?: readonly string[],
+): CommandOutcome {
+  return events === undefined
+    ? { ok: true, patches }
+    : { ok: true, patches, events };
 }
