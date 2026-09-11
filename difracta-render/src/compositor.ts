@@ -1,5 +1,7 @@
 import type { Catalog, Document, Point, Quad } from "@difracta/core";
 
+import { FilterChain } from "./filter-chain.ts";
+import { FilterPlayers, type FilterPass } from "./filter-players.ts";
 import { compileProgram, uniform } from "./gl.ts";
 import { homography, project } from "./homography.ts";
 import { Labels } from "./labels.ts";
@@ -35,9 +37,16 @@ export interface FrameReport {
     readonly running: number;
     readonly rendered: number;
   };
+  /** Filters in the plan, with a running instance, and whose pass ran this frame. */
+  readonly filters: {
+    readonly planned: number;
+    readonly running: number;
+    readonly executed: number;
+  };
 }
 
 const NO_LAYERS = { planned: 0, running: 0, rendered: 0 } as const;
+const NO_FILTERS = { planned: 0, running: 0, executed: 0 } as const;
 
 const CORNER_LABELS = ["TL", "TR", "BR", "BL"] as const;
 /** Grid cells across the calibration pattern. */
@@ -77,6 +86,8 @@ interface Resources {
   readonly masks: MaskTextures;
   readonly labels: Labels;
   readonly players: LayerPlayers;
+  readonly filters: FilterPlayers;
+  readonly chain: FilterChain;
   /** Homographies by Surface, valid while the mapping's corners object is the same. */
   readonly matrices: Map<string, { corners: Quad; matrix: Float32Array }>;
 }
@@ -133,7 +144,8 @@ class WebGLCompositor implements Compositor {
     height: number,
     now: number,
   ): FrameReport {
-    if (this.#lost) return { drew: false, layers: NO_LAYERS };
+    if (this.#lost)
+      return { drew: false, layers: NO_LAYERS, filters: NO_FILTERS };
     const dt =
       this.#lastNow === undefined
         ? 0
@@ -146,29 +158,53 @@ class WebGLCompositor implements Compositor {
     const { gl } = resources;
     const plan = planFrame(document, outputId);
     const step = resources.players.step(plan.layers, dt, width, height);
+    const chain = resources.filters.step(plan.filters, dt, width, height);
     const layers = {
       planned: step.planned,
       running: step.running,
       rendered: step.rendered,
     };
+    const filters = {
+      planned: chain.planned,
+      running: chain.running,
+      executed: chain.executed,
+    };
     const last = this.#last;
     if (
       !step.changed &&
+      !chain.changed &&
       last?.document === document &&
       last.outputId === outputId &&
       last.width === width &&
       last.height === height
     )
-      return { drew: false, layers };
+      return { drew: false, layers, filters: { ...filters, executed: 0 } };
     this.#last = { document, outputId, width, height };
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, width, height);
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    if (plan.blackout) return { drew: true, layers };
+    if (plan.blackout) return { drew: true, layers, filters };
 
+    // With a Filter to run, the Layers accumulate in the chain's target
+    // instead of the screen, each pass transforms what is there so far,
+    // and the last target is presented.
+    const filtered = chain.passes.length > 0;
+    if (filtered) resources.chain.begin(width, height);
     gl.useProgram(resources.program);
     const masked = new Set<string>();
+    let next = 0;
+    const passesBelow = (count: number): void => {
+      for (;;) {
+        const pass: FilterPass | undefined = chain.passes[next];
+        if (pass === undefined || pass.draw.below > count) return;
+        resources.chain.apply(pass);
+        gl.useProgram(resources.program);
+        next += 1;
+      }
+    };
     for (const frame of step.frames) {
+      passesBelow(frame.index);
       const matrix = this.#matrix(resources, frame.draw);
       if (matrix === undefined) continue;
       gl.uniformMatrix3fv(resources.uniforms.homography, false, matrix);
@@ -179,6 +215,11 @@ class WebGLCompositor implements Compositor {
       if (maskTexture !== undefined) masked.add(frame.draw.surface.id);
       this.#drawLayer(resources, frame, maskTexture);
     }
+    passesBelow(plan.layers.length);
+    if (filtered) {
+      resources.chain.present();
+      gl.useProgram(resources.program);
+    }
     for (const draw of plan.draws) {
       const matrix = this.#matrix(resources, draw);
       if (matrix === undefined) continue;
@@ -188,7 +229,7 @@ class WebGLCompositor implements Compositor {
       this.#drawSurface(resources, draw, maskTexture, matrix, width, height);
     }
     resources.masks.retain(masked);
-    return { drew: true, layers };
+    return { drew: true, layers, filters };
   }
 
   dispose(): void {
@@ -199,6 +240,8 @@ class WebGLCompositor implements Compositor {
     resources.masks.dispose();
     resources.labels.dispose();
     resources.players.dispose();
+    resources.filters.dispose();
+    resources.chain.dispose();
     resources.gl.deleteProgram(resources.program);
     resources.gl.deleteBuffer(resources.quad);
     resources.gl.deleteBuffer(resources.loop);
@@ -257,6 +300,8 @@ class WebGLCompositor implements Compositor {
       masks: new MaskTextures(gl),
       labels: new Labels(gl),
       players: new LayerPlayers(gl, this.#catalog),
+      filters: new FilterPlayers(this.#catalog),
+      chain: new FilterChain(gl, quad),
       matrices: new Map(),
     };
   }

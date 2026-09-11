@@ -178,19 +178,26 @@ The Catalog is the set of Visual and Filter definitions a runtime knows
 a backend (`canvas` or `shader`), an optional `recommended` flag, a Parameter
 schema, and for Visuals the Paths they need and the Cues they answer to. Core
 owns the types and the validation; `difracta-visuals` owns the entries and their
-thumbnails, one file per definition (a Filter's is a gray checkerboard through
-that Filter, so Filters compare against the same picture), and the runtime
-passes that Catalog to the command registry. A Visual's file also carries its
-implementation, written against the SDK in `difracta-render` (see Visuals
-below); the runtime and Studio only read the metadata. A definition may carry
-`notes`: paragraphs for whoever composes with it, human or agent, saying what
-the code cannot (how it reads on a Surface, which Parameters interact, what it
-costs, what to stack it with). The runtime answers `catalog.list` with its
-definitions minus their functions, which is how the CLI's `catalog` prints the
-notes and a reference generated from the schema, and how its `addresses`
-resolves Parameters without shipping the Visuals package. Every command's
-`apply` receives it, so `layer.visual` and `layer.filter` can refuse an unknown
-id and check values.
+thumbnails, and the runtime passes that Catalog to the command registry. A
+definition's file also carries its implementation, written against the SDK in
+`difracta-render` (see Visuals and Filters below); the runtime and Studio only
+read the metadata. A definition may carry `notes`: paragraphs for whoever
+composes with it, human or agent, saying what the code cannot (how it reads on a
+Surface, which Parameters interact, what it costs, what to stack it with). The
+runtime answers `catalog.list` with its definitions minus their functions and
+shader source, which is how the CLI's `catalog` prints the notes and a reference
+generated from the schema, and how its `addresses` resolves Parameters without
+shipping the Visuals package.
+
+Thumbnails are rendered, not drawn: `npm run thumbnails` in `difracta-visuals`
+runs each definition through the compositor in a headless Chromium (Playwright),
+a Visual on a full-frame Surface for a few seconds, a Filter over a gray
+checkerboard with a ring, and writes one PNG per definition. **Why rendered:** a
+thumbnail is then what the definition does, and adding a definition costs one
+command rather than an illustration; Filters over the same picture compare with
+each other, and the ring shows displacements a checkerboard alone would hide.
+Every command's `apply` receives it, so `layer.visual` and `layer.filter` can
+refuse an unknown id and check values.
 
 A Parameter is declared once, in the definition, as one of four kinds: number
 (with min, max, step and unit), color (four components from 0 to 1), choice
@@ -411,13 +418,32 @@ Surface's homography with the Surface's Masks, the Layer's opacity, and its
 blend mode (normal is premultiplied over, additive adds), so Layers stack as the
 navigator shows and overlapping Surfaces combine as their light would in the
 room. The frame is recomposited only when the document, the Output, the size, or
-any Layer's canvas changed; a Scene of Layers that report no change costs the
-Output only the instances' updates.
+any Layer's canvas changed, or any Filter reports that its picture would; a
+Scene of Layers and Filters that report no change costs the Output only the
+instances' updates.
+
+The plan also places the Scene's Filter Layers: each one enabled with its
+Groups, holding a Filter, with a mix above zero and at least one planned Layer
+below it on this Output, is listed with that count (`below`), and a Group only
+gates, so a Filter inside a Group still transforms what lies under the Group.
+Each planned Filter has an instance (`filter-players.ts`) that lives as long as
+the Visual instances do, and whose update yields the pass's uniforms or says the
+pass would be an identity (an Amount at zero), in which case it is left out.
+When any pass remains, the frame goes through the chain (`filter-chain.ts`): the
+Layers accumulate into one of two frame-sized textures instead of the screen,
+each pass in plan order reads the current one and writes the other with the
+Filter's fragment, the Layer's mix applied as a blend between input and result,
+then the last texture is presented; with no pass, Layers draw straight to the
+screen as before and the textures are never touched. Programs are compiled once
+per Filter and kept.
 
 **Why Layers draw straight into the frame rather than into a Surface buffer:**
 one draw per Layer is the whole pipeline, blend modes read naturally as what is
 already on the wall, and Filters, which transform the accumulated frame below
-them, get to bleed across Surfaces, which is wanted.
+them, get to bleed across Surfaces, which is wanted. **Why a Filter with nothing
+under it is not planned, and an identity pass is dropped:** each pass is a
+full-frame draw, the most expensive thing an Output does, and both would produce
+exactly their input.
 
 Geometry: every vertex is a Surface Space position pushed through the Surface's
 homography in the vertex shader, with clip-space `w` carrying the projective
@@ -440,7 +466,7 @@ code of two. Why a fixed-size Mask texture: Masks are fractions of Surface
 Space, so the texture does not depend on the frame; a full-resolution texture
 would be rebuilt on every drag of a point and uploaded at megabytes a step.
 
-### Visuals
+### Visuals and Filters
 
 A Visual is a definition plus `create`, which makes one **instance** per Layer
 per Output (`render/sdk/`). An instance is a closure over its own state with two
@@ -463,7 +489,10 @@ second for the cases where snapping would look wrong, and `rateTimer` turns an
 Automatic Rate into firings by accumulating `dt * rate`, jittered around the
 mean, so a rate change carries the progress toward the next firing instead of
 rescheduling it. `automaticRate()` is the Parameter every event-driven Visual
-declares for that, always with the same label and range.
+declares for that, always with the same label and range. `ticker` is the regular
+counterpart, a clock in hertz that says how many ticks passed and how far the
+next one is, for things that beat rather than happen; `smoothstep` eases within
+such a tick.
 
 `update` may return a report. `changed: false` means the previous drawing is
 still right: the player leaves the Layer's canvas alone and the compositor
@@ -487,10 +516,29 @@ changes the default rather than a per-Visual effort. **Why a seeded random
 source anyway:** it costs a dozen lines and makes a Layer look the same on every
 run and a Visual replayable in a test; nothing user-facing depends on it, and no
 Surface is ever rendered by two Outputs that would need to agree. **Why the
-flags come from `update` and not `render`:** `render` is what they skip. **Why
-Filters are not in the SDK:** every Filter is a fragment shader over the Layer
-below it, run by the compositor's framebuffer chain, and that contract is
-defined with the compositor.
+flags come from `update` and not `render`:** `render` is what they skip.
+
+A Filter is a definition plus a GLSL `fragment` defining `filter_image(uv)` over
+the frame accumulated below it, and optionally `create`, which makes one
+instance per Filter Layer per Output with the same `update(frame)` as a
+Visual's. The instance is the JavaScript half of an animated Filter: it
+integrates its phase or tick count from `dt` and returns the uniforms the
+fragment reads this frame, so the fragment only samples and Rate or Speed change
+live without a skip. Every uniform is `u_<name>`: the Parameters by name (number
+as float, color as vec4, choice as an int index, boolean as bool) and the
+instance's by key. The engine's prelude supplies `u_resolution`, `u_texel`,
+`sample_input` (clamped at the edges), `sample_mirrored` (reflected, so
+displaced pixels never show the frame border), `hash` and `hash2`, and after the
+fragment it applies the Layer's mix and keeps the result premultiplied. An
+update may report `changed: false`, meaning the pass would repeat itself for the
+same input, and `identity: true`, meaning it would return its input, which skips
+the pass; uniforms carry over until returned again. The player
+(`createFilterPlayer`) does the bookkeeping without a GPU, so a Filter's
+behaviour is tested frame by frame like a Visual's. A Filter without `create`
+changes only with its Parameters. **Why the same instance model as Visuals:**
+sampling absolute time in the shader is what made every Rate and Speed change
+jump before, and a fragment that reads a counter cannot tell whether it was
+integrated or sampled.
 
 ## Studio
 

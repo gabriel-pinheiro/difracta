@@ -90,7 +90,7 @@ export class OutputPage {
   }
 
   #report(): void {
-    const { layers, ...metrics } = this.#frame.metrics();
+    const { layers, filters, ...metrics } = this.#frame.metrics();
     const telemetry: OutputTelemetry = {
       ...metrics,
       workload: {
@@ -100,7 +100,11 @@ export class OutputPage {
           relevant: layers.planned,
         },
         shaderVisuals: noWorkload,
-        filters: noWorkload,
+        filters: {
+          executedPerFrame: filters.executedPerFrame,
+          enabled: filters.running,
+          relevant: filters.planned,
+        },
       },
     };
     this.#options.client.report(telemetry);

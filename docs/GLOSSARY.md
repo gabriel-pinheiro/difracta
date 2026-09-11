@@ -197,8 +197,9 @@ where things are now.
 The set of Visual and Filter definitions a Runtime knows, each with a stable id.
 Studio picks from the Catalog in the Library, the CLI lists and describes it,
 and commands validate ids and Parameter Values against it. A definition may
-carry notes for whoever composes with it. A Layer referring to an id the Catalog
-no longer has is shown as unavailable and renders nothing; the file stays valid.
+carry notes for whoever composes with it, and has a thumbnail rendered from it.
+A Layer referring to an id the Catalog no longer has is shown as unavailable and
+renders nothing; the file stays valid.
 
 ### Recommended
 
@@ -216,7 +217,7 @@ WebGL2 to map and combine Layer results even when a Visual uses Canvas 2D.
 One configured instance of one registered, code-defined image transformation
 inside a Scene. A Filter transforms the Projection Frame accumulated globally
 below its position and has an enabled value, universal mix, and complete
-Parameter Values. It has no Visual, Target, opacity, blend mode, or random seed.
+Parameter Values. It has no Visual, Target, opacity or blend mode.
 
 A Filter nested in a Group still affects globally lower content outside that
 Group. It is disabled when its Layer or any Group above it is disabled. At mix

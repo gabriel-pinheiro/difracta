@@ -103,6 +103,7 @@ function fromParameter(
         max: definition.max,
         ...(definition.step === undefined ? {} : { step: definition.step }),
         ...(definition.unit === undefined ? {} : { unit: definition.unit }),
+        ...(definition.percent === true ? { percent: true } : {}),
       };
       return { ...base, type: "number", range };
     }

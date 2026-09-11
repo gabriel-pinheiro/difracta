@@ -8,6 +8,8 @@ import { isCanvasVisual, type CanvasVisual } from "./sdk/visual.ts";
 /** A Layer whose canvas holds something to composite this frame. */
 export interface LayerFrame {
   readonly draw: LayerDraw;
+  /** Position in the plan, which is where Filter passes are placed. */
+  readonly index: number;
   readonly texture: WebGLTexture;
 }
 
@@ -61,9 +63,9 @@ export class LayerPlayers {
     let changed = false;
     let running = 0;
     let rendered = 0;
-    for (const draw of draws) {
+    draws.forEach((draw, index) => {
       const definition = this.#catalog.visual(draw.visual);
-      if (definition === undefined || !isCanvasVisual(definition)) continue;
+      if (definition === undefined || !isCanvasVisual(definition)) return;
       seen.add(draw.layer.id);
       const entry = this.#entry(draw, definition, outputWidth, outputHeight);
       running += 1;
@@ -75,8 +77,8 @@ export class LayerPlayers {
       }
       if (result.blank !== entry.blank) changed = true;
       entry.blank = result.blank;
-      if (!result.blank) frames.push({ draw, texture: entry.texture });
-    }
+      if (!result.blank) frames.push({ draw, index, texture: entry.texture });
+    });
     for (const [id, entry] of this.#entries) {
       if (seen.has(id)) continue;
       this.#dispose(entry);

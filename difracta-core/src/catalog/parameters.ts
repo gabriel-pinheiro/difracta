@@ -42,8 +42,10 @@ export interface NumberParameter extends ParameterBase {
   readonly min: number;
   readonly max: number;
   readonly step?: number;
-  /** Shown after the value, such as "%" or "px". */
+  /** Shown after the value, such as "px" or "Hz". */
   readonly unit?: string;
+  /** Shown as 0 to 100 with a percent sign; the value itself stays 0 to 1. */
+  readonly percent?: boolean;
 }
 
 export interface ColorParameter extends ParameterBase {

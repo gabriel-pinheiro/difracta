@@ -1,4 +1,29 @@
-export { cssColor, fit, rateTimer, smooth, type RateTimer } from "./helpers.ts";
+export {
+  defineFilter,
+  isShaderFilter,
+  type FilterContext,
+  type FilterFrame,
+  type FilterInstance,
+  type FilterUpdate,
+  type ShaderFilter,
+  type Uniforms,
+  type UniformValue,
+} from "./filter.ts";
+export {
+  createFilterPlayer,
+  type FilterPlayer,
+  type FilterResult,
+} from "./filter-player.ts";
+export {
+  cssColor,
+  fit,
+  rateTimer,
+  smooth,
+  smoothstep,
+  ticker,
+  type RateTimer,
+  type Ticker,
+} from "./helpers.ts";
 export {
   automaticRate,
   resolveParameters,

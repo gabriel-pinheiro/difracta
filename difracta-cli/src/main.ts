@@ -290,7 +290,7 @@ function describeParameter(parameter: ParameterDefinition): string {
     parameter.description === undefined ? "" : `  ${parameter.description}`;
   switch (parameter.kind) {
     case "number":
-      return `${parameter.label.padEnd(16)} number   default ${parameter.default}  ${parameter.min} to ${parameter.max}${parameter.step === undefined ? "" : ` step ${parameter.step}`}${parameter.unit === undefined ? "" : ` ${parameter.unit}`}${tail}`;
+      return `${parameter.label.padEnd(16)} number   default ${parameter.default}  ${parameter.min} to ${parameter.max}${parameter.step === undefined ? "" : ` step ${parameter.step}`}${parameter.unit === undefined ? "" : ` ${parameter.unit}`}${parameter.percent === true ? " (shown as %)" : ""}${tail}`;
     case "color":
       return `${parameter.label.padEnd(16)} color    default [${parameter.default.join(", ")}] (r, g, b, a from 0 to 1)${tail}`;
     case "choice":

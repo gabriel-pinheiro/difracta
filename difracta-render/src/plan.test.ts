@@ -4,6 +4,7 @@ import {
   emptyDocument,
   executeCommand,
   type Document,
+  type FilterDefinition,
   type VisualDefinition,
 } from "@difracta/core";
 import { describe, expect, it } from "vitest";
@@ -18,7 +19,17 @@ const solid: VisualDefinition = {
   backend: "canvas",
   parameters: {},
 };
-const registry = createBuiltInRegistry(new Catalog({ visuals: [solid] }));
+const glitch: FilterDefinition = {
+  kind: "filter",
+  id: "glitch",
+  name: "Glitch",
+  description: "Breaks the picture.",
+  backend: "shader",
+  parameters: {},
+};
+const registry = createBuiltInRegistry(
+  new Catalog({ visuals: [solid], filters: [glitch] }),
+);
 
 function run(document: Document, name: string, payload: unknown): Document {
   const result = executeCommand(registry, document, name, payload);
@@ -66,7 +77,7 @@ const calibration = {
   owner: "s1",
 };
 
-/** A Scene, top to bottom: A on the wall, a Group of B (floor) and C (no Target), a Filter, disabled D, E on the TV. */
+/** A Scene, top to bottom: A on the wall, a Group of J (Filter), B (floor) and C (no Target), Filter F, disabled D, E on the TV. */
 function staged(): Document {
   let document = run(installation(), "scene.create", { id: "s1", name: "One" });
   const add = (
@@ -100,15 +111,26 @@ function staged(): Document {
   place("C", null);
   add("B", "visual", "G");
   place("B", "sur_floor");
+  add("J", "filter", "G");
   add("A", "visual");
   place("A", "sur_wall");
+  for (const id of ["F", "J"])
+    document = run(document, "layer.filter", { layerId: id, filter: "glitch" });
   return run(document, "scene.play", { sceneId: "s1" });
 }
+
+const filtersOf = (plan: ReturnType<typeof planFrame>) =>
+  plan.filters.map((draw) => [draw.layer.id, draw.below]);
 
 describe("planFrame", () => {
   it("draws nothing outside Calibration Mode when no Scene plays", () => {
     const plan = planFrame(installation(), "out_a");
-    expect(plan).toEqual({ blackout: false, draws: [], layers: [] });
+    expect(plan).toEqual({
+      blackout: false,
+      draws: [],
+      layers: [],
+      filters: [],
+    });
   });
 
   it("plans the active Scene's Layers bottom first, on this Output only", () => {
@@ -137,6 +159,42 @@ describe("planFrame", () => {
     ]);
   });
 
+  it("places a Filter after the planned Layers below it on this Output, or drops it", () => {
+    // On A's Output nothing planned lies under F (D is disabled, E is
+    // elsewhere), while J inside the Group sits over B.
+    expect(filtersOf(planFrame(staged(), "out_a"))).toEqual([["J", 1]]);
+    // On the TV both F and J are over E: a Filter in a Group still
+    // transforms what lies globally below the Group.
+    expect(filtersOf(planFrame(staged(), "out_b"))).toEqual([
+      ["F", 1],
+      ["J", 1],
+    ]);
+    const topmost = run(
+      run(staged(), "layer.create", { id: "H", kind: "filter", sceneId: "s1" }),
+      "layer.filter",
+      { layerId: "H", filter: "glitch" },
+    );
+    expect(filtersOf(planFrame(topmost, "out_a"))).toEqual([
+      ["J", 1],
+      ["H", 2],
+    ]);
+    const mixOff = run(topmost, "address.set", {
+      address: "layer/H/mix",
+      value: 0,
+    });
+    expect(filtersOf(planFrame(mixOff, "out_a"))).toEqual([["J", 1]]);
+    const groupOff = run(topmost, "address.set", {
+      address: "layer/G/enabled",
+      value: false,
+    });
+    expect(filtersOf(planFrame(groupOff, "out_a"))).toEqual([["H", 1]]);
+    const noFilter = run(topmost, "layer.filter", {
+      layerId: "H",
+      filter: null,
+    });
+    expect(filtersOf(planFrame(noFilter, "out_a"))).toEqual([["J", 1]]);
+  });
+
   it("draws nothing under Blackout", () => {
     const document = run(staged(), "address.set", {
       address: "installation/blackout",
@@ -146,12 +204,14 @@ describe("planFrame", () => {
       blackout: true,
       draws: [],
       layers: [],
+      filters: [],
     });
   });
 
   it("shows the calibrated Surface as a pattern with its corner, others per view, and no Layers", () => {
     const selected = run(staged(), "calibration.set", calibration);
     expect(planFrame(selected, "out_a").layers).toEqual([]);
+    expect(planFrame(selected, "out_a").filters).toEqual([]);
     expect(planFrame(selected, "out_b").layers).toHaveLength(1);
     expect(
       planFrame(selected, "out_a").draws.map((draw) => [

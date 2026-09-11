@@ -292,7 +292,12 @@ describe("live protocol", () => {
       "koi-pond",
       "solid-color",
     ]);
-    expect(catalog.filters).toHaveLength(3);
+    expect(catalog.filters.map((filter) => filter.id)).toEqual([
+      "impact-shake",
+      "signal-distortion",
+      "tile-scramble",
+    ]);
+    expect(catalog.filters[0]).not.toHaveProperty("fragment");
     const koi = catalog.visuals[1]!;
     expect(koi.parameters).toHaveProperty("speed");
     expect(koi).not.toHaveProperty("create");

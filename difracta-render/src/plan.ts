@@ -5,6 +5,7 @@ import {
   resolveCalibration,
   type CornerName,
   type Document,
+  type FilterLayer,
   type Layer,
   type Mask,
   type Quad,
@@ -39,13 +40,26 @@ export interface LayerDraw {
   readonly masks: readonly Mask[];
 }
 
+/** One Filter Layer of the active Scene with something under it on this Output. */
+export interface FilterDraw {
+  readonly layer: FilterLayer;
+  /** The Filter's definition id; a Layer without one is not planned. */
+  readonly filter: string;
+  /** How many planned Layers are below it: the pass runs once that many are drawn. */
+  readonly below: number;
+}
+
 export interface FramePlan {
   readonly blackout: boolean;
   /** Calibration drawings, only in Calibration Mode on this Output. */
   readonly draws: readonly SurfaceDraw[];
   /** The Scene's Layers to composite, bottom first; empty while calibrating. */
   readonly layers: readonly LayerDraw[];
+  /** The Scene's Filters in the same order, each placed by `below`. */
+  readonly filters: readonly FilterDraw[];
 }
+
+const NOTHING = { layers: [], filters: [] } as const;
 
 /**
  * What one Output shows for a document: nothing under Blackout; otherwise
@@ -55,7 +69,7 @@ export interface FramePlan {
  */
 export function planFrame(document: Document, outputId: string): FramePlan {
   if (document.operational.blackout)
-    return { blackout: true, draws: [], layers: [] };
+    return { blackout: true, draws: [], ...NOTHING };
   const masksOf = (surface: Surface): readonly Mask[] =>
     orderedEntries(document.masks).filter(
       (mask) => mask.surfaceId === surface.id,
@@ -67,7 +81,7 @@ export function planFrame(document: Document, outputId: string): FramePlan {
     return {
       blackout: false,
       draws: [],
-      layers: planLayers(document, outputId, masksOf),
+      ...planStack(document, outputId, masksOf),
     };
   const draws: SurfaceDraw[] = [];
   for (const surface of orderedEntries(document.surfaces)) {
@@ -105,23 +119,33 @@ export function planFrame(document: Document, outputId: string): FramePlan {
       maskOutline: undefined,
     });
   }
-  return { blackout: false, draws, layers: [] };
+  return { blackout: false, draws, ...NOTHING };
 }
 
 /**
- * The active Scene's Visual Layers that land on this Output: enabled with
- * every Group above them enabled, a Visual picked, and a Target assigned
- * here with a mapping. Filters are passed over here; a Group only gates.
- * Bottom first, so drawing in order stacks them as the navigator shows.
+ * The active Scene's stack as it lands on this Output: Visual Layers that
+ * are enabled with every Group above them enabled, have a Visual, and
+ * target a Surface here with a mapping; and Filter Layers enabled the same
+ * way, with a Filter and a mix above zero, that have at least one such
+ * Layer below them, since a Filter transforms what is already drawn and a
+ * Group only gates. Bottom first, so drawing in order stacks them as the
+ * navigator shows.
  */
-function planLayers(
+function planStack(
   document: Document,
   outputId: string,
   masksOf: (surface: Surface) => readonly Mask[],
-): readonly LayerDraw[] {
+): Pick<FramePlan, "layers" | "filters"> {
   const sceneId = document.installation.activeScene;
-  if (sceneId === null || !(sceneId in document.scenes)) return [];
-  const result: LayerDraw[] = [];
+  if (sceneId === null || !(sceneId in document.scenes)) return NOTHING;
+  type Item =
+    | { readonly kind: "layer"; readonly draw: LayerDraw }
+    | {
+        readonly kind: "filter";
+        readonly layer: FilterLayer;
+        readonly filter: string;
+      };
+  const items: Item[] = [];
   const visit = (parentId: string | null): void => {
     // Top to bottom as ordered; reversed once at the end.
     for (const layer of childLayers(document.layers, sceneId, parentId)) {
@@ -129,12 +153,25 @@ function planLayers(
       if (layer.kind === "group") visit(layer.id);
       else if (layer.kind === "visual") {
         const draw = layerDraw(document, outputId, layer, masksOf);
-        if (draw !== undefined) result.push(draw);
-      }
+        if (draw !== undefined) items.push({ kind: "layer", draw });
+      } else if (layer.filter !== null && layer.mix > 0)
+        items.push({ kind: "filter", layer, filter: layer.filter });
     }
   };
   visit(null);
-  return result.reverse();
+  items.reverse();
+  const layers: LayerDraw[] = [];
+  const filters: FilterDraw[] = [];
+  for (const item of items) {
+    if (item.kind === "layer") layers.push(item.draw);
+    else if (layers.length > 0)
+      filters.push({
+        layer: item.layer,
+        filter: item.filter,
+        below: layers.length,
+      });
+  }
+  return { layers, filters };
 }
 
 function layerDraw(

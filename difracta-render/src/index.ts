@@ -7,6 +7,7 @@ export { homography, project } from "./homography.ts";
 export { MASK_TEXTURE_SIZE } from "./masks.ts";
 export {
   planFrame,
+  type FilterDraw,
   type FramePlan,
   type LayerDraw,
   type SurfaceDraw,

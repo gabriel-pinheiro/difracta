@@ -30,6 +30,12 @@ export function smooth(
   return current + (target - current) * (1 - Math.exp(-rate * dt));
 }
 
+/** GLSL's smoothstep: 0 below `edge0`, 1 above `edge1`, an ease between. */
+export function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
 /** A Color as a CSS `rgba()` string; `alpha` replaces the Color's own. */
 export function cssColor(color: Color, alpha: number = color[3]): string {
   const channel = (value: number): number =>
@@ -61,6 +67,34 @@ export function rateTimer(random: Random): RateTimer {
         fired += 1;
       }
       return fired;
+    },
+  };
+}
+
+/**
+ * A regular clock at a rate in hertz, for the mechanical beat of a Filter
+ * or Visual that re-randomizes on every tick. `advance` says how many
+ * ticks passed this frame and `phase` is the progress toward the next one,
+ * so a rate change only changes how fast that next tick approaches.
+ */
+export interface Ticker {
+  advance(dt: number, rate: number): number;
+  /** From 0 at the last tick toward 1 at the next. */
+  readonly phase: number;
+}
+
+export function ticker(): Ticker {
+  let budget = 0;
+  return {
+    advance(dt, rate) {
+      if (rate <= 0) return 0;
+      budget += Math.max(0, dt) * rate;
+      const fired = Math.floor(budget);
+      budget -= fired;
+      return fired;
+    },
+    get phase() {
+      return budget;
     },
   };
 }

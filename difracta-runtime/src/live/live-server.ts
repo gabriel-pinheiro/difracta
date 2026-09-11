@@ -1,4 +1,9 @@
-import { generateId, type Catalog, type Patch } from "@difracta/core";
+import {
+  generateId,
+  type Catalog,
+  type FilterDefinition,
+  type Patch,
+} from "@difracta/core";
 import {
   ClientMessageSchema,
   PROTOCOL_VERSION,
@@ -418,12 +423,17 @@ export class LiveServer {
           });
           break;
         case "catalog.list":
-          // Definitions carry their implementation; the wire drops functions.
+          // Definitions carry their implementation: JSON drops the
+          // functions, and a Filter's shader source is left out here.
           reply({
             ok: true,
             result: {
               visuals: this.#options.catalog.visuals(),
-              filters: this.#options.catalog.filters(),
+              filters: this.#options.catalog.filters().map((filter) => {
+                const { fragment: _fragment, ...metadata } =
+                  filter as FilterDefinition & { fragment?: unknown };
+                return metadata;
+              }),
             },
           });
           break;

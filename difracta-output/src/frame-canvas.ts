@@ -25,6 +25,12 @@ export interface FrameMetrics {
     readonly running: number;
     readonly planned: number;
   };
+  /** The same for Filter passes. */
+  readonly filters: {
+    readonly executedPerFrame: number;
+    readonly running: number;
+    readonly planned: number;
+  };
 }
 
 /** Weight of the newest sample in the rolling averages. */
@@ -42,7 +48,11 @@ export class FrameCanvas {
   #renderWorkMs: number | null = null;
   #pixelRatio = 1;
   #renderedPerFrame = 0;
-  #lastReport: FrameReport["layers"] = { planned: 0, running: 0, rendered: 0 };
+  #executedPerFrame = 0;
+  #lastReport: Pick<FrameReport, "layers" | "filters"> = {
+    layers: { planned: 0, running: 0, rendered: 0 },
+    filters: { planned: 0, running: 0, executed: 0 },
+  };
 
   constructor(canvas: HTMLCanvasElement) {
     this.#canvas = canvas;
@@ -68,8 +78,13 @@ export class FrameCanvas {
       renderWorkMs: this.#renderWorkMs,
       layers: {
         renderedPerFrame: this.#renderedPerFrame,
-        running: this.#lastReport.running,
-        planned: this.#lastReport.planned,
+        running: this.#lastReport.layers.running,
+        planned: this.#lastReport.layers.planned,
+      },
+      filters: {
+        executedPerFrame: this.#executedPerFrame,
+        running: this.#lastReport.filters.running,
+        planned: this.#lastReport.filters.planned,
       },
     };
   }
@@ -120,10 +135,14 @@ export class FrameCanvas {
       height,
       now,
     );
-    this.#lastReport = report.layers;
+    this.#lastReport = report;
     this.#renderedPerFrame = smooth(
       this.#renderedPerFrame,
       report.layers.rendered,
+    );
+    this.#executedPerFrame = smooth(
+      this.#executedPerFrame,
+      report.filters.executed,
     );
   }
 }

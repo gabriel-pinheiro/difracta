@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { cssColor, fit, rateTimer, smooth } from "./helpers.ts";
+import {
+  cssColor,
+  fit,
+  rateTimer,
+  smooth,
+  smoothstep,
+  ticker,
+} from "./helpers.ts";
 import { createRandom } from "./random.ts";
 
 describe("fit", () => {
@@ -56,5 +63,32 @@ describe("rateTimer", () => {
       frames += 1;
     }
     expect(fired).toBeGreaterThan(0);
+  });
+});
+
+describe("smoothstep", () => {
+  it("clamps outside the edges and eases between them", () => {
+    expect(smoothstep(0.2, 0.8, 0)).toBe(0);
+    expect(smoothstep(0.2, 0.8, 1)).toBe(1);
+    expect(smoothstep(0.2, 0.8, 0.5)).toBeCloseTo(0.5, 6);
+    expect(smoothstep(0, 1, 0.25)).toBeCloseTo(0.15625, 6);
+  });
+});
+
+describe("ticker", () => {
+  it("fires regularly at the rate and keeps its progress across rate changes", () => {
+    const clock = ticker();
+    let fired = 0;
+    for (let i = 0; i < 4; i += 1) fired += clock.advance(0.125, 4);
+    expect(fired).toBe(2);
+    expect(clock.phase).toBeCloseTo(0, 6);
+    expect(clock.advance(0.1, 4)).toBe(0);
+    expect(clock.phase).toBeCloseTo(0.4, 6);
+    // Slowing down keeps the 40% already elapsed.
+    expect(clock.advance(0.6, 1)).toBe(1);
+    expect(clock.phase).toBeCloseTo(0, 6);
+    expect(clock.advance(1, 0)).toBe(0);
+    expect(clock.advance(0.5, 2.5)).toBe(1);
+    expect(clock.phase).toBeCloseTo(0.25, 6);
   });
 });

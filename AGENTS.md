@@ -48,9 +48,18 @@ near-synonyms.
   gestures are commands and requests, so a new one is reachable through
   `difracta run` or `difracta documents` at once; give the everyday ones a
   shortcut and check `difracta --help` reads well to an agent.
-- A Visual's `notes` are what an agent reads before using it. Write them when
-  adding a Visual: how it reads on a Surface, which Parameters interact, cost,
-  what to stack it with.
+- A Visual's or Filter's `notes` are what an agent reads before using it. Write
+  them when adding one: how it reads on a Surface, which Parameters interact,
+  cost, what to stack it with.
+- Visuals and Filters integrate, they never sample: anything time-derived lives
+  in the instance `create` returns and advances by `dt`. A Filter's fragment
+  only samples the frame with the uniforms its instance returns. Report
+  `changed: false` when a frame would repeat itself, `blank` (Visual) or
+  `identity` (Filter) when it would draw nothing or do nothing.
+- Thumbnails are rendered, never drawn. After adding or changing a Visual or
+  Filter run `npm run thumbnails -w @difracta/visuals [id…]` and keep the PNG it
+  writes in `difracta-visuals/thumbnails/`. It needs Chromium for Playwright
+  once: `npx playwright install chromium`.
 - Comments and docs describe what the code does now. Planned work belongs in a
   contributor's `research/` notes, not in "later" remarks in source.
 
