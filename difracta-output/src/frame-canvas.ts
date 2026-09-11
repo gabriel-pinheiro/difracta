@@ -1,5 +1,10 @@
 import type { Document } from "@difracta/core";
-import { createCompositor, type Compositor } from "@difracta/render";
+import {
+  createCompositor,
+  type Compositor,
+  type FrameReport,
+} from "@difracta/render";
+import { builtInCatalog } from "@difracta/visuals";
 
 /**
  * The Projection Frame: sizes the canvas to the display, runs the animation
@@ -14,6 +19,12 @@ export interface FrameMetrics {
   readonly pixelRatio: number;
   readonly frameIntervalMs: number | null;
   readonly renderWorkMs: number | null;
+  /** Rolling average of Layers drawn per frame, and the plan's counts from the last frame. */
+  readonly layers: {
+    readonly renderedPerFrame: number;
+    readonly running: number;
+    readonly planned: number;
+  };
 }
 
 /** Weight of the newest sample in the rolling averages. */
@@ -30,10 +41,12 @@ export class FrameCanvas {
   #frameIntervalMs: number | null = null;
   #renderWorkMs: number | null = null;
   #pixelRatio = 1;
+  #renderedPerFrame = 0;
+  #lastReport: FrameReport["layers"] = { planned: 0, running: 0, rendered: 0 };
 
   constructor(canvas: HTMLCanvasElement) {
     this.#canvas = canvas;
-    this.#compositor = createCompositor(canvas);
+    this.#compositor = createCompositor(canvas, builtInCatalog);
   }
 
   update(state: {
@@ -53,6 +66,11 @@ export class FrameCanvas {
       pixelRatio: this.#pixelRatio,
       frameIntervalMs: this.#frameIntervalMs,
       renderWorkMs: this.#renderWorkMs,
+      layers: {
+        renderedPerFrame: this.#renderedPerFrame,
+        running: this.#lastReport.running,
+        planned: this.#lastReport.planned,
+      },
     };
   }
 
@@ -66,7 +84,7 @@ export class FrameCanvas {
         );
       this.#lastFrameAt = now;
       const started = performance.now();
-      this.#draw();
+      this.#draw(now);
       this.#renderWorkMs = smooth(
         this.#renderWorkMs,
         performance.now() - started,
@@ -85,7 +103,7 @@ export class FrameCanvas {
     this.#renderWorkMs = null;
   }
 
-  #draw(): void {
+  #draw(now: number): void {
     const ratio = this.#limitPixelRatio ? 1 : window.devicePixelRatio || 1;
     this.#pixelRatio = ratio;
     const width = Math.max(1, Math.round(this.#canvas.clientWidth * ratio));
@@ -95,7 +113,18 @@ export class FrameCanvas {
       this.#canvas.height = height;
     }
     if (this.#document === undefined) return;
-    this.#compositor.render(this.#document, this.#outputId, width, height);
+    const report = this.#compositor.render(
+      this.#document,
+      this.#outputId,
+      width,
+      height,
+      now,
+    );
+    this.#lastReport = report.layers;
+    this.#renderedPerFrame = smooth(
+      this.#renderedPerFrame,
+      report.layers.rendered,
+    );
   }
 }
 

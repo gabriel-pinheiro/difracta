@@ -71,12 +71,36 @@ export const SurfaceMappingSchema = z
   .strict();
 export type SurfaceMapping = z.infer<typeof SurfaceMappingSchema>;
 
+/** Render Scale bounds: how much a Surface's Layer canvases are scaled. */
+export const RENDER_SCALE = { min: 0.25, max: 2, step: 0.25 } as const;
+
+/** A Surface's physical width and height, in any one unit; only the ratio matters. */
+export const SurfaceSizeSchema = z
+  .object({ width: z.number().positive(), height: z.number().positive() })
+  .strict();
+export type SurfaceSize = z.infer<typeof SurfaceSizeSchema>;
+
 export const SurfaceSchema = z
   .object({
     id: z.string().min(1),
     name: EntityName,
     /** The Output this Surface renders through, or null while unassigned. */
     output: z.string().min(1).nullable(),
+    /**
+     * Multiplies the resolution of the canvases Layers targeting this
+     * Surface render into; below 1 trades sharpness for throughput.
+     */
+    renderScale: z
+      .number()
+      .min(RENDER_SCALE.min)
+      .max(RENDER_SCALE.max)
+      .default(1),
+    /**
+     * The real shape of the Surface, which its projection cannot reveal at a
+     * steep angle. Null derives the shape from the mapping, right whenever
+     * the projector faces the Surface.
+     */
+    size: SurfaceSizeSchema.nullable().default(null),
     /**
      * One mapping per Output the Surface was ever assigned to, keyed by Output
      * id. Only the entry for `output` is used; the others stay dormant so

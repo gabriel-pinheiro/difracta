@@ -1,26 +1,43 @@
-import type { Document, Point, Quad } from "@difracta/core";
+import type { Catalog, Document, Point, Quad } from "@difracta/core";
 
 import { compileProgram, uniform } from "./gl.ts";
 import { homography, project } from "./homography.ts";
 import { Labels } from "./labels.ts";
+import { LayerPlayers, type LayerFrame } from "./layer-players.ts";
 import { MaskTextures } from "./masks.ts";
 import { CORNER_INDEX, planFrame, type SurfaceDraw } from "./plan.ts";
+import { MAX_FRAME_SECONDS } from "./sdk/visual.ts";
 import { FRAGMENT_SOURCE, MODE, VERTEX_SOURCE } from "./shaders.ts";
 
 export interface Compositor {
   /**
-   * Draws the Output's frame for `document` into a canvas of the given
-   * backing size, unless nothing changed since the previous call, and says
-   * whether it drew. The caller owns the animation loop and the canvas size.
+   * Advances the Output's Visual instances to `now` (milliseconds, as the
+   * animation loop gives it) and draws the frame for `document` into a
+   * canvas of the given backing size, unless nothing changed since the
+   * previous call. The caller owns the animation loop and the canvas size.
    */
   render(
     document: Document,
     outputId: string,
     width: number,
     height: number,
-  ): boolean;
+    now: number,
+  ): FrameReport;
   dispose(): void;
 }
+
+export interface FrameReport {
+  /** The canvas holds a new frame. */
+  readonly drew: boolean;
+  /** Layers in the plan, with a running instance, and that drew this frame. */
+  readonly layers: {
+    readonly planned: number;
+    readonly running: number;
+    readonly rendered: number;
+  };
+}
+
+const NO_LAYERS = { planned: 0, running: 0, rendered: 0 } as const;
 
 const CORNER_LABELS = ["TL", "TR", "BR", "BL"] as const;
 /** Grid cells across the calibration pattern. */
@@ -59,23 +76,30 @@ interface Resources {
   readonly dynamic: WebGLBuffer;
   readonly masks: MaskTextures;
   readonly labels: Labels;
+  readonly players: LayerPlayers;
   /** Homographies by Surface, valid while the mapping's corners object is the same. */
   readonly matrices: Map<string, { corners: Quad; matrix: Float32Array }>;
 }
 
-export function createCompositor(canvas: HTMLCanvasElement): Compositor {
-  return new WebGLCompositor(canvas);
+export function createCompositor(
+  canvas: HTMLCanvasElement,
+  catalog: Catalog,
+): Compositor {
+  return new WebGLCompositor(canvas, catalog);
 }
 
 /**
  * WebGL2 compositor for one Output. It keeps GPU resources per Surface
- * (mask texture, homography) and skips frames whose inputs did not change,
- * so a static Installation costs the Output nothing between edits.
+ * (mask texture, homography) and per Layer (instance, canvas, texture), and
+ * skips frames whose inputs did not change and whose Layers drew nothing
+ * new, so a static Scene costs the Output only the instances' updates.
  */
 class WebGLCompositor implements Compositor {
   readonly #canvas: HTMLCanvasElement;
+  readonly #catalog: Catalog;
   #resources: Resources | undefined;
   #lost = false;
+  #lastNow: number | undefined;
   #last:
     | {
         document: Document;
@@ -94,8 +118,9 @@ class WebGLCompositor implements Compositor {
     this.#last = undefined;
   };
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, catalog: Catalog) {
     this.#canvas = canvas;
+    this.#catalog = catalog;
     canvas.addEventListener("webglcontextlost", this.#onLost);
     canvas.addEventListener("webglcontextrestored", this.#onRestored);
     this.#resources = this.#setup();
@@ -106,27 +131,54 @@ class WebGLCompositor implements Compositor {
     outputId: string,
     width: number,
     height: number,
-  ): boolean {
-    if (this.#lost) return false;
+    now: number,
+  ): FrameReport {
+    if (this.#lost) return { drew: false, layers: NO_LAYERS };
+    const dt =
+      this.#lastNow === undefined
+        ? 0
+        : Math.min(
+            MAX_FRAME_SECONDS,
+            Math.max(0, (now - this.#lastNow) / 1000),
+          );
+    this.#lastNow = now;
+    const resources = (this.#resources ??= this.#setup());
+    const { gl } = resources;
+    const plan = planFrame(document, outputId);
+    const step = resources.players.step(plan.layers, dt, width, height);
+    const layers = {
+      planned: step.planned,
+      running: step.running,
+      rendered: step.rendered,
+    };
     const last = this.#last;
     if (
+      !step.changed &&
       last?.document === document &&
       last.outputId === outputId &&
       last.width === width &&
       last.height === height
     )
-      return false;
+      return { drew: false, layers };
     this.#last = { document, outputId, width, height };
-    const resources = (this.#resources ??= this.#setup());
-    const { gl } = resources;
     gl.viewport(0, 0, width, height);
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    const plan = planFrame(document, outputId);
-    if (plan.blackout) return true;
+    if (plan.blackout) return { drew: true, layers };
 
     gl.useProgram(resources.program);
     const masked = new Set<string>();
+    for (const frame of step.frames) {
+      const matrix = this.#matrix(resources, frame.draw);
+      if (matrix === undefined) continue;
+      gl.uniformMatrix3fv(resources.uniforms.homography, false, matrix);
+      const maskTexture = resources.masks.get(
+        frame.draw.surface.id,
+        frame.draw.masks,
+      );
+      if (maskTexture !== undefined) masked.add(frame.draw.surface.id);
+      this.#drawLayer(resources, frame, maskTexture);
+    }
     for (const draw of plan.draws) {
       const matrix = this.#matrix(resources, draw);
       if (matrix === undefined) continue;
@@ -136,7 +188,7 @@ class WebGLCompositor implements Compositor {
       this.#drawSurface(resources, draw, maskTexture, matrix, width, height);
     }
     resources.masks.retain(masked);
-    return true;
+    return { drew: true, layers };
   }
 
   dispose(): void {
@@ -146,6 +198,7 @@ class WebGLCompositor implements Compositor {
     if (resources === undefined) return;
     resources.masks.dispose();
     resources.labels.dispose();
+    resources.players.dispose();
     resources.gl.deleteProgram(resources.program);
     resources.gl.deleteBuffer(resources.quad);
     resources.gl.deleteBuffer(resources.loop);
@@ -203,11 +256,15 @@ class WebGLCompositor implements Compositor {
       dynamic: gl.createBuffer(),
       masks: new MaskTextures(gl),
       labels: new Labels(gl),
+      players: new LayerPlayers(gl, this.#catalog),
       matrices: new Map(),
     };
   }
 
-  #matrix(resources: Resources, draw: SurfaceDraw): Float32Array | undefined {
+  #matrix(
+    resources: Resources,
+    draw: Pick<SurfaceDraw, "surface" | "corners">,
+  ): Float32Array | undefined {
     const cached = resources.matrices.get(draw.surface.id);
     if (cached?.corners === draw.corners) return cached.matrix;
     const matrix = homography(draw.corners);
@@ -281,6 +338,28 @@ class WebGLCompositor implements Compositor {
     mask.points.forEach((p, index) => {
       this.#marker(resources, p, index === point);
     });
+  }
+
+  /** A Layer's canvas over its Surface, with opacity, blend mode and the Surface's Masks. */
+  #drawLayer(
+    resources: Resources,
+    frame: LayerFrame,
+    maskTexture: WebGLTexture | undefined,
+  ): void {
+    const { gl, uniforms } = resources;
+    const { layer } = frame.draw;
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, maskTexture ?? null);
+    gl.uniform1i(uniforms.maskEnabled, maskTexture === undefined ? 0 : 1);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, frame.texture);
+    gl.uniform1i(uniforms.mode, MODE.layer);
+    gl.uniform4f(uniforms.color, 1, 1, 1, layer.opacity);
+    gl.uniform4f(uniforms.rect, ...WHOLE);
+    if (layer.blendMode === "additive") gl.blendFunc(gl.ONE, gl.ONE);
+    this.#quad(resources);
+    if (layer.blendMode === "additive")
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   }
 
   #quad(resources: Resources): void {

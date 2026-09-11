@@ -103,6 +103,19 @@ Corners are edited by `surface.corner.set` (absolute) and `surface.corner.nudge`
 key is one undo step, and both round to a millionth of the frame so files stay
 free of float noise.
 
+Two more fields say what the Surface's Layers render into. `renderScale` (0.25×
+to 2×, an Address so it is a slider and reachable from the CLI) multiplies the
+resolution of the canvases Layers targeting the Surface draw on. `size` is the
+Surface's real width and height in any unit, or null for automatic, set by
+`surface.size`. `surfaceCanvasSize` (`document/geometry.ts`) turns them into
+pixels: width follows the longer of the top and bottom edges as projected on the
+Output, height the longer of the sides, so no axis is undersampled at any angle;
+a stated size then stretches the shorter axis to the real aspect. **Why a stated
+size at all:** a square seen at a steep angle projects as a tall trapezoid, and
+its image alone cannot tell that from a tall Surface (the projector's optics
+would have to be known), so automatic is right whenever the projector faces the
+Surface, and the size is there for the steep ones.
+
 ### Masks
 
 A Mask is a polygon in Surface Space, three to sixteen points, that decides
@@ -372,19 +385,39 @@ carrying their own literals.
 ## Rendering
 
 `difracta-render` draws one Output's frame into a canvas behind a two-method
-interface: `render(document, outputId, width, height)` and `dispose()`. The
+interface: `render(document, outputId, width, height, now)` and `dispose()`. The
 Output page owns the animation loop, the canvas size and telemetry; the
-compositor only draws, and skips the frame entirely when the document, Output
-and size are the ones it drew last, so a static Installation costs nothing
-between edits.
+compositor advances the Visual instances, draws, and reports what it did.
 
-`planFrame` is the pure part: given a document and an Output it lists what each
-Surface shows this frame. Outside Calibration Mode every assigned Surface is a
-dim fill cut by its Masks. In Calibration Mode on that Output the calibrated
-Surface is a pattern (grid, diagonals, border, name, corner labels, the selected
-corner marked) and the others follow the view. Masks apply to the pattern only
-while a Mask is being aligned, and that Mask is then outlined with its points
-marked.
+`planFrame` is the pure part: given a document and an Output it lists what to
+draw this frame. Outside Calibration Mode that is the active Scene's Visual
+Layers, bottom first, each one that is enabled with every Group above it
+enabled, has a Visual, and targets a Surface on this Output with a mapping;
+Filters are passed over until they render, and a Group only gates. With no
+active Scene the frame is black. In Calibration Mode on that Output the Scene
+gives way to the calibrated Surface as a pattern (grid, diagonals, border, name,
+corner labels, the selected corner marked) and the others follow the view. Masks
+apply to the pattern only while a Mask is being aligned, and that Mask is then
+outlined with its points marked.
+
+Each planned Layer has a Visual instance (`layer-players.ts`) on its own canvas,
+sized by `surfaceCanvasSize` and capped at the GPU's texture limit, with a
+texture uploaded on the frames the instance drew. An instance exists exactly
+while its Layer is planned: playing another Scene, disabling the Layer or a
+Group above it, or clearing its Target disposes it, and a change of Visual or
+canvas size replaces it, so a Scene starts fresh every time it plays. The frame
+is then composited in plan order: every Layer's texture is drawn through its
+Surface's homography with the Surface's Masks, the Layer's opacity, and its
+blend mode (normal is premultiplied over, additive adds), so Layers stack as the
+navigator shows and overlapping Surfaces combine as their light would in the
+room. The frame is recomposited only when the document, the Output, the size, or
+any Layer's canvas changed; a Scene of Layers that report no change costs the
+Output only the instances' updates.
+
+**Why Layers draw straight into the frame rather than into a Surface buffer:**
+one draw per Layer is the whole pipeline, blend modes read naturally as what is
+already on the wall, and Filters, which transform the accumulated frame below
+them, get to bleed across Surfaces, which is wanted.
 
 Geometry: every vertex is a Surface Space position pushed through the Surface's
 homography in the vertex shader, with clip-space `w` carrying the projective

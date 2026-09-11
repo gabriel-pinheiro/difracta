@@ -39,6 +39,7 @@ import { surfaceCornerNudge, surfaceCornerSet } from "./surface.corner.ts";
 import { surfaceCreate } from "./surface.create.ts";
 import { surfaceRemove } from "./surface.remove.ts";
 import { surfaceRename } from "./surface.rename.ts";
+import { surfaceSize } from "./surface.size.ts";
 
 /** Every built-in command. Add one import line per new command file. */
 export const builtInCommands: readonly CommandDefinition<never>[] = [
@@ -52,6 +53,7 @@ export const builtInCommands: readonly CommandDefinition<never>[] = [
   surfaceAssign,
   surfaceCornerSet,
   surfaceCornerNudge,
+  surfaceSize,
   surfaceRemove,
   maskCreate,
   maskRename,

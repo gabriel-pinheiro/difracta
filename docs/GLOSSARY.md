@@ -58,7 +58,14 @@ Surface Space is the normalized unit rectangle from `(0, 0)` at its top-left to
 A Surface setting (0.25×–2×, default 1×) that multiplies the resolution of the
 engine-owned canvases its Canvas 2D Visuals render into. It trades sharpness for
 rendering throughput and does not change composition, Surface Space, or Shader
-Visuals.
+Visuals. It is an Address, so it can be swept from a Control or the CLI.
+
+### Surface Size
+
+A Surface's real width and height in any unit, only the ratio matters. Empty
+means automatic: the shape follows the mapping, which is right whenever the
+projector faces the Surface. Stated, it keeps Visuals unstretched on a Surface
+seen at a steep angle, where the projection alone hides the real shape.
 
 ### Mask
 

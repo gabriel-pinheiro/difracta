@@ -7,8 +7,10 @@ import {
 import {
   BLEND_MODE_LABELS,
   BLEND_MODES,
+  RENDER_SCALE,
   type Document,
   type Layer,
+  type Surface,
 } from "../document/document.ts";
 import { orderedEntries } from "../document/order.ts";
 import type { PatchPath } from "../document/patch.ts";
@@ -57,8 +59,8 @@ export interface ResolvedAddress {
   readonly options?: readonly ChoiceOption[];
 }
 
-/** What resolving needs from a Document: only the Layers so far. */
-export type AddressSource = Pick<Document, "layers">;
+/** What resolving needs from a Document: the Layers and the Surfaces so far. */
+export type AddressSource = Pick<Document, "layers" | "surfaces">;
 
 interface AddressPattern {
   /** Segments; `*` captures one id or name. */
@@ -133,6 +135,23 @@ const patterns: readonly AddressPattern[] = [
       default: false,
     }),
     list: () => [[]],
+  },
+  {
+    pattern: ["surface", "*", "render-scale"],
+    resolve: (document, _catalog, [id = ""]) => {
+      const surface = document.surfaces[id];
+      if (surface === undefined) return undefined;
+      return {
+        label: "Render Scale",
+        owner: surface.name,
+        path: ["surfaces", id, "renderScale"],
+        type: "number",
+        default: 1,
+        range: { ...RENDER_SCALE, unit: "×" },
+      };
+    },
+    list: (document) =>
+      orderedEntries(document.surfaces).map((surface) => [surface.id]),
   },
   {
     pattern: ["layer", "*", "enabled"],
@@ -273,7 +292,10 @@ export function layerAddresses(
   layer: Layer,
   catalog: Catalog = emptyCatalog,
 ): readonly ResolvedAddress[] {
-  const document: AddressSource = { layers: { [layer.id]: layer } };
+  const document: AddressSource = {
+    layers: { [layer.id]: layer },
+    surfaces: {},
+  };
   const own = ["enabled", "opacity", "blend", "mix"].map((field) =>
     resolveAddress(
       document,
@@ -293,6 +315,21 @@ export function layerAddresses(
   return [...own, ...parameters].filter(
     (entry): entry is ResolvedAddress => entry !== undefined,
   );
+}
+
+/** The Addresses of one Surface, in inspector order. */
+export function surfaceAddresses(surface: Surface): readonly ResolvedAddress[] {
+  const document: AddressSource = {
+    layers: {},
+    surfaces: { [surface.id]: surface },
+  };
+  return ["render-scale"].flatMap((field) => {
+    const resolved = resolveAddress(
+      document,
+      formatAddress(["surface", surface.id, field]),
+    );
+    return resolved === undefined ? [] : [resolved];
+  });
 }
 
 /** Why `value` cannot be written to `resolved`, or undefined when it can. */

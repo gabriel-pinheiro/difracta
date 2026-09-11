@@ -1,14 +1,24 @@
 import {
+  Catalog,
   createBuiltInRegistry,
   emptyDocument,
   executeCommand,
   type Document,
+  type VisualDefinition,
 } from "@difracta/core";
 import { describe, expect, it } from "vitest";
 
 import { planFrame } from "./plan.ts";
 
-const registry = createBuiltInRegistry();
+const solid: VisualDefinition = {
+  kind: "visual",
+  id: "solid",
+  name: "Solid",
+  description: "One color.",
+  backend: "canvas",
+  parameters: {},
+};
+const registry = createBuiltInRegistry(new Catalog({ visuals: [solid] }));
 
 function run(document: Document, name: string, payload: unknown): Document {
   const result = executeCommand(registry, document, name, payload);
@@ -56,32 +66,93 @@ const calibration = {
   owner: "s1",
 };
 
+/** A Scene, top to bottom: A on the wall, a Group of B (floor) and C (no Target), a Filter, disabled D, E on the TV. */
+function staged(): Document {
+  let document = run(installation(), "scene.create", { id: "s1", name: "One" });
+  const add = (
+    id: string,
+    kind: "visual" | "filter" | "group",
+    parentId: string | null = null,
+  ): void => {
+    document = run(document, "layer.create", {
+      id,
+      kind,
+      sceneId: "s1",
+      parentId,
+    });
+  };
+  const place = (id: string, target: string | null): void => {
+    document = run(document, "layer.visual", { layerId: id, visual: "solid" });
+    document = run(document, "layer.update", { layerId: id, target });
+  };
+  // New Layers land on top, so create bottom first.
+  add("E", "visual");
+  place("E", "sur_tv");
+  add("D", "visual");
+  place("D", "sur_wall");
+  document = run(document, "address.set", {
+    address: "layer/D/enabled",
+    value: false,
+  });
+  add("F", "filter");
+  add("G", "group");
+  add("C", "visual", "G");
+  place("C", null);
+  add("B", "visual", "G");
+  place("B", "sur_floor");
+  add("A", "visual");
+  place("A", "sur_wall");
+  return run(document, "scene.play", { sceneId: "s1" });
+}
+
 describe("planFrame", () => {
-  it("fills every assigned Surface with its Masks outside Calibration Mode", () => {
+  it("draws nothing outside Calibration Mode when no Scene plays", () => {
     const plan = planFrame(installation(), "out_a");
-    expect(plan.blackout).toBe(false);
+    expect(plan).toEqual({ blackout: false, draws: [], layers: [] });
+  });
+
+  it("plans the active Scene's Layers bottom first, on this Output only", () => {
+    const plan = planFrame(staged(), "out_a");
+    expect(plan.draws).toEqual([]);
     expect(
-      plan.draws.map((draw) => [
+      plan.layers.map((draw) => [
+        draw.layer.id,
         draw.surface.id,
-        draw.style,
         draw.masks.length,
       ]),
     ).toEqual([
-      ["sur_wall", "fill", 1],
-      ["sur_floor", "fill", 0],
+      ["B", "sur_floor", 0],
+      ["A", "sur_wall", 1],
+    ]);
+    expect(planFrame(staged(), "out_b").layers.map((d) => d.layer.id)).toEqual([
+      "E",
+    ]);
+    // A disabled Group hides its Layers.
+    const groupOff = run(staged(), "address.set", {
+      address: "layer/G/enabled",
+      value: false,
+    });
+    expect(planFrame(groupOff, "out_a").layers.map((d) => d.layer.id)).toEqual([
+      "A",
     ]);
   });
 
   it("draws nothing under Blackout", () => {
-    const document = run(installation(), "address.set", {
+    const document = run(staged(), "address.set", {
       address: "installation/blackout",
       value: true,
     });
-    expect(planFrame(document, "out_a")).toEqual({ blackout: true, draws: [] });
+    expect(planFrame(document, "out_a")).toEqual({
+      blackout: true,
+      draws: [],
+      layers: [],
+    });
   });
 
-  it("shows the calibrated Surface as a pattern with its corner, others per view", () => {
-    const selected = run(installation(), "calibration.set", calibration);
+  it("shows the calibrated Surface as a pattern with its corner, others per view, and no Layers", () => {
+    const selected = run(staged(), "calibration.set", calibration);
+    expect(planFrame(selected, "out_a").layers).toEqual([]);
+    expect(planFrame(selected, "out_b").layers).toHaveLength(1);
     expect(
       planFrame(selected, "out_a").draws.map((draw) => [
         draw.surface.id,
@@ -112,9 +183,7 @@ describe("planFrame", () => {
       ["pattern", false],
     ]);
     // The other Output is unaffected.
-    expect(planFrame(patterns, "out_b").draws.map((d) => d.style)).toEqual([
-      "fill",
-    ]);
+    expect(planFrame(patterns, "out_b").draws).toEqual([]);
   });
 
   it("applies and outlines the Mask being aligned", () => {

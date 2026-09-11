@@ -69,3 +69,51 @@ export function midpoint(first: Point, second: Point): Point {
 export function addPoints(point: Point, delta: Point): Point {
   return roundPoint({ x: point.x + delta.x, y: point.y + delta.y });
 }
+
+/**
+ * The pixel size of the canvases Layers targeting a Surface render into.
+ * Width follows the longer of the top and bottom edges as projected on the
+ * Output, height the longer of the sides, so no axis is undersampled at
+ * any angle; a stated physical size then stretches the shorter axis to the
+ * real aspect, since a steep projection hides it; Render Scale multiplies
+ * both; `maxDimension` (the GPU's texture limit) caps each axis, keeping the
+ * aspect.
+ */
+export function surfaceCanvasSize({
+  corners,
+  outputWidth,
+  outputHeight,
+  size,
+  renderScale,
+  maxDimension = Infinity,
+}: {
+  readonly corners: Quad;
+  readonly outputWidth: number;
+  readonly outputHeight: number;
+  readonly size: { readonly width: number; readonly height: number } | null;
+  readonly renderScale: number;
+  readonly maxDimension?: number;
+}): { readonly width: number; readonly height: number } {
+  const px = (a: Point, b: Point): number =>
+    Math.hypot((a.x - b.x) * outputWidth, (a.y - b.y) * outputHeight);
+  let width = Math.max(
+    px(corners.topLeft, corners.topRight),
+    px(corners.bottomLeft, corners.bottomRight),
+  );
+  let height = Math.max(
+    px(corners.topLeft, corners.bottomLeft),
+    px(corners.topRight, corners.bottomRight),
+  );
+  if (size !== null) {
+    const aspect = size.width / size.height;
+    if (width / height < aspect) width = height * aspect;
+    else height = width / aspect;
+  }
+  width *= renderScale;
+  height *= renderScale;
+  const fit = Math.min(1, maxDimension / width, maxDimension / height);
+  return {
+    width: Math.max(1, Math.round(width * fit)),
+    height: Math.max(1, Math.round(height * fit)),
+  };
+}

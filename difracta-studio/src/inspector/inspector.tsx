@@ -11,7 +11,7 @@ export function Inspector({ view }: { readonly view: DocumentView }) {
   return (
     <aside className="flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground">
       <PanelHeader>Inspector</PanelHeader>
-      <div className="min-h-0 overflow-auto">
+      <div className="@container min-h-0 overflow-auto">
         {selection === undefined ? (
           <p className="p-3 text-muted-foreground">
             Nothing selected. Click an item in the navigator to see its settings

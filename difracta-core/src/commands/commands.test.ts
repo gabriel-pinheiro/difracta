@@ -121,6 +121,8 @@ describe("built-in commands", () => {
       id: "sur_a",
       name: "Wall",
       output: null,
+      renderScale: 1,
+      size: null,
       mappings: {},
       order: "a0",
     });
@@ -620,5 +622,39 @@ describe("built-in commands", () => {
     const same = run(start, "installation.rename", { name: "Living" });
     expect(same.patches).toEqual([]);
     expect(same.document).toBe(start);
+  });
+
+  it("states or automates a Surface's physical size", () => {
+    let document = emptyDocument("Test");
+    document = run(document, "surface.create", {
+      id: "s",
+      name: "Wall",
+    }).document;
+    expect(document.surfaces.s?.size).toBeNull();
+    expect(document.surfaces.s?.renderScale).toBe(1);
+    const sized = run(document, "surface.size", {
+      surfaceId: "s",
+      size: { width: 240, height: 120 },
+    });
+    expect(sized.label).toBe("Set Surface size");
+    expect(sized.document.surfaces.s?.size).toEqual({
+      width: 240,
+      height: 120,
+    });
+    expect(
+      run(sized.document, "surface.size", {
+        surfaceId: "s",
+        size: { width: 240, height: 120 },
+      }).patches,
+    ).toEqual([]);
+    const automatic = run(sized.document, "surface.size", {
+      surfaceId: "s",
+      size: null,
+    });
+    expect(automatic.label).toBe("Automatic Surface size");
+    expect(automatic.document.surfaces.s?.size).toBeNull();
+    expect(() =>
+      run(document, "surface.size", { surfaceId: "nope", size: null }),
+    ).toThrow("does not exist");
   });
 });

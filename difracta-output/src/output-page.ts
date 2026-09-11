@@ -90,11 +90,15 @@ export class OutputPage {
   }
 
   #report(): void {
-    const metrics = this.#frame.metrics();
+    const { layers, ...metrics } = this.#frame.metrics();
     const telemetry: OutputTelemetry = {
       ...metrics,
       workload: {
-        canvasVisuals: noWorkload,
+        canvasVisuals: {
+          executedPerFrame: layers.renderedPerFrame,
+          enabled: layers.running,
+          relevant: layers.planned,
+        },
         shaderVisuals: noWorkload,
         filters: noWorkload,
       },

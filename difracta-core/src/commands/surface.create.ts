@@ -46,6 +46,8 @@ export const surfaceCreate = defineCommand({
       id: surfaceId,
       name,
       output,
+      renderScale: 1,
+      size: null,
       mappings:
         output === null
           ? {}

@@ -2,6 +2,7 @@ import type { DocumentView } from "@difracta/client";
 import {
   CORNERS,
   orderedEntries,
+  surfaceAddresses,
   tableEntries,
   type Mask,
   type Output,
@@ -11,6 +12,7 @@ import {
 import { SquareDashed } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { AddressRow } from "@/inspector/fields/address-row";
 import { CalibrationControls } from "@/inspector/fields/calibration-controls";
 import { InspectorHeading } from "@/inspector/fields/inspector-heading";
 import { NameField } from "@/inspector/fields/name-field";
@@ -27,6 +29,7 @@ import {
 } from "@/entities/output/output-live";
 
 import { QuadEditor, quadPoints } from "./quad-editor";
+import { SizeField } from "./size-field";
 
 /** Frame shape assumed until an Output Session reports its real resolution. */
 const DEFAULT_ASPECT = 16 / 9;
@@ -91,6 +94,7 @@ export function SurfaceInspector({
         ) : (
           <Mapping view={view} surface={surface} outputId={surface.output} />
         )}
+        <Rendering view={view} surface={surface} />
         <div className="grid gap-1">
           <span className="text-xs text-muted-foreground">Masks</span>
           {owned.length === 0 ? (
@@ -126,6 +130,38 @@ export function SurfaceInspector({
         </div>
       </div>
     </>
+  );
+}
+
+/** What Layers on this Surface render into: its real shape and the Render Scale. */
+function Rendering({
+  view,
+  surface,
+}: {
+  readonly view: DocumentView;
+  readonly surface: Surface;
+}) {
+  const command = useCommand(view);
+  return (
+    <div className="grid gap-1.5">
+      <span className="text-xs text-muted-foreground">Rendering</span>
+      <SizeField
+        surface={surface}
+        onCommit={(size) =>
+          void command("surface.size", { surfaceId: surface.id, size })
+        }
+      />
+      {surfaceAddresses(surface).map((resolved) => (
+        <AddressRow
+          key={resolved.address}
+          resolved={resolved}
+          value={surface.renderScale}
+          onEdit={(value) =>
+            command("address.edit", { address: resolved.address, value })
+          }
+        />
+      ))}
+    </div>
   );
 }
 

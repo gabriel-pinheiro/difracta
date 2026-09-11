@@ -10,6 +10,7 @@ import {
   listAddresses,
   resolveAddress,
   sameAddressValue,
+  surfaceAddresses,
 } from "./address.ts";
 
 const catalog = new Catalog({
@@ -105,6 +106,29 @@ describe("addresses", () => {
       type: "boolean",
       default: false,
     });
+  });
+
+  it("resolves a Surface's Render Scale", () => {
+    const document = run(emptyDocument("Test"), "surface.create", {
+      id: "s",
+      name: "Wall",
+    });
+    expect(resolveAddress(document, "surface/s/render-scale")).toEqual({
+      address: "surface/s/render-scale",
+      label: "Render Scale",
+      owner: "Wall",
+      path: ["surfaces", "s", "renderScale"],
+      type: "number",
+      default: 1,
+      range: { min: 0.25, max: 2, step: 0.25, unit: "×" },
+    });
+    expect(
+      surfaceAddresses(document.surfaces.s!).map((a) => a.address),
+    ).toEqual(["surface/s/render-scale"]);
+    expect(listAddresses(document).map((a) => a.address)).toEqual([
+      "installation/blackout",
+      "surface/s/render-scale",
+    ]);
   });
 
   it("resolves Layer settings and Parameters with their type, default and range", () => {

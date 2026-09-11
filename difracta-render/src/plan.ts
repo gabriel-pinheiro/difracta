@@ -1,12 +1,15 @@
 import {
+  childLayers,
   CORNERS,
   orderedEntries,
   resolveCalibration,
   type CornerName,
   type Document,
+  type Layer,
   type Mask,
   type Quad,
   type Surface,
+  type VisualLayer,
 } from "@difracta/core";
 
 export type SurfaceStyle = "fill" | "pattern" | "outline";
@@ -26,19 +29,33 @@ export interface SurfaceDraw {
     { readonly mask: Mask; readonly point: number | undefined } | undefined;
 }
 
+/** One Visual Layer of the active Scene landing on this Output through its Target. */
+export interface LayerDraw {
+  readonly layer: VisualLayer;
+  /** The Visual's definition id; a Layer without one is not planned. */
+  readonly visual: string;
+  readonly surface: Surface;
+  readonly corners: Quad;
+  readonly masks: readonly Mask[];
+}
+
 export interface FramePlan {
   readonly blackout: boolean;
+  /** Calibration drawings, only in Calibration Mode on this Output. */
   readonly draws: readonly SurfaceDraw[];
+  /** The Scene's Layers to composite, bottom first; empty while calibrating. */
+  readonly layers: readonly LayerDraw[];
 }
 
 /**
  * What one Output shows for a document: nothing under Blackout; otherwise
- * each assigned Surface as a dim fill cut by its Masks, or, in Calibration
- * Mode on this Output, the calibrated Surface as a pattern and the others as
- * the view says. Pure, so the rules are testable without a GPU.
+ * the active Scene's Layers on their Surfaces, or, in Calibration Mode on
+ * this Output, the calibrated Surface as a pattern and the others as the
+ * view says. Pure, so the rules are testable without a GPU.
  */
 export function planFrame(document: Document, outputId: string): FramePlan {
-  if (document.operational.blackout) return { blackout: true, draws: [] };
+  if (document.operational.blackout)
+    return { blackout: true, draws: [], layers: [] };
   const masksOf = (surface: Surface): readonly Mask[] =>
     orderedEntries(document.masks).filter(
       (mask) => mask.surfaceId === surface.id,
@@ -46,23 +63,17 @@ export function planFrame(document: Document, outputId: string): FramePlan {
   const calibration = resolveCalibration(document);
   const calibrating =
     calibration?.outputId === outputId ? calibration : undefined;
+  if (calibrating === undefined)
+    return {
+      blackout: false,
+      draws: [],
+      layers: planLayers(document, outputId, masksOf),
+    };
   const draws: SurfaceDraw[] = [];
   for (const surface of orderedEntries(document.surfaces)) {
     if (surface.output !== outputId) continue;
     const corners = surface.mappings[outputId]?.corners;
     if (corners === undefined) continue;
-    if (calibrating === undefined) {
-      draws.push({
-        surface,
-        corners,
-        style: "fill",
-        highlighted: false,
-        masks: masksOf(surface),
-        corner: undefined,
-        maskOutline: undefined,
-      });
-      continue;
-    }
     if (surface.id === calibrating.surface.id) {
       const mask = calibrating.mask;
       draws.push({
@@ -94,7 +105,56 @@ export function planFrame(document: Document, outputId: string): FramePlan {
       maskOutline: undefined,
     });
   }
-  return { blackout: false, draws };
+  return { blackout: false, draws, layers: [] };
+}
+
+/**
+ * The active Scene's Visual Layers that land on this Output: enabled with
+ * every Group above them enabled, a Visual picked, and a Target assigned
+ * here with a mapping. Filters are passed over here; a Group only gates.
+ * Bottom first, so drawing in order stacks them as the navigator shows.
+ */
+function planLayers(
+  document: Document,
+  outputId: string,
+  masksOf: (surface: Surface) => readonly Mask[],
+): readonly LayerDraw[] {
+  const sceneId = document.installation.activeScene;
+  if (sceneId === null || !(sceneId in document.scenes)) return [];
+  const result: LayerDraw[] = [];
+  const visit = (parentId: string | null): void => {
+    // Top to bottom as ordered; reversed once at the end.
+    for (const layer of childLayers(document.layers, sceneId, parentId)) {
+      if (!layer.enabled) continue;
+      if (layer.kind === "group") visit(layer.id);
+      else if (layer.kind === "visual") {
+        const draw = layerDraw(document, outputId, layer, masksOf);
+        if (draw !== undefined) result.push(draw);
+      }
+    }
+  };
+  visit(null);
+  return result.reverse();
+}
+
+function layerDraw(
+  document: Document,
+  outputId: string,
+  layer: Layer & { kind: "visual" },
+  masksOf: (surface: Surface) => readonly Mask[],
+): LayerDraw | undefined {
+  if (layer.visual === null || layer.target === null) return undefined;
+  const surface = document.surfaces[layer.target];
+  if (surface?.output !== outputId) return undefined;
+  const corners = surface.mappings[outputId]?.corners;
+  if (corners === undefined) return undefined;
+  return {
+    layer,
+    visual: layer.visual,
+    surface,
+    corners,
+    masks: masksOf(surface),
+  };
 }
 
 export const CORNER_INDEX: Readonly<Record<CornerName, number>> =

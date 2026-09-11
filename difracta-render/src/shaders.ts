@@ -20,11 +20,18 @@ void main() {
 }
 `;
 
-export const MODE = { flat: 0, pattern: 1, label: 2, marker: 3 } as const;
+export const MODE = {
+  flat: 0,
+  pattern: 1,
+  label: 2,
+  marker: 3,
+  layer: 4,
+} as const;
 
 /**
  * Modes: flat colour (fills and lines), the calibration pattern, a label
- * texture, a ring marker. Output is premultiplied. The pattern is computed
+ * texture, a ring marker, and a Layer's canvas sampled across Surface Space
+ * with the Layer's opacity in `u_color.a`. Output is premultiplied. The pattern is computed
  * from Surface Space coordinates and their screen-space derivatives, so its
  * lines stay about one pixel wide at any projection and cost no geometry.
  */
@@ -79,6 +86,8 @@ void main() {
     o_color = vec4(pattern(v_uv), 1.0) * mask;
   } else if (u_mode == 2) {
     o_color = texture(u_texture, v_local) * u_color.a;
+  } else if (u_mode == 4) {
+    o_color = texture(u_texture, v_uv) * u_color.a * mask;
   } else {
     float r = length(v_local - 0.5);
     float px = abs(r - 0.36) / max(length(fwidth(v_local)), 1e-6);
