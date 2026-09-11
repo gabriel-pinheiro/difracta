@@ -412,7 +412,9 @@ active Scene the frame is black. In Calibration Mode on that Output the Scene
 gives way to the calibrated Surface as a pattern (grid, diagonals, border, name,
 corner labels, the selected corner marked) and the others follow the view. Masks
 apply to the pattern only while a Mask is being aligned, and that Mask is then
-outlined with its points marked.
+outlined with its points marked. That drawing lives in `calibration-drawing.ts`
+and goes through the same Surface Space program as the Layers
+(`surface-program.ts`), so a pattern lands exactly where the Scene will.
 
 Each planned Layer has a Visual instance (`layer-players.ts`). A canvas Visual's
 draws on its own canvas, sized by `surfaceCanvasSize` and capped at the GPU's

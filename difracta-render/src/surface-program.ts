@@ -1,0 +1,101 @@
+import { compileProgram, uniform } from "./gl.ts";
+import { FRAGMENT_SOURCE, MODE, VERTEX_SOURCE } from "./shaders.ts";
+
+export type Color = readonly [number, number, number, number];
+/** A sub-rectangle of Surface Space: x, y, width, height. */
+export type Rect = readonly [number, number, number, number];
+export const WHOLE: Rect = [0, 0, 1, 1];
+
+export { MODE };
+
+/**
+ * The program that draws in Surface Space through a homography: Layer
+ * canvases, calibration patterns, outlines, markers and labels all go
+ * through it (see `shaders.ts`). It owns the unit quad every draw shares,
+ * with texture unit 0 reserved for the Surface's Mask and unit 1 for the
+ * picture being drawn.
+ */
+export class SurfaceProgram {
+  readonly gl: WebGL2RenderingContext;
+  readonly program: WebGLProgram;
+  readonly quad: WebGLBuffer;
+  readonly uniforms: Record<
+    | "homography"
+    | "rect"
+    | "mode"
+    | "color"
+    | "maskEnabled"
+    | "divisions"
+    | "corner"
+    | "emphasis",
+    WebGLUniformLocation
+  >;
+
+  constructor(gl: WebGL2RenderingContext) {
+    this.gl = gl;
+    const program = compileProgram(gl, VERTEX_SOURCE, FRAGMENT_SOURCE);
+    gl.useProgram(program);
+    gl.uniform1i(uniform(gl, program, "u_mask"), 0);
+    gl.uniform1i(uniform(gl, program, "u_texture"), 1);
+    this.program = program;
+    this.uniforms = {
+      homography: uniform(gl, program, "u_homography"),
+      rect: uniform(gl, program, "u_rect"),
+      mode: uniform(gl, program, "u_mode"),
+      color: uniform(gl, program, "u_color"),
+      maskEnabled: uniform(gl, program, "u_mask_enabled"),
+      divisions: uniform(gl, program, "u_divisions"),
+      corner: uniform(gl, program, "u_corner"),
+      emphasis: uniform(gl, program, "u_emphasis"),
+    };
+    this.quad = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.quad);
+    gl.bufferData(
+      gl.ARRAY_BUFFER,
+      new Float32Array([0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1]),
+      gl.STATIC_DRAW,
+    );
+  }
+
+  /** Makes this the current program; call again after another program drew. */
+  use(): void {
+    this.gl.useProgram(this.program);
+  }
+
+  setHomography(matrix: Float32Array): void {
+    this.gl.uniformMatrix3fv(this.uniforms.homography, false, matrix);
+  }
+
+  /** Binds the Surface's Mask on unit 0, or turns masking off. */
+  setMask(texture: WebGLTexture | undefined): void {
+    const { gl } = this;
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texture ?? null);
+    gl.uniform1i(this.uniforms.maskEnabled, texture === undefined ? 0 : 1);
+  }
+
+  /** Draws the unit quad with the uniforms as they are. */
+  drawQuad(): void {
+    const { gl } = this;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.quad);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+  }
+
+  /** A closed line loop through `count` points held in `buffer`, unmasked. */
+  drawLoop(buffer: WebGLBuffer, count: number, color: Color): void {
+    const { gl, uniforms } = this;
+    gl.uniform4f(uniforms.rect, ...WHOLE);
+    gl.uniform1i(uniforms.mode, MODE.flat);
+    gl.uniform1i(uniforms.maskEnabled, 0);
+    gl.uniform4f(uniforms.color, ...color);
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.LINE_LOOP, 0, count);
+  }
+
+  dispose(): void {
+    this.gl.deleteProgram(this.program);
+    this.gl.deleteBuffer(this.quad);
+  }
+}

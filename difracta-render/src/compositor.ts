@@ -1,16 +1,15 @@
-import type { Catalog, Document, Point, Quad } from "@difracta/core";
+import type { Catalog, Document, Quad } from "@difracta/core";
 
+import { CalibrationDrawing } from "./calibration-drawing.ts";
 import { FilterChain } from "./filter-chain.ts";
 import { FilterPlayers, type FilterPass } from "./filter-players.ts";
-import { compileProgram, uniform } from "./gl.ts";
-import { homography, project } from "./homography.ts";
-import { Labels } from "./labels.ts";
+import { homography } from "./homography.ts";
 import { LayerPlayers, type LayerFrame } from "./layer-players.ts";
 import { MaskTextures } from "./masks.ts";
-import { CORNER_INDEX, planFrame, type SurfaceDraw } from "./plan.ts";
+import { planFrame, type SurfaceDraw } from "./plan.ts";
 import { MAX_FRAME_SECONDS } from "./sdk/visual.ts";
 import { ShaderVisualPrograms } from "./shader-visuals.ts";
-import { FRAGMENT_SOURCE, MODE, VERTEX_SOURCE } from "./shaders.ts";
+import { MODE, SurfaceProgram, WHOLE } from "./surface-program.ts";
 
 export interface Compositor {
   /**
@@ -57,43 +56,11 @@ export interface FrameReport {
 const NO_LAYERS = { planned: 0, running: 0, rendered: 0 } as const;
 const NO_FILTERS = { planned: 0, running: 0, executed: 0 } as const;
 
-const CORNER_LABELS = ["TL", "TR", "BR", "BL"] as const;
-/** Grid cells across the calibration pattern. */
-const PATTERN_DIVISIONS = 8;
-const FILL: Color = [0.4, 0.4, 0.4, 1];
-const OUTLINE: Color = [1, 1, 1, 0.55];
-const MASK_EDGE: Color = [0.4, 0.85, 1, 0.9];
-const MARKER: Color = [0.4, 0.85, 1, 0.9];
-const SELECTED_MARKER: Color = [1, 0.72, 0.2, 1];
-const LABEL_HEIGHT = 0.08;
-const CORNER_LABEL_HEIGHT = 0.045;
-const CORNER_LABEL_INSET = 0.07;
-const MARKER_SIZE = 0.03;
-const SELECTED_MARKER_SIZE = 0.045;
-
-type Color = readonly [number, number, number, number];
-type Rect = readonly [number, number, number, number];
-const WHOLE: Rect = [0, 0, 1, 1];
-
 interface Resources {
   readonly gl: WebGL2RenderingContext;
-  readonly program: WebGLProgram;
-  readonly uniforms: Record<
-    | "homography"
-    | "rect"
-    | "mode"
-    | "color"
-    | "maskEnabled"
-    | "divisions"
-    | "corner"
-    | "emphasis",
-    WebGLUniformLocation
-  >;
-  readonly quad: WebGLBuffer;
-  readonly loop: WebGLBuffer;
-  readonly dynamic: WebGLBuffer;
+  readonly program: SurfaceProgram;
+  readonly calibration: CalibrationDrawing;
   readonly masks: MaskTextures;
-  readonly labels: Labels;
   readonly players: LayerPlayers;
   readonly filters: FilterPlayers;
   readonly chain: FilterChain;
@@ -170,7 +137,7 @@ class WebGLCompositor implements Compositor {
           );
     this.#lastNow = now;
     const resources = (this.#resources ??= this.#setup());
-    const { gl } = resources;
+    const { gl, program } = resources;
     const plan = planFrame(document, outputId);
     const step = resources.players.step(plan.layers, dt, width, height);
     const chain = resources.filters.step(plan.filters, dt, width, height);
@@ -208,7 +175,7 @@ class WebGLCompositor implements Compositor {
     // and the last target is presented.
     const filtered = chain.passes.length > 0;
     if (filtered) resources.chain.begin(width, height);
-    gl.useProgram(resources.program);
+    program.use();
     const masked = new Set<string>();
     let next = 0;
     const passesBelow = (count: number): void => {
@@ -216,7 +183,7 @@ class WebGLCompositor implements Compositor {
         const pass: FilterPass | undefined = chain.passes[next];
         if (pass === undefined || pass.draw.below > count) return;
         resources.chain.apply(pass);
-        gl.useProgram(resources.program);
+        program.use();
         next += 1;
       }
     };
@@ -224,7 +191,7 @@ class WebGLCompositor implements Compositor {
       passesBelow(frame.index);
       const matrix = this.#matrix(resources, frame.draw);
       if (matrix === undefined) continue;
-      gl.uniformMatrix3fv(resources.uniforms.homography, false, matrix);
+      program.setHomography(matrix);
       const maskTexture = resources.masks.get(
         frame.draw.surface.id,
         frame.draw.masks,
@@ -237,15 +204,15 @@ class WebGLCompositor implements Compositor {
     passesBelow(plan.layers.length);
     if (filtered) {
       resources.chain.present();
-      gl.useProgram(resources.program);
+      program.use();
     }
     for (const draw of plan.draws) {
       const matrix = this.#matrix(resources, draw);
       if (matrix === undefined) continue;
-      gl.uniformMatrix3fv(resources.uniforms.homography, false, matrix);
+      program.setHomography(matrix);
       const maskTexture = resources.masks.get(draw.surface.id, draw.masks);
       if (maskTexture !== undefined) masked.add(draw.surface.id);
-      this.#drawSurface(resources, draw, maskTexture, matrix, width, height);
+      resources.calibration.draw(draw, maskTexture, matrix, width, height);
     }
     resources.masks.retain(masked);
     return { drew: true, layers, shaders, filters };
@@ -261,15 +228,12 @@ class WebGLCompositor implements Compositor {
     const resources = this.#resources;
     if (resources === undefined) return;
     resources.masks.dispose();
-    resources.labels.dispose();
+    resources.calibration.dispose();
     resources.players.dispose();
     resources.filters.dispose();
     resources.chain.dispose();
     resources.shaderPrograms.dispose();
-    resources.gl.deleteProgram(resources.program);
-    resources.gl.deleteBuffer(resources.quad);
-    resources.gl.deleteBuffer(resources.loop);
-    resources.gl.deleteBuffer(resources.dynamic);
+    resources.program.dispose();
     this.#resources = undefined;
   }
 
@@ -283,50 +247,20 @@ class WebGLCompositor implements Compositor {
       powerPreference: "high-performance",
     });
     if (gl === null) throw new Error("WebGL2 is unavailable on this display.");
-    const program = compileProgram(gl, VERTEX_SOURCE, FRAGMENT_SOURCE);
-    gl.useProgram(program);
-    gl.uniform1i(uniform(gl, program, "u_mask"), 0);
-    gl.uniform1i(uniform(gl, program, "u_texture"), 1);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.bindVertexArray(gl.createVertexArray());
     gl.enableVertexAttribArray(0);
-    const quad = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, quad);
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      new Float32Array([0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1]),
-      gl.STATIC_DRAW,
-    );
-    const loop = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, loop);
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]),
-      gl.STATIC_DRAW,
-    );
+    const program = new SurfaceProgram(gl);
     return {
       gl,
       program,
-      uniforms: {
-        homography: uniform(gl, program, "u_homography"),
-        rect: uniform(gl, program, "u_rect"),
-        mode: uniform(gl, program, "u_mode"),
-        color: uniform(gl, program, "u_color"),
-        maskEnabled: uniform(gl, program, "u_mask_enabled"),
-        divisions: uniform(gl, program, "u_divisions"),
-        corner: uniform(gl, program, "u_corner"),
-        emphasis: uniform(gl, program, "u_emphasis"),
-      },
-      quad,
-      loop,
-      dynamic: gl.createBuffer(),
+      calibration: new CalibrationDrawing(program),
       masks: new MaskTextures(gl),
-      labels: new Labels(gl),
       players: new LayerPlayers(gl, this.#catalog),
       filters: new FilterPlayers(this.#catalog),
-      chain: new FilterChain(gl, quad),
-      shaderPrograms: new ShaderVisualPrograms(gl, quad),
+      chain: new FilterChain(gl, program.quad),
+      shaderPrograms: new ShaderVisualPrograms(gl, program.quad),
       matrices: new Map(),
     };
   }
@@ -344,70 +278,6 @@ class WebGLCompositor implements Compositor {
     }
     resources.matrices.set(draw.surface.id, { corners: draw.corners, matrix });
     return matrix;
-  }
-
-  #drawSurface(
-    resources: Resources,
-    draw: SurfaceDraw,
-    maskTexture: WebGLTexture | undefined,
-    matrix: Float32Array,
-    width: number,
-    height: number,
-  ): void {
-    const { gl, uniforms } = resources;
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, maskTexture ?? null);
-    gl.uniform1i(uniforms.maskEnabled, maskTexture === undefined ? 0 : 1);
-    if (draw.style === "outline") {
-      this.#lines(resources, resources.loop, 4, OUTLINE);
-      return;
-    }
-    gl.uniform4f(uniforms.rect, ...WHOLE);
-    if (draw.style === "fill") {
-      gl.uniform1i(uniforms.mode, MODE.flat);
-      gl.uniform4f(uniforms.color, ...FILL);
-      this.#quad(resources);
-      return;
-    }
-    gl.uniform1i(uniforms.mode, MODE.pattern);
-    gl.uniform1f(uniforms.divisions, PATTERN_DIVISIONS);
-    gl.uniform1f(uniforms.emphasis, draw.highlighted ? 1 : 0.55);
-    gl.uniform1i(
-      uniforms.corner,
-      draw.corner === undefined ? -1 : CORNER_INDEX[draw.corner],
-    );
-    this.#quad(resources);
-    if (!draw.highlighted) return;
-
-    // Labels and the Mask outline sit on top, unmasked.
-    gl.uniform1i(uniforms.maskEnabled, 0);
-    const aspect = projectedAspect(matrix, width, height);
-    this.#label(resources, draw.surface.name, LABEL_HEIGHT, aspect, (w, h) => [
-      0.5 - w / 2,
-      0.5 - h / 2,
-    ]);
-    if (draw.maskOutline === undefined) {
-      CORNER_LABELS.forEach((text, index) => {
-        this.#label(resources, text, CORNER_LABEL_HEIGHT, aspect, (w, h) => [
-          index === 1 || index === 2
-            ? 1 - CORNER_LABEL_INSET - w
-            : CORNER_LABEL_INSET,
-          index >= 2 ? 1 - CORNER_LABEL_INSET - h : CORNER_LABEL_INSET,
-        ]);
-      });
-      return;
-    }
-    const { mask, point } = draw.maskOutline;
-    gl.bindBuffer(gl.ARRAY_BUFFER, resources.dynamic);
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      new Float32Array(mask.points.flatMap((p) => [p.x, p.y])),
-      gl.DYNAMIC_DRAW,
-    );
-    this.#lines(resources, resources.dynamic, mask.points.length, MASK_EDGE);
-    mask.points.forEach((p, index) => {
-      this.#marker(resources, p, index === point);
-    });
   }
 
   /** A shader Layer run over its Surface, with opacity, blend mode and the Surface's Masks. */
@@ -432,7 +302,7 @@ class WebGLCompositor implements Compositor {
     });
     if (layer.blendMode === "additive")
       gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    gl.useProgram(resources.program);
+    resources.program.use();
   }
 
   /** A Layer's canvas over its Surface, with opacity, blend mode and the Surface's Masks. */
@@ -441,100 +311,18 @@ class WebGLCompositor implements Compositor {
     frame: LayerFrame & { kind: "canvas" },
     maskTexture: WebGLTexture | undefined,
   ): void {
-    const { gl, uniforms } = resources;
+    const { gl, program } = resources;
+    const { uniforms } = program;
     const { layer } = frame.draw;
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, maskTexture ?? null);
-    gl.uniform1i(uniforms.maskEnabled, maskTexture === undefined ? 0 : 1);
+    program.setMask(maskTexture);
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, frame.texture);
     gl.uniform1i(uniforms.mode, MODE.layer);
     gl.uniform4f(uniforms.color, 1, 1, 1, layer.opacity);
     gl.uniform4f(uniforms.rect, ...WHOLE);
     if (layer.blendMode === "additive") gl.blendFunc(gl.ONE, gl.ONE);
-    this.#quad(resources);
+    program.drawQuad();
     if (layer.blendMode === "additive")
       gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   }
-
-  #quad(resources: Resources): void {
-    const { gl } = resources;
-    gl.bindBuffer(gl.ARRAY_BUFFER, resources.quad);
-    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
-  }
-
-  #lines(
-    resources: Resources,
-    buffer: WebGLBuffer,
-    count: number,
-    color: Color,
-  ): void {
-    const { gl, uniforms } = resources;
-    gl.uniform4f(uniforms.rect, ...WHOLE);
-    gl.uniform1i(uniforms.mode, MODE.flat);
-    gl.uniform1i(uniforms.maskEnabled, 0);
-    gl.uniform4f(uniforms.color, ...color);
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    gl.drawArrays(gl.LINE_LOOP, 0, count);
-  }
-
-  #marker(resources: Resources, point: Point, selected: boolean): void {
-    const { gl, uniforms } = resources;
-    const size = selected ? SELECTED_MARKER_SIZE : MARKER_SIZE;
-    gl.uniform1i(uniforms.mode, MODE.marker);
-    gl.uniform4f(uniforms.color, ...(selected ? SELECTED_MARKER : MARKER));
-    gl.uniform4f(
-      uniforms.rect,
-      point.x - size / 2,
-      point.y - size / 2,
-      size,
-      size,
-    );
-    this.#quad(resources);
-  }
-
-  /** Draws `text` as a quad `height` tall in Surface Space, placed by `at(width, height)`. */
-  #label(
-    resources: Resources,
-    text: string,
-    height: number,
-    surfaceAspect: number,
-    at: (width: number, height: number) => readonly [number, number],
-  ): void {
-    const { gl, uniforms } = resources;
-    const label = resources.labels.get(text);
-    const width = (height * label.aspect) / surfaceAspect;
-    const [x, y] = at(width, height);
-    gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, label.texture);
-    gl.uniform1i(uniforms.mode, MODE.label);
-    gl.uniform4f(uniforms.color, 1, 1, 1, 1);
-    gl.uniform4f(uniforms.rect, x, y, width, height);
-    this.#quad(resources);
-  }
-}
-
-/** Width over height of the Surface's bounding box on screen, so text keeps its proportions. */
-function projectedAspect(
-  matrix: Float32Array,
-  width: number,
-  height: number,
-): number {
-  const xs: number[] = [];
-  const ys: number[] = [];
-  for (const [u, v] of [
-    [0, 0],
-    [1, 0],
-    [1, 1],
-    [0, 1],
-  ] as const) {
-    const p = project(matrix, u, v);
-    xs.push(p.x * width);
-    ys.push(p.y * height);
-  }
-  const w = Math.max(...xs) - Math.min(...xs);
-  const h = Math.max(...ys) - Math.min(...ys);
-  return h < 1 ? 1 : Math.max(0.05, w / h);
 }
