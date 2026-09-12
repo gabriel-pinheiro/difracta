@@ -512,6 +512,7 @@ describe("built-in commands", () => {
     const entered = run(document, "calibration.set", {
       surfaceId: "sur_a",
       maskId: null,
+      pathId: null,
       corner: "topLeft",
       point: null,
       view: "selected",
@@ -527,6 +528,7 @@ describe("built-in commands", () => {
     const onMask = run(entered.document, "calibration.set", {
       surfaceId: "sur_a",
       maskId: "mask_a",
+      pathId: null,
       corner: null,
       point: 3,
       view: "outlines",
@@ -537,6 +539,7 @@ describe("built-in commands", () => {
       executeCommand(registry, entered.document, "calibration.set", {
         surfaceId: "sur_a",
         maskId: "mask_a",
+        pathId: null,
         corner: null,
         point: 4,
         view: "outlines",
@@ -547,6 +550,7 @@ describe("built-in commands", () => {
       executeCommand(registry, entered.document, "calibration.set", {
         surfaceId: "sur_b",
         maskId: "mask_a",
+        pathId: null,
         corner: null,
         point: null,
         view: "selected",
@@ -562,6 +566,7 @@ describe("built-in commands", () => {
     const entered = run(withSurface(), "calibration.set", {
       surfaceId: "sur_a",
       maskId: null,
+      pathId: null,
       corner: null,
       point: null,
       view: "selected",
@@ -578,6 +583,7 @@ describe("built-in commands", () => {
       executeCommand(registry, entered, "calibration.set", {
         surfaceId: "sur_a",
         maskId: null,
+        pathId: null,
         corner: null,
         point: null,
         view: "selected",

@@ -8,6 +8,8 @@ import { describe, expect, it } from "vitest";
 
 import { beamWeb } from "./beam-web.ts";
 import { blink } from "./blink.ts";
+import { frameElectric } from "./frame-electric.ts";
+import { lightningStrikes } from "./lightning-strikes.ts";
 import { strobe } from "./strobe.ts";
 import { thunder } from "./thunder.ts";
 
@@ -127,5 +129,76 @@ describe("Beam Web", () => {
     recording.clear();
     expect(player.frame(DT, {}).blank).toBe(true);
     expect(beams()).toBe(0);
+  });
+});
+
+const frame = {
+  points: [
+    { x: 0.2, y: 0.2 },
+    { x: 0.8, y: 0.2 },
+    { x: 0.8, y: 0.8 },
+    { x: 0.2, y: 0.8 },
+  ],
+  closed: true,
+};
+
+describe("Lightning Strikes", () => {
+  it("is blank until a Strike, then draws bolts from the Path and fades them out", () => {
+    const recording = recordingContext();
+    const player = createVisualPlayer(lightningStrikes, {
+      context: recording.context,
+      width: 320,
+      height: 180,
+      seed: "test",
+    });
+    const paths = { frame };
+    const values = { automaticRate: 0 };
+    expect(player.frame(DT, values, paths).blank).toBe(true);
+    player.cue("strike");
+    expect(player.frame(DT, values, paths)).toEqual({
+      rendered: true,
+      blank: false,
+    });
+    const strokes = recording.callsTo("stroke").length;
+    expect(strokes).toBeGreaterThan(0);
+    // The origin lies on the Path: the first traced point is on the rectangle's edge.
+    const [first] = recording.callsTo("moveTo");
+    const [x, y] = [Number(first?.args[0]), Number(first?.args[1])];
+    const onEdge =
+      Math.min(Math.abs(x - 64), Math.abs(x - 256)) < 0.01 ||
+      Math.min(Math.abs(y - 36), Math.abs(y - 144)) < 0.01;
+    expect(onEdge).toBe(true);
+    // Half a second later the strike is gone and nothing is drawn.
+    for (let i = 0; i < 40; i += 1) player.frame(DT, values, paths);
+    expect(player.frame(DT, values, paths).blank).toBe(true);
+    // The Automatic Rate strikes by itself.
+    let struck = false;
+    for (let i = 0; i < 120 && !struck; i += 1)
+      struck = !player.frame(DT, { automaticRate: 4 }, paths).blank;
+    expect(struck).toBe(true);
+  });
+});
+
+describe("Frame Electric", () => {
+  it("integrates its clock from Speed and reports a Path edit as a change", () => {
+    const player = createShaderPlayer(frameElectric, {
+      width: 320,
+      height: 180,
+      seed: "test",
+    });
+    const paths = { frame };
+    const first = player.frame(DT, { speed: 1 }, 320, 180, paths);
+    expect(first.changed).toBe(true);
+    const time = first.uniforms.time;
+    const still = player.frame(DT, { speed: 0 }, 320, 180, paths);
+    expect(still.changed).toBe(true); // the speed changed
+    expect(player.frame(DT, { speed: 0 }, 320, 180, paths).changed).toBe(false);
+    expect(player.frame(DT, { speed: 0 }, 320, 180, paths).uniforms.time).toBe(
+      time,
+    );
+    const edited = player.frame(DT, { speed: 0 }, 320, 180, {
+      frame: { ...frame, closed: false },
+    });
+    expect(edited.changed).toBe(true);
   });
 });

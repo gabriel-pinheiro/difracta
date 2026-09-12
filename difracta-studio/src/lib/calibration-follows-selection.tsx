@@ -1,5 +1,5 @@
 import type { DocumentView } from "@difracta/client";
-import type { Mask, Surface, Table } from "@difracta/core";
+import type { Mask, Path, Surface, Table } from "@difracta/core";
 import { useEffect, useRef } from "react";
 
 import { useSelection, type Selection } from "@/selection/selection";
@@ -8,8 +8,8 @@ import { useCalibration } from "./calibration";
 import { useDocumentPath } from "./client";
 
 /**
- * While Calibration Mode is on, selecting another Surface or Mask moves the
- * pattern to it; the view is kept and the inspector then reports its own
+ * While Calibration Mode is on, selecting another Surface, Mask or Path
+ * moves the pattern to it; the view is kept and the inspector then reports its own
  * corner or point. Selecting anything else leaves the mode as it is, so a
  * glance at an Output's stats does not drop the pattern on stage. Reacts to
  * selection changes only: another Studio moving the calibration must not be
@@ -24,9 +24,10 @@ export function CalibrationFollowsSelection({
   const { calibration, set } = useCalibration(view);
   const surfaces = useDocumentPath<Table<Surface>>(view, ["surfaces"]) ?? {};
   const masks = useDocumentPath<Table<Mask>>(view, ["masks"]) ?? {};
-  const latest = useRef({ calibration, surfaces, masks });
+  const paths = useDocumentPath<Table<Path>>(view, ["paths"]) ?? {};
+  const latest = useRef({ calibration, surfaces, masks, paths });
   useEffect(() => {
-    latest.current = { calibration, surfaces, masks };
+    latest.current = { calibration, surfaces, masks, paths };
   });
   const previous = useRef<Selection | undefined>(selection);
   useEffect(() => {
@@ -38,11 +39,13 @@ export function CalibrationFollowsSelection({
       selection,
       current.surfaces,
       current.masks,
+      current.paths,
     );
     if (target === undefined) return;
     if (
       target.surfaceId === current.calibration.surfaceId &&
-      target.maskId === current.calibration.maskId
+      target.maskId === current.calibration.maskId &&
+      target.pathId === current.calibration.pathId
     )
       return;
     set({ ...current.calibration, ...target, corner: null, point: null });
@@ -54,19 +57,33 @@ function calibrationTarget(
   selection: Selection | undefined,
   surfaces: Table<Surface>,
   masks: Table<Mask>,
-): { readonly surfaceId: string; readonly maskId: string | null } | undefined {
+  paths: Table<Path>,
+):
+  | {
+      readonly surfaceId: string;
+      readonly maskId: string | null;
+      readonly pathId: string | null;
+    }
+  | undefined {
   if (selection?.kind === "surface") {
     const surface = surfaces[selection.id];
     return surface?.output == null
       ? undefined
-      : { surfaceId: surface.id, maskId: null };
+      : { surfaceId: surface.id, maskId: null, pathId: null };
   }
   if (selection?.kind === "mask") {
     const mask = masks[selection.id];
     const surface = mask === undefined ? undefined : surfaces[mask.surfaceId];
     return mask === undefined || surface?.output == null
       ? undefined
-      : { surfaceId: surface.id, maskId: mask.id };
+      : { surfaceId: surface.id, maskId: mask.id, pathId: null };
+  }
+  if (selection?.kind === "path") {
+    const path = paths[selection.id];
+    const surface = path === undefined ? undefined : surfaces[path.surfaceId];
+    return path === undefined || surface?.output == null
+      ? undefined
+      : { surfaceId: surface.id, maskId: null, pathId: path.id };
   }
   return undefined;
 }

@@ -53,6 +53,19 @@ export {
   type FrameResult,
   type VisualPlayer,
 } from "./player.ts";
+export {
+  PATH_UNIFORM_POINTS,
+  pathDeclarations,
+  pathGeometry,
+  pathTracker,
+  pathUniformPoints,
+  type PathGeometry,
+  type PathSample,
+  type PathShape,
+  type PathShapes,
+  type PathSide,
+  type PathTracker,
+} from "./path.ts";
 export { createRandom, seedFromText, type Random } from "./random.ts";
 export {
   recordingContext,
@@ -64,6 +77,8 @@ export {
   defineVisual,
   isCanvasVisual,
   type CanvasVisual,
+  type PathRequirements,
+  type PathsOf,
   type UpdateResult,
   type VisualCanvas,
   type VisualContext,

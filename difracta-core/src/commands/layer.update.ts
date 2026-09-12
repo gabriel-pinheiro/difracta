@@ -3,11 +3,14 @@ import { z } from "zod";
 import { accepted, defineCommand, rejected } from "../command/command.ts";
 import { BlendModeSchema } from "../document/document.ts";
 import type { Patch } from "../document/patch.ts";
+import { fitPaths } from "../document/paths.ts";
 
 /**
  * Settings of a Layer, each optional so one call changes any subset. Fields
  * are checked against the Layer's kind: opacity, blend mode and Target
- * belong to Visual Layers, mix to Filter Layers, enabled to all.
+ * belong to Visual Layers, mix to Filter Layers, enabled to all. A new
+ * Target keeps only the Path bindings that are on it; the rest are dropped,
+ * and the Layer waits for a Path there.
  */
 export const layerUpdate = defineCommand({
   name: "layer.update",
@@ -33,7 +36,7 @@ export const layerUpdate = defineCommand({
       : "Change Layer settings",
   coalesceKey: ({ layerId, ...fields }) =>
     `layer.update:${layerId}:${Object.keys(fields).sort().join(",")}`,
-  apply({ document, payload }) {
+  apply({ document, catalog, payload }) {
     const layer = document.layers[payload.layerId];
     if (layer === undefined)
       return rejected(`Layer “${payload.layerId}” does not exist.`);
@@ -56,6 +59,17 @@ export const layerUpdate = defineCommand({
       )
         return rejected(`Surface “${payload.target}” does not exist.`);
       set(field, payload[field]);
+      if (field === "target" && layer.kind === "visual") {
+        const paths = fitPaths(
+          document,
+          catalog,
+          layer.visual,
+          payload.target ?? null,
+          layer.paths,
+        );
+        if (Object.keys(paths).length !== Object.keys(layer.paths).length)
+          set("paths", paths);
+      }
     }
     if (payload.mix !== undefined) {
       if (layer.kind !== "filter")

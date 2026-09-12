@@ -10,8 +10,8 @@ terms in code, UI text, docs, and conversation.
 
 One complete projection setup and its configuration.
 
-An Installation owns Outputs, Surfaces, Surface Mappings, Regions, Masks,
-Guides, Scenes, Controllers, Parameter Links, and Macros.
+An Installation owns Outputs, Surfaces, Surface Mappings, Regions, Masks, Paths,
+Scenes, Controllers, Parameter Links, and Macros.
 
 ### Projector
 
@@ -46,9 +46,9 @@ overlap when mapped into the same Projection Frame.
 
 ### Surface Space
 
-The local coordinate system in which a Surface's Regions, Guides, and Visual
-content are described. Rendering is transformed from Surface Space through a
-Surface Mapping into an Output's Projection Frame.
+The local coordinate system in which a Surface's Regions, Masks, Paths, and
+Visual content are described. Rendering is transformed from Surface Space
+through a Surface Mapping into an Output's Projection Frame.
 
 Surface Space is the normalized unit rectangle from `(0, 0)` at its top-left to
 `(1, 1)` at its bottom-right.
@@ -115,11 +115,12 @@ physical alignment.
 ### Calibration Mode
 
 A temporary Output presentation used while editing Surface Mappings, Masks,
-Regions, or Guides. It replaces Scene playback on one selected Output with
-Surface patterns and bounds, neutral Guide calibration imagery, the Surface's
-pattern already masked, or a filled Region over its dimmed Surface.
+Paths, or Regions. It replaces Scene playback on one selected Output with
+Surface patterns and bounds, the Surface's pattern already masked with the Mask
+or Path being aligned drawn over it with its points marked, or a filled Region
+over its dimmed Surface.
 
-Masks are applied while calibrating a Mask or a Guide, so the operator aligns
+Masks are applied while calibrating a Mask or a Path, so the operator aligns
 against the shape the audience will actually see. They are not applied while
 calibrating a Surface's quadrilateral, where a Mask would hide the corners being
 dragged.
@@ -152,26 +153,22 @@ Region spanning its whole Surface is identical to targeting the Surface.
 Aspect ratio is not corrected: a tall narrow Region squashes a circular Visual
 into an ellipse exactly as a wide Surface already does.
 
-### Guide
-
-Named calibrated geometry that influences a Visual without itself being a render
-Target. Guides provide reusable spatial inputs.
-
 ### Path
 
-A line-shaped Guide, such as `Plafond Perimeter`. A Lightning Bolts Visual can
-bind its origin to a Path. The initial Path is an ordered sequence of 2–16
-straight-segment points in normalized Surface Space and may be open or closed.
+Named calibrated geometry a Visual follows without itself being a render Target,
+such as `Plafond Perimeter`. A Path is an ordered sequence of 2–16
+straight-segment points in Surface Space, open or closed, and belongs to one
+Surface. It lights nothing by itself: Lightning Strikes erupts from one, Frame
+Electric hums along one.
 
-Point order gives an open Path a directed line: Side A is its left side and Side
-B is its right side while moving from the first point to the last. Visuals may
-interpret these sides through a Parameter. Lightning presents Side A as Outward
-and Side B as Inward for a closed Path, using the Path's centroid to make that
-meaning independent of clockwise or counterclockwise authoring.
+Point order gives a Path a direction: Side A is its left side and Side B its
+right side while moving from the first point to the last. A Visual with a side
+to choose offers it as a Parameter. Lightning Strikes offers Outward and Inward
+instead, judged against the Path's centroid, so a frame drawn clockwise or
+counterclockwise emits the same way.
 
-### Anchor
-
-A point-shaped Guide, such as the center of the Plafond or an emission origin.
+A Surface's Masks and Paths share one order in the navigator; the order is
+organizational only.
 
 ## Composition and rendering
 
@@ -314,16 +311,16 @@ A deferred color-sampling value that may eventually provide discrete colors or a
 continuous gradient to a Visual. Current Visuals use explicit Color Parameters;
 do not use Palette as a synonym for a single Color.
 
-### Guide Binding
+### Path Binding
 
-A connection from a named geometric input declared by a Visual to a compatible
-Guide in the Installation. For example, a Lightning Bolts Layer can bind its
-`origin` input to the `Plafond Perimeter` Path.
+A Visual declares the Paths it follows by key, such as `frame`; a Visual Layer
+binds one Path of the Installation to each key. For example, a Lightning Strikes
+Layer binds its `frame` to the `Plafond Perimeter` Path.
 
-A Guide Binding is not a Parameter.
-
-Every declared Guide Binding is required. Its Guide must have the declared kind
-and belong to the same Surface as the Layer's Target.
+A Path Binding is not a Parameter. Every declared Path is required, and the
+bound Path must belong to the same Surface as the Layer's Target: a Layer with
+one unbound renders nothing until a Path is picked, and a Target or Visual
+change drops the bindings that no longer fit rather than being refused.
 
 ### Layer
 
@@ -338,7 +335,8 @@ three reorder, move, duplicate and hide the same way.
 A Layer that renders one Visual into a Target, with Parameter Values, an opacity
 and a blend mode. It renders RGBA content over a transparent background; the
 order of Layers controls composition where pixels overlap. A Visual Layer may
-exist without a Visual or a Target yet, in which case it renders nothing.
+exist without a Visual or a Target yet, or with a Path its Visual declares
+unbound, in which case it renders nothing.
 
 ### Filter Layer
 
@@ -476,8 +474,8 @@ Frame. It helps diagnose Frame Interval but is not a precise GPU measurement.
 The Studio panel for the selected object, especially a selected Layer. A Layer
 Inspector starts with what the Layer is made of and the way into the Library,
 then its name, then collapsible sections of Address rows: Layer settings,
-Parameters, and later Guide Bindings. Each row has a label, a Control and a
-reset to the default when the value differs from it.
+Parameters, and Path Bindings. Each row has a label, a Control and a reset to
+the default when the value differs from it.
 
 ### Library
 

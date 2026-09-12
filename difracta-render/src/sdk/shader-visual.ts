@@ -1,7 +1,7 @@
 import type { ParameterSchema, VisualDefinition } from "@difracta/core";
 
 import type { Uniforms } from "./uniforms.ts";
-import type { VisualContext, VisualFrame } from "./visual.ts";
+import type { PathRequirements, VisualContext, VisualFrame } from "./visual.ts";
 
 /**
  * A shader Visual is a definition plus a GLSL fragment defining
@@ -12,7 +12,8 @@ import type { VisualContext, VisualFrame } from "./visual.ts";
  * the uniforms the fragment reads this frame instead of drawing: the
  * instance integrates clocks and live events in JavaScript, the fragment
  * only paints. Uniform naming and the prelude (`u_resolution`, `u_texel`,
- * `hash`, `hash2`) follow the Filter SDK.
+ * `hash`, `hash2`) follow the Filter SDK; each declared Path arrives as
+ * `u_path_<key>_points`, `_count` and `_closed` (see `sdk/path.ts`).
  */
 export interface ShaderUpdate {
   /** False when the picture would be the same as last frame's. */
@@ -23,28 +24,34 @@ export interface ShaderUpdate {
   readonly uniforms?: Uniforms;
 }
 
-export interface ShaderVisualInstance<S extends ParameterSchema> {
+export interface ShaderVisualInstance<
+  S extends ParameterSchema,
+  P extends PathRequirements = PathRequirements,
+> {
   // eslint-disable-next-line @typescript-eslint/no-invalid-void-type -- an update with nothing to report returns nothing
-  update(frame: VisualFrame<S>): ShaderUpdate | void;
+  update(frame: VisualFrame<S, P>): ShaderUpdate | void;
   cue?(key: string): void;
   dispose?(): void;
 }
 
 export interface ShaderVisual<
   S extends ParameterSchema = ParameterSchema,
+  P extends PathRequirements = PathRequirements,
 > extends VisualDefinition {
   readonly backend: "shader";
   readonly parameters: S;
+  readonly paths?: P;
   /** GLSL ES 3.00 defining `vec4 render_visual(vec2 uv)`; may declare its own `u_` uniforms. */
   readonly fragment: string;
-  /** Absent for a Visual whose picture depends only on its Parameters. */
-  create?(context: VisualContext<S>): ShaderVisualInstance<S>;
+  /** Absent for a Visual whose picture depends only on its Parameters and Paths. */
+  create?(context: VisualContext<S, P>): ShaderVisualInstance<S, P>;
 }
 
-/** Declares a shader Visual; the Parameter schema types `params` everywhere. */
-export function defineShaderVisual<const S extends ParameterSchema>(
-  visual: Omit<ShaderVisual<S>, "kind" | "backend">,
-): ShaderVisual<S> {
+/** Declares a shader Visual; the Parameter schema types `params` and the Paths type `paths` everywhere. */
+export function defineShaderVisual<
+  const S extends ParameterSchema,
+  const P extends PathRequirements = readonly [],
+>(visual: Omit<ShaderVisual<S, P>, "kind" | "backend">): ShaderVisual<S, P> {
   return { ...visual, kind: "visual", backend: "shader" };
 }
 

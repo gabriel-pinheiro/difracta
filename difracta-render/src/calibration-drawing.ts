@@ -16,6 +16,7 @@ const PATTERN_DIVISIONS = 8;
 const FILL: Color = [0.4, 0.4, 0.4, 1];
 const OUTLINE: Color = [1, 1, 1, 0.55];
 const MASK_EDGE: Color = [0.4, 0.85, 1, 0.9];
+const PATH_EDGE: Color = [1, 0.85, 0.3, 0.95];
 const MARKER: Color = [0.4, 0.85, 1, 0.9];
 const SELECTED_MARKER: Color = [1, 0.72, 0.2, 1];
 const LABEL_HEIGHT = 0.08;
@@ -27,7 +28,7 @@ const SELECTED_MARKER_SIZE = 0.045;
 /**
  * What an Output shows in Calibration Mode: each Surface as a fill, an
  * outline or the pattern, the calibrated one with its name, corner labels
- * and, when a Mask is being aligned, the Mask's outline and point markers.
+ * and, when a Mask or Path is being aligned, its line and point markers.
  * Everything is drawn in Surface Space through the shared program, so it
  * lands exactly where the Scene will.
  */
@@ -83,34 +84,51 @@ export class CalibrationDrawing {
     program.drawQuad();
     if (!draw.highlighted) return;
 
-    // Labels and the Mask outline sit on top, unmasked.
+    // Labels and the Mask or Path line sit on top, unmasked.
     gl.uniform1i(uniforms.maskEnabled, 0);
     const aspect = projectedAspect(matrix, width, height);
     this.#label(draw.surface.name, LABEL_HEIGHT, aspect, (w, h) => [
       0.5 - w / 2,
       0.5 - h / 2,
     ]);
-    if (draw.maskOutline === undefined) {
-      CORNER_LABELS.forEach((text, index) => {
-        this.#label(text, CORNER_LABEL_HEIGHT, aspect, (w, h) => [
-          index === 1 || index === 2
-            ? 1 - CORNER_LABEL_INSET - w
-            : CORNER_LABEL_INSET,
-          index >= 2 ? 1 - CORNER_LABEL_INSET - h : CORNER_LABEL_INSET,
-        ]);
-      });
+    if (draw.maskOutline !== undefined) {
+      const { mask, point } = draw.maskOutline;
+      this.#line(mask.points, true, MASK_EDGE, point);
       return;
     }
-    const { mask, point } = draw.maskOutline;
+    if (draw.pathOutline !== undefined) {
+      const { path, point } = draw.pathOutline;
+      this.#line(path.points, path.closed, PATH_EDGE, point);
+      return;
+    }
+    CORNER_LABELS.forEach((text, index) => {
+      this.#label(text, CORNER_LABEL_HEIGHT, aspect, (w, h) => [
+        index === 1 || index === 2
+          ? 1 - CORNER_LABEL_INSET - w
+          : CORNER_LABEL_INSET,
+        index >= 2 ? 1 - CORNER_LABEL_INSET - h : CORNER_LABEL_INSET,
+      ]);
+    });
+  }
+
+  /** A shape's line through its points, with a marker on each and the selected one larger. */
+  #line(
+    points: readonly Point[],
+    closed: boolean,
+    color: Color,
+    selected: number | undefined,
+  ): void {
+    const program = this.#program;
+    const { gl } = program;
     gl.bindBuffer(gl.ARRAY_BUFFER, this.#dynamic);
     gl.bufferData(
       gl.ARRAY_BUFFER,
-      new Float32Array(mask.points.flatMap((p) => [p.x, p.y])),
+      new Float32Array(points.flatMap((p) => [p.x, p.y])),
       gl.DYNAMIC_DRAW,
     );
-    program.drawLoop(this.#dynamic, mask.points.length, MASK_EDGE);
-    mask.points.forEach((p, index) => {
-      this.#marker(p, index === point);
+    program.drawLoop(this.#dynamic, points.length, color, closed);
+    points.forEach((p, index) => {
+      this.#marker(p, index === selected);
     });
   }
 

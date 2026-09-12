@@ -1,6 +1,7 @@
 import { sameAddressValue, type ParameterValues } from "@difracta/core";
 
 import { resolveParameters } from "./parameters.ts";
+import { pathTracker, type PathShapes } from "./path.ts";
 import { createRandom } from "./random.ts";
 import {
   MAX_FRAME_SECONDS,
@@ -10,12 +11,12 @@ import {
 
 /**
  * Runs one Visual instance on one canvas: creates it on the first frame,
- * detects Parameter changes, clamps time, and turns the instance's update
- * report into whether the canvas was redrawn or should be skipped. The
- * Output owns the canvas and calls `frame` once per animation frame.
+ * detects Parameter and Path changes, clamps time, and turns the instance's
+ * update report into whether the canvas was redrawn or should be skipped.
+ * The Output owns the canvas and calls `frame` once per animation frame.
  */
 export interface VisualPlayer {
-  frame(dt: number, values: ParameterValues): FrameResult;
+  frame(dt: number, values: ParameterValues, paths?: PathShapes): FrameResult;
   /** Delivers a fired Cue to the instance, once there is one. */
   cue(key: string): void;
   dispose(): void;
@@ -46,11 +47,16 @@ export function createVisualPlayer(
   let instance: VisualInstance<typeof visual.parameters> | undefined;
   let previous: ParameterValues | undefined;
   let needsRedraw = true;
+  const tracker = pathTracker();
+  let paths: ReturnType<typeof tracker.resolve>["paths"] = {};
   return {
-    frame(dt, values) {
+    frame(dt, values, shapes = {}) {
       const params = resolveParameters(visual.parameters, values);
+      const resolved = tracker.resolve(shapes, width, height);
+      paths = resolved.paths;
       const changed =
         previous === undefined ||
+        resolved.changed ||
         Object.keys(params).some(
           (name) => !sameAddressValue(params[name], previous?.[name]),
         );
@@ -59,12 +65,14 @@ export function createVisualPlayer(
         width,
         height,
         params,
+        paths,
         random: createRandom(seed),
       });
       const report =
         instance.update({
           dt: Math.min(MAX_FRAME_SECONDS, Math.max(0, dt)),
           params,
+          paths,
           width,
           height,
           changed,
@@ -78,7 +86,7 @@ export function createVisualPlayer(
       context.save();
       context.setTransform(1, 0, 0, 1, 0, 0);
       context.clearRect(0, 0, width, height);
-      instance.render({ context, width, height, params });
+      instance.render({ context, width, height, params, paths });
       context.restore();
       needsRedraw = false;
       return { rendered: true, blank: false };

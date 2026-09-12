@@ -25,7 +25,7 @@ const catalog = [
   visual("stars", "Drifting Stars", "Points of light.", { recommended: true }),
   visual("solid", "Solid Color", "One flat color.", { recommended: true }),
   visual("runner", "Path Runner", "A streak along a Path.", {
-    guides: [{ key: "track", kind: "path", label: "Track" }],
+    paths: [{ key: "track", label: "Track" }],
     cues: [{ key: "launch", label: "Launch" }],
   }),
   visual("grid", "Grid Pulse", "Cells lighting up.", {

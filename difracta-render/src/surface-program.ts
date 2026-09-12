@@ -82,8 +82,13 @@ export class SurfaceProgram {
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }
 
-  /** A closed line loop through `count` points held in `buffer`, unmasked. */
-  drawLoop(buffer: WebGLBuffer, count: number, color: Color): void {
+  /** A line through `count` points held in `buffer`, closed back to the first unless told otherwise, unmasked. */
+  drawLoop(
+    buffer: WebGLBuffer,
+    count: number,
+    color: Color,
+    closed = true,
+  ): void {
     const { gl, uniforms } = this;
     gl.uniform4f(uniforms.rect, ...WHOLE);
     gl.uniform1i(uniforms.mode, MODE.flat);
@@ -91,7 +96,7 @@ export class SurfaceProgram {
     gl.uniform4f(uniforms.color, ...color);
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    gl.drawArrays(gl.LINE_LOOP, 0, count);
+    gl.drawArrays(closed ? gl.LINE_LOOP : gl.LINE_STRIP, 0, count);
   }
 
   dispose(): void {

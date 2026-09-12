@@ -9,6 +9,7 @@ import {
   type LayerId,
   type MacroId,
   type MaskId,
+  type PathId,
   type SceneId,
   type OutputId,
   type SurfaceId,
@@ -143,12 +144,38 @@ export const MaskSchema = z
 export type Mask = Entity<typeof MaskSchema, MaskId>;
 export type MaskMode = Mask["mode"];
 
+export const PATH_POINTS = { min: 2, max: 16 } as const;
+
+/**
+ * A polyline in Surface Space a Visual follows: two to sixteen points,
+ * open or closed. Point order gives it a direction: Side A is the left of
+ * travel and Side B the right, and a Visual with a side to choose reads
+ * them that way. A Path lights nothing by itself; a Visual Layer binds one
+ * to each Path its Visual declares.
+ */
+export const PathSchema = z
+  .object({
+    id: z.string().min(1),
+    name: EntityName,
+    surfaceId: z.string().min(1),
+    points: z
+      .array(PointSchema)
+      .min(PATH_POINTS.min)
+      .max(PATH_POINTS.max)
+      .readonly(),
+    closed: z.boolean(),
+    /** Position among the Masks and Paths of the same Surface, which share one order. */
+    order: z.string().min(1).default(DEFAULT_ORDER_KEY),
+  })
+  .strict();
+export type Path = Entity<typeof PathSchema, PathId>;
+
 export const CALIBRATION_VIEWS = ["selected", "outlines", "patterns"] as const;
 export const CalibrationViewSchema = z.enum(CALIBRATION_VIEWS);
 export type CalibrationView = z.infer<typeof CalibrationViewSchema>;
 
 /**
- * Calibration Mode: one Surface (or one of its Masks) shown as a pattern on
+ * Calibration Mode: one Surface (or one of its Masks or Paths) shown as a pattern on
  * its Output instead of the dim fill. `owner` is the live session that
  * entered it, so the runtime can clear it when that session goes away.
  */
@@ -157,7 +184,9 @@ export const CalibrationSchema = z
     surfaceId: z.string().min(1),
     /** Mask being aligned, with its Masks applied; null aligns the quad. */
     maskId: z.string().min(1).nullable(),
-    /** Corner or Mask point highlighted on the Output. */
+    /** Path being aligned, with the Masks applied; exclusive with `maskId`. */
+    pathId: z.string().min(1).nullable(),
+    /** Corner, Mask point or Path point highlighted on the Output. */
     corner: CornerNameSchema.nullable(),
     point: z.number().int().min(0).nullable(),
     /** What the other Surfaces of the Output show meanwhile. */
@@ -215,6 +244,11 @@ export const LayerSchema = z.discriminatedUnion("kind", [
       parameters: ParameterValuesSchema.default({}),
       /** Surface the Layer renders into; null renders nowhere. */
       target: z.string().min(1).nullable(),
+      /**
+       * The Path bound to each Path the Visual declares, by its key. A key
+       * left unbound keeps the Layer from rendering until a Path is picked.
+       */
+      paths: z.record(z.string().min(1), z.string().min(1)).default({}),
       opacity: z.number().min(0).max(1),
       blendMode: BlendModeSchema,
     })
@@ -382,6 +416,7 @@ export const DocumentSchema = z
     outputs: z.record(z.string(), OutputSchema),
     surfaces: z.record(z.string(), SurfaceSchema),
     masks: z.record(z.string(), MaskSchema),
+    paths: z.record(z.string(), PathSchema),
     scenes: z.record(z.string(), SceneSchema),
     layers: z.record(z.string(), LayerSchema),
     controllers: z.record(z.string(), ControllerSchema),
@@ -396,6 +431,7 @@ export interface Document {
   readonly outputs: Table<Output>;
   readonly surfaces: Table<Surface>;
   readonly masks: Table<Mask>;
+  readonly paths: Table<Path>;
   readonly scenes: Table<Scene>;
   readonly layers: Table<Layer>;
   readonly controllers: Table<Controller>;
@@ -409,6 +445,7 @@ export const TABLE_SCHEMAS = {
   outputs: OutputSchema,
   surfaces: SurfaceSchema,
   masks: MaskSchema,
+  paths: PathSchema,
   scenes: SceneSchema,
   layers: LayerSchema,
   controllers: ControllerSchema,
@@ -422,6 +459,7 @@ export const ORDERED_TABLES = [
   "outputs",
   "surfaces",
   "masks",
+  "paths",
   "scenes",
   "layers",
   "controllers",
@@ -437,6 +475,7 @@ export const PARENT_FIELDS: Partial<
   Record<OrderedTableName, readonly string[]>
 > = {
   masks: ["surfaceId"],
+  paths: ["surfaceId"],
   layers: ["sceneId", "parentId"],
   controllers: ["parentId"],
   macros: ["parentId"],
@@ -472,6 +511,7 @@ export function emptyDocument(name: string): Document {
     outputs: {},
     surfaces: {},
     masks: {},
+    paths: {},
     scenes: {},
     layers: {},
     controllers: {},

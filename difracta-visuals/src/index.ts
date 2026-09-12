@@ -6,7 +6,9 @@ import { tileScramble } from "./filters/tile-scramble.ts";
 import { beamWeb } from "./visuals/beam-web.ts";
 import { blink } from "./visuals/blink.ts";
 import { bubbles } from "./visuals/bubbles.ts";
+import { frameElectric } from "./visuals/frame-electric.ts";
 import { koiPond } from "./visuals/koi-pond.ts";
+import { lightningStrikes } from "./visuals/lightning-strikes.ts";
 import { solidColor } from "./visuals/solid-color.ts";
 import { strobe } from "./visuals/strobe.ts";
 import { thunder } from "./visuals/thunder.ts";
@@ -16,7 +18,17 @@ import { thunder } from "./visuals/thunder.ts";
  * each. Add a definition by importing it here.
  */
 export const builtInCatalog = new Catalog({
-  visuals: [solidColor, koiPond, bubbles, blink, strobe, thunder, beamWeb],
+  visuals: [
+    solidColor,
+    koiPond,
+    bubbles,
+    blink,
+    strobe,
+    thunder,
+    beamWeb,
+    lightningStrikes,
+    frameElectric,
+  ],
   filters: [tileScramble, impactShake, signalDistortion],
 });
 

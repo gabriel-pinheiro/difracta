@@ -2,6 +2,11 @@ import type { ParameterDefinition, ParameterValues } from "@difracta/core";
 
 import { parameterDeclarations, uniformName } from "./filter-shaders.ts";
 import { compileProgram, setUniform, uniform } from "./gl.ts";
+import {
+  pathDeclarations,
+  pathUniformPoints,
+  type PathShapes,
+} from "./sdk/path.ts";
 import type { ShaderVisual } from "./sdk/shader-visual.ts";
 import type { Uniforms } from "./sdk/uniforms.ts";
 import { VERTEX_SOURCE } from "./shaders.ts";
@@ -12,6 +17,8 @@ export interface ShaderDrawInput {
   /** The Layer's values completed with the schema defaults. */
   readonly params: ParameterValues;
   readonly uniforms: Uniforms;
+  /** The Paths the Visual declares, by key, in Surface Space. */
+  readonly paths: PathShapes;
   /** The Surface's size in frame pixels, what `u_resolution` reports. */
   readonly width: number;
   readonly height: number;
@@ -62,7 +69,7 @@ void main() {
 `;
 
 export function visualFragmentSource(visual: ShaderVisual): string {
-  return `${PRELUDE}${parameterDeclarations(visual.parameters)}\n${visual.fragment}\n${MAIN}`;
+  return `${PRELUDE}${parameterDeclarations(visual.parameters)}\n${pathDeclarations(visual.paths)}\n${visual.fragment}\n${MAIN}`;
 }
 
 /**
@@ -97,6 +104,8 @@ export class ShaderVisualPrograms {
     gl.uniform2f(entry.texel, 1 / input.width, 1 / input.height);
     for (const [name, definition] of Object.entries(input.visual.parameters))
       this.#setParameter(entry, name, definition, input.params[name]);
+    for (const { key } of input.visual.paths ?? [])
+      this.#setPath(entry, key, input.paths[key]);
     for (const [name, value] of Object.entries(input.uniforms)) {
       const location = this.#location(entry, name);
       if (location !== null) setUniform(gl, location, value);
@@ -150,6 +159,24 @@ export class ShaderVisualPrograms {
     );
     entry.locations.set(name, location);
     return location;
+  }
+
+  #setPath(
+    entry: ProgramEntry,
+    key: string,
+    shape: PathShapes[string] | undefined,
+  ): void {
+    const gl = this.#gl;
+    const points = this.#location(entry, `path_${key}_points`);
+    const count = this.#location(entry, `path_${key}_count`);
+    const closed = this.#location(entry, `path_${key}_closed`);
+    if (points !== null)
+      gl.uniform2fv(
+        points,
+        pathUniformPoints(shape ?? { points: [], closed: false }),
+      );
+    if (count !== null) gl.uniform1i(count, shape?.points.length ?? 0);
+    if (closed !== null) gl.uniform1i(closed, shape?.closed === true ? 1 : 0);
   }
 
   #setParameter(

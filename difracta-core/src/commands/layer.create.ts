@@ -64,6 +64,7 @@ export const layerCreate = defineCommand({
             visual: null,
             parameters: {},
             target: null,
+            paths: {},
             opacity: 1,
             blendMode: "normal",
           }

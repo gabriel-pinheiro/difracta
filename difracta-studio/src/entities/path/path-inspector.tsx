@@ -1,7 +1,8 @@
 import type { DocumentView } from "@difracta/client";
 import {
-  MASK_POINTS,
+  PATH_POINTS,
   type Mask,
+  type Path,
   type Surface,
   type Table,
 } from "@difracta/core";
@@ -12,8 +13,6 @@ import { Button } from "@/components/ui/button";
 import { CalibrationControls } from "@/inspector/fields/calibration-controls";
 import { InspectorHeading } from "@/inspector/fields/inspector-heading";
 import { NameField } from "@/inspector/fields/name-field";
-import { NumberField } from "@/inspector/fields/number-field";
-import { fromPercent, toPercent } from "@/inspector/fields/points";
 import {
   nudgeKeyHandler,
   PolygonEditor,
@@ -24,14 +23,20 @@ import { useCommand, useDocumentPath } from "@/lib/client";
 import { cn } from "@/lib/utils";
 import { useSelection } from "@/selection/selection";
 
-import { quadPoints } from "@/entities/surface/quad-editor";
+import { surfaceAspect } from "@/entities/mask/mask-inspector";
 
-const modes = [
-  { value: "include", label: "Include: only its area is lit" },
-  { value: "exclude", label: "Exclude: its area is never lit" },
+const shapes = [
+  { value: "closed", label: "Closed: the last point joins the first" },
+  { value: "open", label: "Open: a line from the first point to the last" },
 ] as const;
 
-export function MaskInspector({
+/**
+ * A Path's name, whether it closes, and its points in the same editor a
+ * Mask uses, with the Surface's Masks and other Paths dashed for context.
+ * Points are numbered in travel order, which is what gives the Path its
+ * sides.
+ */
+export function PathInspector({
   view,
   id,
 }: {
@@ -40,77 +45,71 @@ export function MaskInspector({
 }) {
   const command = useCommand(view);
   const { select } = useSelection();
-  const mask = useDocumentPath<Mask>(view, ["masks", id]);
+  const path = useDocumentPath<Path>(view, ["paths", id]);
   const surfaces = useDocumentPath<Table<Surface>>(view, ["surfaces"]) ?? {};
   const masks = useDocumentPath<Table<Mask>>(view, ["masks"]) ?? {};
+  const paths = useDocumentPath<Table<Path>>(view, ["paths"]) ?? {};
   const { calibration } = useCalibration(view);
-  // Open on the point the Output already highlights, if it does.
   const [selected, setSelected] = useState(
-    () => calibrationFor(calibration, mask?.surfaceId ?? "", id)?.point ?? 0,
+    () =>
+      calibrationFor(calibration, path?.surfaceId ?? "", null, id)?.point ?? 0,
   );
 
   useEffect(() => {
-    if (mask === undefined) select({ kind: "installation" });
-  }, [mask, select]);
-  if (mask === undefined) return null;
-  const surface = surfaces[mask.surfaceId];
-  const point = Math.min(selected, mask.points.length - 1);
-  const siblings = Object.values(masks).flatMap((other) =>
-    other.surfaceId === mask.surfaceId && other.id !== mask.id
-      ? [{ name: other.name, points: other.points }]
-      : [],
-  );
+    if (path === undefined) select({ kind: "installation" });
+  }, [path, select]);
+  if (path === undefined) return null;
+  const surface = surfaces[path.surfaceId];
+  const point = Math.min(selected, path.points.length - 1);
+  const outlines = [
+    ...Object.values(masks).filter((mask) => mask.surfaceId === path.surfaceId),
+    ...Object.values(paths).filter(
+      (other) => other.surfaceId === path.surfaceId && other.id !== path.id,
+    ),
+  ].map((shape) => ({ name: shape.name, points: shape.points }));
   const nudge = (index: number, by: { x: number; y: number }): void =>
-    void command("mask.point.nudge", { maskId: id, index, by });
+    void command("path.point.nudge", { pathId: id, index, by });
 
   return (
     <>
-      <InspectorHeading name={mask.name} id={mask.id} />
+      <InspectorHeading name={path.name} id={path.id} />
       <div className="grid gap-4 p-3">
         <NameField
           label="Name"
-          value={mask.name}
-          onCommit={(name) => void command("mask.rename", { maskId: id, name })}
+          value={path.name}
+          onCommit={(name) => void command("path.rename", { pathId: id, name })}
         />
         <SelectField
-          label="Mode"
-          value={mask.mode}
-          options={modes}
-          onValueChange={(mode) =>
-            void command("mask.update", { maskId: id, mode })
-          }
-        />
-        <NumberField
-          label="Feather"
-          unit="%"
-          step={0.1}
-          value={toPercent(mask.feather)}
-          onCommit={(value) =>
-            void command("mask.update", {
-              maskId: id,
-              feather: Math.min(1, Math.max(0, fromPercent(value))),
+          label="Shape"
+          value={path.closed ? "closed" : "open"}
+          options={shapes}
+          onValueChange={(shape) =>
+            void command("path.update", {
+              pathId: id,
+              closed: shape === "closed",
             })
           }
         />
         <div className="grid gap-1">
           <span className="text-xs text-muted-foreground">
-            Points, in {surface?.name ?? "the Surface"}
+            Points, in {surface?.name ?? "the Surface"}, in travel order
           </span>
           <PolygonEditor
-            points={mask.points}
-            names={mask.points.map((_, index) => String(index + 1))}
-            outlines={siblings}
+            points={path.points}
+            names={path.points.map((_, index) => String(index + 1))}
+            outlines={outlines}
             aspect={surfaceAspect(surface)}
             selected={point}
             onSelect={setSelected}
             onSet={(index, next) =>
-              command("mask.point.set", { maskId: id, index, point: next })
+              command("path.point.set", { pathId: id, index, point: next })
             }
             onNudge={nudge}
-            spaceLabel="Mask points in Surface Space"
+            spaceLabel="Path points in Surface Space"
+            closed={path.closed}
           />
           <div className="mt-2 flex flex-wrap gap-1" role="radiogroup">
-            {mask.points.map((_, index) => (
+            {path.points.map((_, index) => (
               <button
                 key={index}
                 type="button"
@@ -135,10 +134,14 @@ export function MaskInspector({
             <Button
               variant="outline"
               size="sm"
-              disabled={mask.points.length >= MASK_POINTS.max}
-              title="Insert a point halfway to the next one"
+              disabled={path.points.length >= PATH_POINTS.max}
+              title={
+                !path.closed && point === path.points.length - 1
+                  ? "Continue the line past the last point"
+                  : "Insert a point halfway to the next one"
+              }
               onClick={() =>
-                void command("mask.point.add", { maskId: id, after: point })
+                void command("path.point.add", { pathId: id, after: point })
               }
             >
               <Plus data-icon="inline-start" /> Add point
@@ -146,9 +149,9 @@ export function MaskInspector({
             <Button
               variant="outline"
               size="sm"
-              disabled={mask.points.length <= MASK_POINTS.min}
+              disabled={path.points.length <= PATH_POINTS.min}
               onClick={() =>
-                void command("mask.point.remove", { maskId: id, index: point })
+                void command("path.point.remove", { pathId: id, index: point })
               }
             >
               <Minus data-icon="inline-start" /> Remove point
@@ -157,8 +160,9 @@ export function MaskInspector({
         </div>
         <CalibrationControls
           view={view}
-          surfaceId={mask.surfaceId}
-          maskId={mask.id}
+          surfaceId={path.surfaceId}
+          maskId={null}
+          pathId={path.id}
           corner={null}
           point={point}
           disabled={surface?.output == null}
@@ -166,24 +170,4 @@ export function MaskInspector({
       </div>
     </>
   );
-}
-
-/**
- * Surface Space has no aspect of its own; the enabled mapping's bounding box
- * gives the preview a shape close to what the projector shows, within limits:
- * a Surface that is a thin band in the frame (a ceiling seen at an angle)
- * still needs an editor tall enough to place points in.
- */
-export function surfaceAspect(surface: Surface | undefined): number {
-  const mapping =
-    surface?.output === null || surface === undefined
-      ? undefined
-      : surface.mappings[surface.output];
-  if (mapping === undefined) return 1;
-  const xs = quadPoints(mapping.corners).map((point) => point.x);
-  const ys = quadPoints(mapping.corners).map((point) => point.y);
-  const width = Math.max(...xs) - Math.min(...xs);
-  const height = Math.max(...ys) - Math.min(...ys);
-  if (width <= 0 || height <= 0) return 1;
-  return Math.min(2, Math.max(0.5, (width / height) * (16 / 9)));
 }

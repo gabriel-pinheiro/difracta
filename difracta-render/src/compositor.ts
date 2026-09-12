@@ -148,6 +148,7 @@ class WebGLCompositor implements Compositor {
     const plan = planFrame(
       effectiveDocument(document, this.#catalog),
       outputId,
+      this.#catalog,
     );
     const step = resources.players.step(plan.layers, dt, width, height);
     const chain = resources.filters.step(plan.filters, dt, width, height);
@@ -304,6 +305,7 @@ class WebGLCompositor implements Compositor {
       visual: frame.visual,
       params: frame.params,
       uniforms: frame.uniforms,
+      paths: frame.draw.paths,
       width: frame.width,
       height: frame.height,
       opacity: layer.opacity,

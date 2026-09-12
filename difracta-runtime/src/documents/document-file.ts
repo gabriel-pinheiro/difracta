@@ -30,6 +30,7 @@ const DocumentFileSchema = z
     /** Absent in files written before Surfaces existed. */
     surfaces: DocumentSchema.shape.surfaces.default({}),
     masks: DocumentSchema.shape.masks.default({}),
+    paths: DocumentSchema.shape.paths.default({}),
     scenes: DocumentSchema.shape.scenes.default({}),
     layers: DocumentSchema.shape.layers.default({}),
     controllers: DocumentSchema.shape.controllers.default({}),
@@ -56,6 +57,7 @@ export function serializeDocument(document: Document): string {
     outputs: document.outputs,
     surfaces: document.surfaces,
     masks: document.masks,
+    paths: document.paths,
     scenes: document.scenes,
     layers: document.layers,
     controllers: document.controllers,
@@ -92,6 +94,7 @@ export function parseDocumentFile(text: string): ParsedDocumentFile {
       outputs: parsed.data.outputs as Document["outputs"],
       surfaces: parsed.data.surfaces as Document["surfaces"],
       masks: parsed.data.masks as Document["masks"],
+      paths: parsed.data.paths as Document["paths"],
       scenes: parsed.data.scenes as Document["scenes"],
       layers: parsed.data.layers as Document["layers"],
       controllers: parsed.data.controllers as Document["controllers"],

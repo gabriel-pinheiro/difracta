@@ -17,10 +17,9 @@ export interface CueDefinition {
   readonly description?: string;
 }
 
-/** A geometric input a Visual needs bound before it can render. */
-export interface GuideRequirement {
+/** A Path a Visual needs bound before it can render, by the key its code reads it under. */
+export interface PathRequirement {
   readonly key: string;
-  readonly kind: "path";
   readonly label: string;
   readonly description?: string;
 }
@@ -46,7 +45,7 @@ interface DefinitionBase {
 
 export interface VisualDefinition extends DefinitionBase {
   readonly kind: "visual";
-  readonly guides?: readonly GuideRequirement[];
+  readonly paths?: readonly PathRequirement[];
 }
 
 export interface FilterDefinition extends DefinitionBase {
@@ -56,7 +55,7 @@ export interface FilterDefinition extends DefinitionBase {
 export type Definition = VisualDefinition | FilterDefinition;
 
 export function usesPath(definition: Definition): boolean {
-  return definition.kind === "visual" && (definition.guides?.length ?? 0) > 0;
+  return definition.kind === "visual" && (definition.paths?.length ?? 0) > 0;
 }
 
 export function hasCues(definition: Definition): boolean {

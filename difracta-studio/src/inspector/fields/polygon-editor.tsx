@@ -35,6 +35,7 @@ export function PolygonEditor({
   onSet,
   onNudge,
   spaceLabel,
+  closed = true,
 }: {
   readonly points: readonly Point[];
   readonly names: readonly string[];
@@ -47,6 +48,8 @@ export function PolygonEditor({
   readonly onSet: (index: number, point: Point) => Promise<unknown>;
   readonly onNudge: (index: number, by: Point) => void;
   readonly spaceLabel: string;
+  /** False draws the shape as a line from the first point to the last, unfilled. */
+  readonly closed?: boolean;
 }) {
   const [dragging, setDragging] = useState<
     { index: number; point: Point } | undefined
@@ -118,11 +121,19 @@ export function PolygonEditor({
             <title>{outline.name}</title>
           </polygon>
         ))}
-        <polygon
-          points={polygon(shown)}
-          className="fill-selection/15 stroke-selection"
-          vectorEffect="non-scaling-stroke"
-        />
+        {closed ? (
+          <polygon
+            points={polygon(shown)}
+            className="fill-selection/15 stroke-selection"
+            vectorEffect="non-scaling-stroke"
+          />
+        ) : (
+          <polyline
+            points={polygon(shown)}
+            className="fill-none stroke-selection"
+            vectorEffect="non-scaling-stroke"
+          />
+        )}
         {shown.map((point, index) => {
           const { x, y } = toSpace(point);
           const name = names[index] ?? String(index + 1);

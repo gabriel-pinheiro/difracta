@@ -24,6 +24,7 @@ function harness(visual: CanvasVisual, positionMethod: string) {
     width: WIDTH,
     height: HEIGHT,
     params,
+    paths: {},
     random: createRandom("test"),
   });
   const step = (
@@ -39,6 +40,7 @@ function harness(visual: CanvasVisual, positionMethod: string) {
       instance.update({
         dt,
         params,
+        paths: {},
         width: WIDTH,
         height: HEIGHT,
         changed: i === 0,
@@ -51,6 +53,7 @@ function harness(visual: CanvasVisual, positionMethod: string) {
       width: WIDTH,
       height: HEIGHT,
       params,
+      paths: {},
     });
     return recording
       .callsTo(positionMethod)

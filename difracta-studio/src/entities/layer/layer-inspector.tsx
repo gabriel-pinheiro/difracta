@@ -6,15 +6,18 @@ import {
   linkAt,
   linkable,
   orderedEntries,
+  pathsOf,
   sameAddressValue,
   type AddressValue,
   type Controller,
   type Layer,
   type Link,
+  type Path,
   type ResolvedAddress,
   type Surface,
   type Table,
 } from "@difracta/core";
+import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -32,7 +35,10 @@ import { InspectorSection } from "@/inspector/fields/inspector-section";
 import { NameField } from "@/inspector/fields/name-field";
 import { catalog, definitionOf } from "@/lib/catalog";
 import { useCommand, useDocumentPath } from "@/lib/client";
+import { useExpansion } from "@/navigator/expansion";
 import { useSelection } from "@/selection/selection";
+
+import { generatePathId } from "@/entities/surface/child-rows";
 
 import { DefinitionBlock } from "./definition-block";
 
@@ -50,7 +56,8 @@ function valueAt(layer: Layer, resolved: ResolvedAddress): AddressValue {
  * third. Every row is one Address, so opacity and a Visual's Parameter are
  * edited through the same command and a Cue fires through the same Address
  * a Macro or OSC would. A row a Controller drives shows the Controller
- * instead of a control; the row menu links and unlinks.
+ * instead of a control; the row menu links and unlinks. A Visual that
+ * follows Paths gets one row per Path it declares, below the Target.
  */
 export function LayerInspector({
   view,
@@ -61,8 +68,10 @@ export function LayerInspector({
 }) {
   const command = useCommand(view);
   const { select } = useSelection();
+  const { setExpanded } = useExpansion();
   const layer = useDocumentPath<Layer>(view, ["layers", id]);
   const surfaces = useDocumentPath<Table<Surface>>(view, ["surfaces"]) ?? {};
+  const paths = useDocumentPath<Table<Path>>(view, ["paths"]) ?? {};
   const links = useDocumentPath<Table<Link>>(view, ["links"]) ?? {};
   const controllers =
     useDocumentPath<Table<Controller>>(view, ["controllers"]) ?? {};
@@ -131,6 +140,102 @@ export function LayerInspector({
       links={rowLinks(resolved)}
     />
   );
+  const pathRows =
+    layer.kind !== "visual" || definition?.kind !== "visual"
+      ? []
+      : (definition.paths ?? []).map((requirement) => {
+          const target = layer.target;
+          const candidates =
+            target === null ? [] : pathsOf({ masks: {}, paths }, target);
+          const bound = layer.paths[requirement.key];
+          const value =
+            bound !== undefined &&
+            candidates.some((candidate) => candidate.id === bound)
+              ? bound
+              : null;
+          const createPath = (): void => {
+            if (target === null) return;
+            const pathId = generatePathId();
+            void command("path.create", {
+              id: pathId,
+              surfaceId: target,
+              name: `${layer.name} ${requirement.label}`,
+            })
+              .then(() =>
+                command("layer.path", {
+                  layerId: id,
+                  key: requirement.key,
+                  pathId,
+                }),
+              )
+              .then(() => {
+                setExpanded("surface", target, true);
+                select({ kind: "path", id: pathId });
+              });
+          };
+          return (
+            <FieldRow key={`path:${requirement.key}`} label={requirement.label}>
+              <div className="flex w-full min-w-0 items-center gap-1">
+                <Select
+                  value={value}
+                  items={[
+                    { value: null, label: "None" },
+                    ...candidates.map((candidate) => ({
+                      value: candidate.id,
+                      label: candidate.name,
+                    })),
+                  ]}
+                  onValueChange={(pathId: string | null) =>
+                    void command("layer.path", {
+                      layerId: id,
+                      key: requirement.key,
+                      pathId,
+                    })
+                  }
+                >
+                  <SelectTrigger
+                    aria-label={`${requirement.label} Path`}
+                    className="min-w-0 flex-1"
+                    title={
+                      target === null
+                        ? "Pick a Target first"
+                        : value === null
+                          ? `Needs a Path on the Target: ${requirement.description ?? "the Visual follows it"}`
+                          : requirement.description
+                    }
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={null}>
+                      {target === null
+                        ? "No Target"
+                        : candidates.length === 0
+                          ? "No Path on the Target"
+                          : "None"}
+                    </SelectItem>
+                    {candidates.map((candidate) => (
+                      <SelectItem key={candidate.id} value={candidate.id}>
+                        {candidate.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="size-7 shrink-0"
+                  disabled={target === null}
+                  title="New Path on the Target, bound here"
+                  aria-label={`New ${requirement.label} Path`}
+                  onClick={createPath}
+                >
+                  <Plus />
+                </Button>
+              </div>
+            </FieldRow>
+          );
+        });
   const allDefault = parameters.every(
     (entry) =>
       linkAt({ links }, entry.address) !== undefined ||
@@ -181,6 +286,7 @@ export function LayerInspector({
                     </SelectContent>
                   </Select>
                 </FieldRow>,
+                ...pathRows,
                 row(resolved),
               ]
             : [row(resolved)],

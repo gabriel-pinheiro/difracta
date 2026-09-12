@@ -368,11 +368,11 @@ function describeDefinition(definition: Definition): string {
         `  ${cue.key.padEnd(12)} ${cue.label}${cue.description === undefined ? "" : `  ${cue.description}`}`,
       );
   }
-  if (definition.kind === "visual" && definition.guides !== undefined) {
-    lines.push("", "Guides");
-    for (const guide of definition.guides)
+  if (definition.kind === "visual" && definition.paths !== undefined) {
+    lines.push("", "Paths (bind with layer.path)");
+    for (const path of definition.paths)
       lines.push(
-        `  ${guide.key.padEnd(12)} ${guide.kind} ${guide.label}${guide.description === undefined ? "" : `  ${guide.description}`}`,
+        `  ${path.key.padEnd(12)} ${path.label}${path.description === undefined ? "" : `  ${path.description}`}`,
       );
   }
   return lines.join("\n");

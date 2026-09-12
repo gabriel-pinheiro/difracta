@@ -5,10 +5,11 @@ import { siblingsOf, tableEntries, type Mask } from "../document/document.ts";
 import { insetPolygon } from "../document/geometry.ts";
 import { uniqueName } from "../document/names.ts";
 import { appendOrderKey } from "../document/order.ts";
+import { surfaceChildren } from "../document/paths.ts";
 import { generateId, id } from "../ids.ts";
 import { settings } from "../settings.ts";
 
-/** A new Mask is an include rectangle inset from the Surface's edges, with no feather. */
+/** A new Mask is an include rectangle inset from the Surface's edges, with no feather, after the Surface's other children. */
 export const maskCreate = defineCommand({
   name: "mask.create",
   kind: "authoring",
@@ -39,7 +40,14 @@ export const maskCreate = defineCommand({
       mode: "include",
       points: insetPolygon(settings.masks.defaultInset),
       feather: 0,
-      order: appendOrderKey(siblings),
+      order: appendOrderKey(
+        Object.fromEntries(
+          surfaceChildren(document, payload.surfaceId).map((child) => [
+            child.entity.id,
+            child.entity,
+          ]),
+        ),
+      ),
     };
     return accepted([{ op: "set", path: ["masks", maskId], value: mask }]);
   },

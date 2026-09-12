@@ -1,6 +1,7 @@
 import { sameAddressValue, type ParameterValues } from "@difracta/core";
 
 import { resolveParameters } from "./parameters.ts";
+import { pathTracker, type PathShapes } from "./path.ts";
 import { createRandom } from "./random.ts";
 import type { ShaderVisual, ShaderVisualInstance } from "./shader-visual.ts";
 import type { Uniforms } from "./uniforms.ts";
@@ -8,9 +9,10 @@ import { MAX_FRAME_SECONDS } from "./visual.ts";
 
 /**
  * Runs one shader Visual instance: creates it on the first frame, detects
- * Parameter changes, clamps time, carries uniforms across frames and
- * delivers Cues. No GPU is involved, so a shader Visual's behaviour is
- * tested frame by frame like a canvas Visual's.
+ * Parameter and Path changes, clamps time, carries uniforms across frames
+ * and delivers Cues. No GPU is involved, so a shader Visual's behaviour is
+ * tested frame by frame like a canvas Visual's. A Visual without `create`
+ * still reports a Path edit as a change, since its fragment reads the Path.
  */
 export interface ShaderPlayer {
   frame(
@@ -18,6 +20,7 @@ export interface ShaderPlayer {
     values: ParameterValues,
     width: number,
     height: number,
+    paths?: PathShapes,
   ): ShaderFrameResult;
   cue(key: string): void;
   dispose(): void;
@@ -49,30 +52,36 @@ export function createShaderPlayer(
   let previous: ParameterValues | undefined;
   let uniforms = NO_UNIFORMS;
   let wasBlank: boolean | undefined;
-  const create = (values: ParameterValues) => {
-    instance ??= visual.create?.({
-      width,
-      height,
-      params: resolveParameters(visual.parameters, values),
-      random: createRandom(seed),
-    });
-    return instance;
-  };
+  const tracker = pathTracker();
   return {
-    frame(dt, values, frameWidth, frameHeight) {
+    frame(dt, values, frameWidth, frameHeight, shapes = {}) {
       const params = resolveParameters(visual.parameters, values);
+      const { paths, changed: pathsChanged } = tracker.resolve(
+        shapes,
+        frameWidth,
+        frameHeight,
+      );
       const changed =
         previous === undefined ||
+        pathsChanged ||
         Object.keys(params).some(
           (name) => !sameAddressValue(params[name], previous?.[name]),
         );
       previous = params;
-      const current = create(values);
+      instance ??= visual.create?.({
+        width,
+        height,
+        params,
+        paths,
+        random: createRandom(seed),
+      });
+      const current = instance;
       if (current === undefined) return { blank: false, changed, uniforms };
       const report =
         current.update({
           dt: Math.min(MAX_FRAME_SECONDS, Math.max(0, dt)),
           params,
+          paths,
           width: frameWidth,
           height: frameHeight,
           changed,

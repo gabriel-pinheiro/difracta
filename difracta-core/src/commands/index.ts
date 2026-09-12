@@ -17,6 +17,7 @@ import { layerDuplicate } from "./layer.duplicate.ts";
 import { layerGroup, layerUngroup } from "./layer.group.ts";
 import { layerFilter, layerVisual } from "./layer.pick.ts";
 import { layerMove } from "./layer.move.ts";
+import { layerPath } from "./layer.path.ts";
 import { layerRemove } from "./layer.remove.ts";
 import { layerRename } from "./layer.rename.ts";
 import { layerReset } from "./layer.reset.ts";
@@ -46,6 +47,16 @@ import { maskRemove } from "./mask.remove.ts";
 import { maskRename } from "./mask.rename.ts";
 import { maskUpdate } from "./mask.update.ts";
 import { outputCreate } from "./output.create.ts";
+import { pathCreate } from "./path.create.ts";
+import {
+  pathPointAdd,
+  pathPointNudge,
+  pathPointRemove,
+  pathPointSet,
+} from "./path.point.ts";
+import { pathRemove } from "./path.remove.ts";
+import { pathRename } from "./path.rename.ts";
+import { pathUpdate } from "./path.update.ts";
 import { outputRemove } from "./output.remove.ts";
 import { outputRename } from "./output.rename.ts";
 import { outputUpdate } from "./output.update.ts";
@@ -83,6 +94,14 @@ export const builtInCommands: readonly CommandDefinition<never>[] = [
   maskPointAdd,
   maskPointRemove,
   maskRemove,
+  pathCreate,
+  pathRename,
+  pathUpdate,
+  pathPointSet,
+  pathPointNudge,
+  pathPointAdd,
+  pathPointRemove,
+  pathRemove,
   sceneCreate,
   sceneRename,
   sceneDuplicate,
@@ -95,6 +114,7 @@ export const builtInCommands: readonly CommandDefinition<never>[] = [
   layerFilter,
   layerReset,
   layerMove,
+  layerPath,
   layerDuplicate,
   layerGroup,
   layerUngroup,

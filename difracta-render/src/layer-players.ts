@@ -124,7 +124,11 @@ export class LayerPlayers {
           size(draw.surface.renderScale),
         );
         counter.running += 1;
-        const result = entry.player.frame(dt, draw.layer.parameters);
+        const result = entry.player.frame(
+          dt,
+          draw.layer.parameters,
+          draw.paths,
+        );
         if (result.rendered) {
           this.#upload(entry);
           counter.rendered += 1;
@@ -144,6 +148,7 @@ export class LayerPlayers {
           draw.layer.parameters,
           width,
           height,
+          draw.paths,
         );
         if (result.changed) changed = true;
         if (result.blank) return;

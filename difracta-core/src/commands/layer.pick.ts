@@ -22,6 +22,7 @@ import type { FilterLayer, VisualLayer } from "../document/document.ts";
 import { childLayers, LAYER_LABELS } from "../document/layers.ts";
 import { uniqueName } from "../document/names.ts";
 import { applyPatches, type Patch } from "../document/patch.ts";
+import { fitPaths } from "../document/paths.ts";
 
 /**
  * Picking what a Layer is made of: `layer.visual` sets a Visual Layer's
@@ -33,7 +34,8 @@ import { applyPatches, type Patch } from "../document/patch.ts";
  * A Layer still called by its generated name, or by the name of what it
  * held before, takes the new definition's name, and the generated name again
  * when left with nothing; a name the user typed stays. Links to Parameters
- * the new definition lacks, or of another type, go; the rest stay wired.
+ * the new definition lacks, or of another type, go; the rest stay wired,
+ * and so do Path bindings under keys the new Visual declares.
  */
 const PickPayload = z
   .object({
@@ -74,6 +76,21 @@ function pick(
     { op: "set", path: ["layers", layer.id, field], value: nextId },
     { op: "set", path: ["layers", layer.id, "parameters"], value: parameters },
   ];
+  if (layer.kind === "visual") {
+    const paths = fitPaths(
+      document,
+      catalog,
+      nextId,
+      layer.target,
+      layer.paths,
+    );
+    if (Object.keys(paths).length !== Object.keys(layer.paths).length)
+      patches.push({
+        op: "set",
+        path: ["layers", layer.id, "paths"],
+        value: paths,
+      });
+  }
   for (const link of linksOfLayer(document.links, layer.id)) {
     const [, , kind, name] = link.address.split("/");
     if (kind !== "param") continue;

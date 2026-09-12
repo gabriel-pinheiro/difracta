@@ -10,7 +10,7 @@ import type { Quad } from "@difracta/core";
  * Why a homography and not a mesh: four corners fully determine a projective
  * transform, the GPU interpolates it perspective-correctly for free when the
  * quad is drawn with its clip-space w set to that third component, and every
- * later shape (Regions, Masks, Guides) inherits the same mapping by living
+ * later shape (Masks, Paths) inherits the same mapping by living
  * in Surface Space.
  */
 export function homography(corners: Quad): Float32Array | undefined {

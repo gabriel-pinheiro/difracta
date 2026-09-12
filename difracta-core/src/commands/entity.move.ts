@@ -4,6 +4,7 @@ import { accepted, defineCommand, rejected } from "../command/command.ts";
 import {
   ORDERED_TABLES,
   siblingsOf,
+  type Document,
   type OrderedTableName,
 } from "../document/document.ts";
 import {
@@ -12,16 +13,41 @@ import {
   type Ordered,
 } from "../document/order.ts";
 import type { Patch } from "../document/patch.ts";
+import { surfaceChildren } from "../document/paths.ts";
 
 const labels: Record<OrderedTableName, string> = {
   outputs: "Output",
   surfaces: "Surface",
   masks: "Mask",
+  paths: "Path",
   scenes: "Scene",
   layers: "Layer",
   controllers: "Controller",
   macros: "Macro",
 };
+
+/** Every ordered entity of the table `moving` sits in, with the table each patch goes to. */
+function siblingTable(
+  document: Document,
+  tableName: OrderedTableName,
+  moving: Ordered & { readonly surfaceId?: string },
+): Readonly<Record<string, Ordered & { readonly table: OrderedTableName }>> {
+  // Masks and Paths of one Surface share an order, so either moves among both.
+  if (tableName === "masks" || tableName === "paths")
+    return Object.fromEntries(
+      surfaceChildren(document, moving.surfaceId ?? "").map((child) => [
+        child.entity.id,
+        { id: child.entity.id, order: child.entity.order, table: child.table },
+      ]),
+    );
+  const whole: Readonly<Record<string, Ordered>> = document[tableName];
+  return Object.fromEntries(
+    Object.entries(siblingsOf(tableName, whole, moving)).map(([id, entity]) => [
+      id,
+      { id, order: entity.order, table: tableName },
+    ]),
+  );
+}
 
 /** Places an entity right after a sibling (or first) among its siblings: its table, or its parent's children. */
 export const entityMove = defineCommand({
@@ -48,7 +74,7 @@ export const entityMove = defineCommand({
       );
     if (payload.after === payload.id)
       return rejected("An entity cannot be placed after itself.");
-    const table = siblingsOf(payload.table, whole, moving);
+    const table = siblingTable(document, payload.table, moving);
     if (payload.after !== null && !(payload.after in table))
       return rejected(
         `${labels[payload.table]} “${payload.after}” is not a sibling of “${payload.id}”.`,
@@ -59,7 +85,7 @@ export const entityMove = defineCommand({
     const changes = orderKeysForMove(siblings, moving, payload.after);
     const patches: Patch[] = [...changes].map(([id, order]) => ({
       op: "set",
-      path: [payload.table, id, "order"],
+      path: [table[id]?.table ?? payload.table, id, "order"],
       value: order,
     }));
     return accepted(patches);

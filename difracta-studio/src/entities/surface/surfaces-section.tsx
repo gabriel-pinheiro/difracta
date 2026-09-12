@@ -3,10 +3,11 @@ import {
   orderedEntries,
   type Mask,
   type Output,
+  type Path,
   type Surface,
   type Table,
 } from "@difracta/core";
-import { Box, SquareDashed, Trash2 } from "lucide-react";
+import { Box, Spline, SquareDashed, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { NameDialog } from "@/components/name-dialog";
@@ -17,7 +18,11 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { generateMaskId, MaskRows } from "@/entities/mask/mask-rows";
+import {
+  ChildRows,
+  generateMaskId,
+  generatePathId,
+} from "@/entities/surface/child-rows";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useExpansion } from "@/navigator/expansion";
 import { NavigatorEmptyRow, NavigatorRow } from "@/navigator/navigator-row";
@@ -37,18 +42,22 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
   const surfaces = useDocumentPath<Table<Surface>>(view, ["surfaces"]) ?? {};
   const outputs = useDocumentPath<Table<Output>>(view, ["outputs"]) ?? {};
   const masks = useDocumentPath<Table<Mask>>(view, ["masks"]) ?? {};
+  const paths = useDocumentPath<Table<Path>>(view, ["paths"]) ?? {};
   const [naming, setNaming] = useState<
-    { kind: "surface" } | { kind: "mask"; surface: Surface } | undefined
+    | { kind: "surface" }
+    | { kind: "mask" | "path"; surface: Surface }
+    | undefined
   >(undefined);
   const ordered = orderedEntries(surfaces);
 
   function create(name: string): void {
-    if (naming?.kind === "mask") {
-      const id = generateMaskId();
+    if (naming?.kind === "mask" || naming?.kind === "path") {
+      const kind = naming.kind;
+      const id = kind === "mask" ? generateMaskId() : generatePathId();
       const surfaceId = naming.surface.id;
-      void command("mask.create", { id, surfaceId, name }).then(() => {
+      void command(`${kind}.create`, { id, surfaceId, name }).then(() => {
         setExpanded("surface", surfaceId, true);
-        select({ kind: "mask", id });
+        select({ kind, id });
       });
       return;
     }
@@ -59,6 +68,8 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
   }
   const maskCount = (surface: Surface): number =>
     Object.values(masks).filter((mask) => mask.surfaceId === surface.id).length;
+  const pathCount = (surface: Surface): number =>
+    Object.values(paths).filter((path) => path.surfaceId === surface.id).length;
 
   return (
     <>
@@ -97,7 +108,18 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
                       onSelect={() =>
                         select({ kind: "surface", id: surface.id })
                       }
-                      onCreate={() => setNaming({ kind: "mask", surface })}
+                      createItems={[
+                        {
+                          label: "Mask…",
+                          icon: SquareDashed,
+                          onSelect: () => setNaming({ kind: "mask", surface }),
+                        },
+                        {
+                          label: "Path…",
+                          icon: Spline,
+                          onSelect: () => setNaming({ kind: "path", surface }),
+                        },
+                      ]}
                     >
                       <span
                         className={
@@ -116,6 +138,11 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
                     >
                       <SquareDashed /> Add Mask…
                     </ContextMenuItem>
+                    <ContextMenuItem
+                      onClick={() => setNaming({ kind: "path", surface })}
+                    >
+                      <Spline /> Add Path…
+                    </ContextMenuItem>
                     <ContextMenuSeparator />
                     <ContextMenuItem
                       variant="destructive"
@@ -130,10 +157,12 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
                   </ContextMenuContent>
                 </ContextMenu>
                 {expanded &&
-                  (maskCount(surface) === 0 ? (
-                    <NavigatorEmptyRow depth={2}>No Masks</NavigatorEmptyRow>
+                  (maskCount(surface) + pathCount(surface) === 0 ? (
+                    <NavigatorEmptyRow depth={2}>
+                      No Masks or Paths
+                    </NavigatorEmptyRow>
                   ) : (
-                    <MaskRows view={view} surfaceId={surface.id} />
+                    <ChildRows view={view} surfaceId={surface.id} />
                   ))}
               </SortableItem>
             );
@@ -152,13 +181,21 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
                   submitLabel: "Create",
                   onSubmit: create,
                 }
-              : {
-                  title: `New Mask on ${naming.surface.name}`,
-                  label: "Name",
-                  initial: `Mask ${String(maskCount(naming.surface) + 1)}`,
-                  submitLabel: "Create",
-                  onSubmit: create,
-                }
+              : naming.kind === "mask"
+                ? {
+                    title: `New Mask on ${naming.surface.name}`,
+                    label: "Name",
+                    initial: `Mask ${String(maskCount(naming.surface) + 1)}`,
+                    submitLabel: "Create",
+                    onSubmit: create,
+                  }
+                : {
+                    title: `New Path on ${naming.surface.name}`,
+                    label: "Name",
+                    initial: `Path ${String(pathCount(naming.surface) + 1)}`,
+                    submitLabel: "Create",
+                    onSubmit: create,
+                  }
         }
         onClose={() => setNaming(undefined)}
       />

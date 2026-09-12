@@ -1,5 +1,5 @@
 import type { DocumentView } from "@difracta/client";
-import type { Mask, Output, Surface, Table } from "@difracta/core";
+import type { Mask, Output, Path, Surface, Table } from "@difracta/core";
 import type { LiveState } from "@difracta/protocol";
 
 import { useDocumentCommands } from "@/documents/document-commands";
@@ -88,6 +88,7 @@ function CalibrationStatus({ view }: { readonly view: DocumentView }) {
   const { calibration, exit } = useCalibration(view);
   const surfaces = useDocumentPath<Table<Surface>>(view, ["surfaces"]);
   const masks = useDocumentPath<Table<Mask>>(view, ["masks"]);
+  const paths = useDocumentPath<Table<Path>>(view, ["paths"]);
   const outputs = useDocumentPath<Table<Output>>(view, ["outputs"]);
   if (calibration === null) return null;
   // Same checks as the Output makes: a stale entry shows nothing.
@@ -97,10 +98,14 @@ function CalibrationStatus({ view }: { readonly view: DocumentView }) {
     calibration.maskId === null ? undefined : masks?.[calibration.maskId];
   if (calibration.maskId !== null && mask?.surfaceId !== surface.id)
     return null;
+  const path =
+    calibration.pathId === null ? undefined : paths?.[calibration.pathId];
+  if (calibration.pathId !== null && path?.surfaceId !== surface.id)
+    return null;
   const output = outputs?.[surface.output]?.name ?? surface.output;
   return (
     <span className="flex items-center gap-1.5 rounded-sm bg-amber-500/20 px-1.5 text-amber-300">
-      Calibrating {mask?.name ?? surface.name} on {output}
+      Calibrating {mask?.name ?? path?.name ?? surface.name} on {output}
       <button
         type="button"
         className="underline underline-offset-2 hover:text-amber-100"

@@ -2,14 +2,16 @@ import type { DocumentView } from "@difracta/client";
 import {
   CORNERS,
   orderedEntries,
+  surfaceChildren,
   surfaceAddresses,
   tableEntries,
   type Mask,
+  type Path,
   type Output,
   type Surface,
   type Table,
 } from "@difracta/core";
-import { SquareDashed } from "lucide-react";
+import { Spline, SquareDashed } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { AddressRow } from "@/inspector/fields/address-row";
@@ -47,12 +49,13 @@ export function SurfaceInspector({
   const surface = useDocumentPath<Surface>(view, ["surfaces", id]);
   const outputs = useDocumentPath<Table<Output>>(view, ["outputs"]) ?? {};
   const masks = useDocumentPath<Table<Mask>>(view, ["masks"]) ?? {};
+  const paths = useDocumentPath<Table<Path>>(view, ["paths"]) ?? {};
 
   useEffect(() => {
     if (surface === undefined) select({ kind: "installation" });
   }, [surface, select]);
   if (surface === undefined) return null;
-  const owned = orderedEntries(masks).filter((mask) => mask.surfaceId === id);
+  const children = surfaceChildren({ masks, paths }, id);
 
   return (
     <>
@@ -96,30 +99,42 @@ export function SurfaceInspector({
         )}
         <Rendering view={view} surface={surface} />
         <div className="grid gap-1">
-          <span className="text-xs text-muted-foreground">Masks</span>
-          {owned.length === 0 ? (
+          <span className="text-xs text-muted-foreground">Masks and Paths</span>
+          {children.length === 0 ? (
             <p className="text-[0.6875rem]/relaxed text-muted-foreground">
-              No Masks: the whole Surface is lit. Add one from its row in the
-              navigator.
+              No Masks, so the whole Surface is lit, and no Paths. Add either
+              from the Surface's row in the navigator.
             </p>
           ) : (
             <ul className="grid gap-px">
-              {owned.map((mask) => (
-                <li key={mask.id}>
+              {children.map(({ table, entity }) => (
+                <li key={entity.id}>
                   <button
                     type="button"
                     className="flex h-6 w-full items-center gap-1.5 rounded-sm px-1.5 text-left text-xs hover:bg-accent hover:text-accent-foreground"
                     onClick={() => {
-                      // Selecting from here reveals the Mask's row in the navigator.
+                      // Selecting from here reveals the row in the navigator.
                       setExpanded("surface", id, true);
-                      select({ kind: "mask", id: mask.id });
+                      select({
+                        kind: table === "masks" ? "mask" : "path",
+                        id: entity.id,
+                      });
                     }}
                   >
-                    <SquareDashed className="size-3.5 shrink-0 text-muted-foreground" />
-                    <span className="truncate">{mask.name}</span>
-                    {mask.mode === "exclude" && (
+                    {table === "masks" ? (
+                      <SquareDashed className="size-3.5 shrink-0 text-muted-foreground" />
+                    ) : (
+                      <Spline className="size-3.5 shrink-0 text-muted-foreground" />
+                    )}
+                    <span className="truncate">{entity.name}</span>
+                    {table === "masks" && entity.mode === "exclude" && (
                       <span className="ml-auto text-[0.625rem] text-muted-foreground">
                         exclude
+                      </span>
+                    )}
+                    {table === "paths" && !entity.closed && (
+                      <span className="ml-auto text-[0.625rem] text-muted-foreground">
+                        open
                       </span>
                     )}
                   </button>

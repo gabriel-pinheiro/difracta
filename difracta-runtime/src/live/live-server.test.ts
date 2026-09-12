@@ -158,6 +158,7 @@ describe("live protocol", () => {
     await studio.command(created.id, "calibration.set", {
       surfaceId: "sur_a",
       maskId: null,
+      pathId: null,
       corner: "topLeft",
       point: null,
       view: "selected",
@@ -342,7 +343,9 @@ describe("live protocol", () => {
       "beam-web",
       "blink",
       "bubbles",
+      "frame-electric",
       "koi-pond",
+      "lightning-strikes",
       "solid-color",
       "strobe",
       "thunder",
@@ -353,7 +356,7 @@ describe("live protocol", () => {
       "tile-scramble",
     ]);
     expect(catalog.filters[0]).not.toHaveProperty("fragment");
-    const koi = catalog.visuals[3]!;
+    const koi = catalog.visuals[4]!;
     expect(koi.parameters).toHaveProperty("speed");
     expect(koi).not.toHaveProperty("create");
     expect(typeof koi.notes).toBe("string");

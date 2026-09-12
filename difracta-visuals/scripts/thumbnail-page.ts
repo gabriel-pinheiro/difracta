@@ -80,6 +80,17 @@ function installation(kind: ThumbnailKind, id: string): Document {
     });
     document = run(document, "layer.visual", { layerId, visual: visualId });
     document = run(document, "layer.update", { layerId, target: "sur" });
+    // A Visual that follows a Path gets the default one: a closed inset rectangle.
+    for (const { key } of catalog.visual(visualId)?.paths ?? []) {
+      const pathId = `path_${key}`;
+      if (!(pathId in document.paths))
+        document = run(document, "path.create", {
+          id: pathId,
+          surfaceId: "sur",
+          name: key,
+        });
+      document = run(document, "layer.path", { layerId, key, pathId });
+    }
   };
   if (kind === "visual") visual("thumbnail", id);
   else {

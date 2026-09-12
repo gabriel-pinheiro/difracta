@@ -3,11 +3,14 @@ import {
   CORNERS,
   orderedEntries,
   resolveCalibration,
+  resolveLayerPaths,
+  type Catalog,
   type CornerName,
   type Document,
   type FilterLayer,
   type Layer,
   type Mask,
+  type Path,
   type Quad,
   type Surface,
   type VisualLayer,
@@ -28,6 +31,9 @@ export interface SurfaceDraw {
   /** The Mask being aligned, drawn as an outline with its points. */
   readonly maskOutline:
     { readonly mask: Mask; readonly point: number | undefined } | undefined;
+  /** The Path being aligned, drawn as a line with its points. */
+  readonly pathOutline:
+    { readonly path: Path; readonly point: number | undefined } | undefined;
 }
 
 /** One Visual Layer of the active Scene landing on this Output through its Target. */
@@ -38,6 +44,8 @@ export interface LayerDraw {
   readonly surface: Surface;
   readonly corners: Quad;
   readonly masks: readonly Mask[];
+  /** The Paths the Visual declares, bound and on this Surface, by key. */
+  readonly paths: Readonly<Record<string, Path>>;
 }
 
 /** One Filter Layer of the active Scene with something under it on this Output. */
@@ -65,9 +73,14 @@ const NOTHING = { layers: [], filters: [] } as const;
  * What one Output shows for a document: nothing under Blackout; otherwise
  * the active Scene's Layers on their Surfaces, or, in Calibration Mode on
  * this Output, the calibrated Surface as a pattern and the others as the
- * view says. Pure, so the rules are testable without a GPU.
+ * view says. The Catalog says which Paths each Visual needs bound. Pure,
+ * so the rules are testable without a GPU.
  */
-export function planFrame(document: Document, outputId: string): FramePlan {
+export function planFrame(
+  document: Document,
+  outputId: string,
+  catalog: Catalog,
+): FramePlan {
   if (document.operational.blackout)
     return { blackout: true, draws: [], ...NOTHING };
   const masksOf = (surface: Surface): readonly Mask[] =>
@@ -81,7 +94,7 @@ export function planFrame(document: Document, outputId: string): FramePlan {
     return {
       blackout: false,
       draws: [],
-      ...planStack(document, outputId, masksOf),
+      ...planStack(document, outputId, catalog, masksOf),
     };
   const draws: SurfaceDraw[] = [];
   for (const surface of orderedEntries(document.surfaces)) {
@@ -89,21 +102,24 @@ export function planFrame(document: Document, outputId: string): FramePlan {
     const corners = surface.mappings[outputId]?.corners;
     if (corners === undefined) continue;
     if (surface.id === calibrating.surface.id) {
-      const mask = calibrating.mask;
+      const { mask, path } = calibrating;
+      const shape = mask ?? path;
       draws.push({
         surface,
         corners,
         style: "pattern",
         highlighted: true,
-        // A Mask hides the corners being dragged, so it only applies while
-        // the Mask itself is aligned, against the shape the audience sees.
-        masks: mask === undefined ? [] : masksOf(surface),
+        // A Mask hides the corners being dragged, so Masks only apply while
+        // a Mask or Path is aligned, against the shape the audience sees.
+        masks: shape === undefined ? [] : masksOf(surface),
         corner:
-          mask === undefined
+          shape === undefined
             ? (calibrating.calibration.corner ?? undefined)
             : undefined,
         maskOutline:
           mask === undefined ? undefined : { mask, point: calibrating.point },
+        pathOutline:
+          path === undefined ? undefined : { path, point: calibrating.point },
       });
       continue;
     }
@@ -117,6 +133,7 @@ export function planFrame(document: Document, outputId: string): FramePlan {
       masks: [],
       corner: undefined,
       maskOutline: undefined,
+      pathOutline: undefined,
     });
   }
   return { blackout: false, draws, ...NOTHING };
@@ -124,8 +141,9 @@ export function planFrame(document: Document, outputId: string): FramePlan {
 
 /**
  * The active Scene's stack as it lands on this Output: Visual Layers that
- * are enabled with every Group above them enabled, have a Visual, and
- * target a Surface here with a mapping; and Filter Layers enabled the same
+ * are enabled with every Group above them enabled, have a Visual with every
+ * Path it declares bound, and target a Surface here with a mapping; and
+ * Filter Layers enabled the same
  * way, with a Filter and a mix above zero, that have at least one such
  * Layer below them, since a Filter transforms what is already drawn and a
  * Group only gates. Bottom first, so drawing in order stacks them as the
@@ -134,6 +152,7 @@ export function planFrame(document: Document, outputId: string): FramePlan {
 function planStack(
   document: Document,
   outputId: string,
+  catalog: Catalog,
   masksOf: (surface: Surface) => readonly Mask[],
 ): Pick<FramePlan, "layers" | "filters"> {
   const sceneId = document.installation.activeScene;
@@ -152,7 +171,7 @@ function planStack(
       if (!layer.enabled) continue;
       if (layer.kind === "group") visit(layer.id);
       else if (layer.kind === "visual") {
-        const draw = layerDraw(document, outputId, layer, masksOf);
+        const draw = layerDraw(document, outputId, catalog, layer, masksOf);
         if (draw !== undefined) items.push({ kind: "layer", draw });
       } else if (layer.filter !== null && layer.mix > 0)
         items.push({ kind: "filter", layer, filter: layer.filter });
@@ -177,6 +196,7 @@ function planStack(
 function layerDraw(
   document: Document,
   outputId: string,
+  catalog: Catalog,
   layer: Layer & { kind: "visual" },
   masksOf: (surface: Surface) => readonly Mask[],
 ): LayerDraw | undefined {
@@ -185,12 +205,15 @@ function layerDraw(
   if (surface?.output !== outputId) return undefined;
   const corners = surface.mappings[outputId]?.corners;
   if (corners === undefined) return undefined;
+  const paths = resolveLayerPaths(document, catalog, layer);
+  if (paths === undefined) return undefined;
   return {
     layer,
     visual: layer.visual,
     surface,
     corners,
     masks: masksOf(surface),
+    paths,
   };
 }
 

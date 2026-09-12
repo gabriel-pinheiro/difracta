@@ -59,9 +59,10 @@ Document
 ├── outputs { [id]: Output }
 ├── surfaces { [id]: Surface }        output, mappings per Output
 ├── masks { [id]: Mask }              surfaceId, mode, points, feather
+├── paths { [id]: Path }              surfaceId, points, closed
 ├── scenes { [id]: Scene }            name, order
 ├── layers { [id]: Layer }            kind, sceneId, parentId, enabled, order, + per kind
-│                                     visual: visual, parameters, target, opacity, blendMode
+│                                     visual: visual, parameters, target, paths, opacity, blendMode
 │                                     filter: filter, parameters, mix
 ├── controllers { [id]: Controller }  kind, parentId, order; number: value 0..1; color: value
 ├── links { [id]: Link }              controllerId, address, anchors
@@ -131,6 +132,35 @@ Surface; `entity.move` keeps a Mask among its siblings. Removing a Surface
 removes its Masks. Point commands (`mask.point.set`, `.nudge`, `.add`,
 `.remove`) replace the whole `points` array, because patch paths address object
 keys, not array positions, and sixteen points is a small value.
+
+### Paths
+
+A Path is a polyline in Surface Space, two to sixteen points, open or closed,
+that a Visual follows: it lights nothing by itself. A Visual definition declares
+the Paths it needs by key (`paths: [{ key, label }]`), and a Visual Layer's
+`paths` binds a Path id to each key (`layer.path`). The bound Path must be on
+the Layer's Target; a Layer with any declared Path unbound is not planned, so it
+renders nothing and the inspector says which Path it needs. Picking another
+Visual or Target keeps the bindings that still fit and drops the rest rather
+than refusing, and removing a Path or its Surface unbinds it everywhere. Paths
+live in their own table like Masks, with the same commands (`path.create`,
+`.rename`, `.update` for open or closed, `.point.set`, `.nudge`, `.add`,
+`.remove`, `.remove`); adding a point after the last one of an open Path
+continues the line instead of splitting a closing edge. Masks and Paths of one
+Surface share one order: `entity.move` on either takes its neighbours from both
+tables (`surfaceChildren`), and a new one appends after both. Point order is the
+Path's direction: Side A is the left of travel, Side B the right.
+
+**Why bindings on the Layer rather than a Path Parameter:** a Parameter is a
+value in the Visual's own vocabulary; a binding is a reference into the
+Installation that must follow the Target and go away with its Path. Keeping it
+apart from `parameters` keeps Addresses, Links and Macros out of it. **Why drop
+rather than refuse:** an operator building a Scene picks the Visual first and
+draws the Path after; a refusal in either order is a dead end, an empty binding
+is a next step. **Why one order across two tables:** the navigator shows a
+Surface's Masks and Paths as one list, and an order the operator cannot arrange
+the way they read it is a small daily annoyance for no invariant gained; the
+Masks still apply in their own sequence among Masks.
 
 **Why a table rather than an array on the Surface:** Masks are selected,
 renamed, reordered and inspected like any entity, and the navigator and
@@ -262,7 +292,7 @@ counting; a visited set does both.
 The Catalog is the set of Visual and Filter definitions a runtime knows
 (`core/catalog/`). A definition is code with a stable id, a name, a description,
 a backend (`canvas` or `shader`), an optional `recommended` flag, a Parameter
-schema, and for Visuals the Paths they need and the Cues they answer to. Core
+schema, and for Visuals the Paths they follow and the Cues they answer to. Core
 owns the types and the validation; `difracta-visuals` owns the entries and their
 thumbnails, and the runtime passes that Catalog to the command registry. A
 definition's file also carries its implementation, written against the SDK in
@@ -304,7 +334,7 @@ today, with one Layer flagged, rather than refuse as a whole.
 
 ### Calibration Mode
 
-`operational.calibration` names one Surface, or one Mask of it, plus the
+`operational.calibration` names one Surface, or one Mask or Path of it, plus the
 highlighted corner or point, the view for the Output's other Surfaces (hidden,
 outlines, patterns) and the live session that entered it. `calibration.set`
 replaces the whole entry and `calibration.exit` clears it; both are performance
@@ -539,15 +569,17 @@ compositor advances the Visual instances, draws, and reports what it did.
 `planFrame` is the pure part: given a document and an Output it lists what to
 draw this frame. Outside Calibration Mode that is the active Scene's Visual
 Layers, bottom first, each one that is enabled with every Group above it
-enabled, has a Visual, and targets a Surface on this Output with a mapping;
-Filters are passed over until they render, and a Group only gates. With no
-active Scene the frame is black. In Calibration Mode on that Output the Scene
-gives way to the calibrated Surface as a pattern (grid, diagonals, border, name,
-corner labels, the selected corner marked) and the others follow the view. Masks
-apply to the pattern only while a Mask is being aligned, and that Mask is then
-outlined with its points marked. That drawing lives in `calibration-drawing.ts`
-and goes through the same Surface Space program as the Layers
-(`surface-program.ts`), so a pattern lands exactly where the Scene will.
+enabled, has a Visual with every Path it declares bound on its Target, and
+targets a Surface on this Output with a mapping; Filters are passed over until
+they render, and a Group only gates. With no active Scene the frame is black. In
+Calibration Mode on that Output the Scene gives way to the calibrated Surface as
+a pattern (grid, diagonals, border, name, corner labels, the selected corner
+marked) and the others follow the view. Masks apply to the pattern only while a
+Mask or Path is being aligned, and that shape is then drawn over it with its
+points marked, a Mask as a loop and an open Path as a line. That drawing lives
+in `calibration-drawing.ts` and goes through the same Surface Space program as
+the Layers (`surface-program.ts`), so a pattern lands exactly where the Scene
+will.
 
 Each planned Layer has a Visual instance (`layer-players.ts`). A canvas Visual's
 draws on its own canvas, sized by `surfaceCanvasSize` and capped at the GPU's
@@ -593,12 +625,12 @@ exactly their input.
 Geometry: every vertex is a Surface Space position pushed through the Surface's
 homography in the vertex shader, with clip-space `w` carrying the projective
 term, so the GPU interpolates Surface Space perspective-correctly and every
-later shape drawn in Surface Space (Regions, Guides) inherits the mapping for
-free. The homography is computed once per mapping change and cached by the
-corners object's identity. The pattern is computed in the fragment shader from
-Surface Space coordinates and their screen-space derivatives, so its lines are
-about one pixel wide at any projection and cost no geometry. Labels are text
-rendered once per string into a small texture.
+later shape drawn in Surface Space (Masks, Paths) inherits the mapping for free.
+The homography is computed once per mapping change and cached by the corners
+object's identity. The pattern is computed in the fragment shader from Surface
+Space coordinates and their screen-space derivatives, so its lines are about one
+pixel wide at any projection and cost no geometry. Labels are text rendered once
+per string into a small texture.
 
 Masks: one alpha texture per Surface at a fixed 512×512, rebuilt only when that
 Surface's Masks change (identity comparison, since the document is immutable per
@@ -618,10 +650,21 @@ per Output (`render/sdk/`). An instance is a closure over its own state with two
 methods the player calls every animation frame: `update(frame)` advances the
 state by `frame.dt` seconds, and `render(canvas)` draws the state onto the
 Layer's 2D context. `frame` carries the current Parameter values, the size and a
-`changed` flag (true on the first frame and whenever a Parameter differs from
-the previous frame); `create` gets the same plus a `random` source seeded from
-the Layer id. Time only ever arrives as a delta, clamped to 100 ms so a tab that
-slept does not fast-forward.
+`changed` flag (true on the first frame and whenever a Parameter or a Path
+differs from the previous frame); `create` gets the same plus a `random` source
+seeded from the Layer id. Time only ever arrives as a delta, clamped to 100 ms
+so a tab that slept does not fast-forward. The Paths the Visual declares arrive
+under their keys in `paths`, resolved to pixels (`sdk/path.ts`): points, total
+length, `at(t)` for the place a fraction of the way along with its tangent, and
+`side(sample, side)` for a unit vector off the Path on Side A, Side B, outward
+or inward, the last two judged against the centroid. A shader Visual reads the
+same Path as `u_path_<key>_points[16]`, `_count` and `_closed` in Surface Space,
+declared by the engine. The player rebuilds a Path's geometry only when its
+object or the canvas size changed, since the document is immutable per revision,
+and counts that as a change so a static Visual redraws when its Path is dragged.
+**Why pixels for canvas and Surface Space for shaders:** each is what that
+backend draws in; a canvas Visual measuring reach in pixels wants the Path there
+too, and a fragment already gets `u_resolution` to do the same.
 
 The one rule of the SDK is that a Visual **integrates, it never samples**:
 anything time-derived (a phase, a position, a clock) lives in the instance and
@@ -718,10 +761,10 @@ center holds tabs; the Outputs tab shows one card per Output. Selection is
 Studio-local state and never reaches the runtime; the selected row and card
 carry an outline so the inspector's subject is visible at a glance. Rows with
 children open and close with a chevron: Output rows start open so their live
-sessions stay in view, Surface rows start closed so Masks do not crowd the list;
-creating a child or selecting one from an inspector opens its parent. Column
-sizes and section open states are remembered per browser in localStorage; row
-open states live in memory and reset with the Installation. An empty section
+sessions stay in view, Surface rows start closed so Masks and Paths do not crowd
+the list; creating a child or selecting one from an inspector opens its parent.
+Column sizes and section open states are remembered per browser in localStorage;
+row open states live in memory and reset with the Installation. An empty section
 says how to add its first entity, and an open row without children says so in
 one dim line.
 
@@ -806,14 +849,16 @@ its own; applying to the runtime shows every candidate where it will be seen.
 stay usable, so a Layer's other settings can change while candidates are
 compared.
 
-The Surface and Mask inspectors carry a Calibrate toggle and, while active, the
-view for the other Surfaces; the corner or point selected in the inspector is
-mirrored to the Output as it changes, and focusing a corner or point button
-selects it, so Tab and the arrow keys agree. While the mode is on, selecting
-another Surface or Mask moves the pattern to it; selecting anything else leaves
-it on. The status strip shows what is being calibrated with an exit link, so a
-forgotten Calibration Mode stays visible. Escape clears the selection outside
-text fields and dialogs.
+The Surface, Mask and Path inspectors carry a Calibrate toggle and, while
+active, the view for the other Surfaces; the corner or point selected in the
+inspector is mirrored to the Output as it changes, and focusing a corner or
+point button selects it, so Tab and the arrow keys agree. While the mode is on,
+selecting another Surface, Mask or Path moves the pattern to it; selecting
+anything else leaves it on. A Visual Layer whose Visual follows Paths shows one
+row per Path below its Target, a select over the Target's Paths with a "+" that
+creates one named after the Layer, binds it and selects it. The status strip
+shows what is being calibrated with an exit link, so a forgotten Calibration
+Mode stays visible. Escape clears the selection outside text fields and dialogs.
 
 Blackout sits in the menu bar because it is the one control a performer must
 reach without looking; it writes `installation/blackout` through the input
