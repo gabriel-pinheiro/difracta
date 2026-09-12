@@ -1,10 +1,54 @@
 import { DifractaClient } from "@difracta/client";
+import {
+  createBuiltInRegistry,
+  defineCommand,
+  emptyCatalog,
+  type CommandDefinition,
+} from "@difracta/core";
+import {
+  PROTOCOL_VERSION,
+  type ClientMessage,
+  type ServerMessage,
+} from "@difracta/protocol";
+import { EventEmitter } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { WebSocket } from "ws";
+import { z } from "zod";
 
+import { DocumentStore } from "../documents/document-store.ts";
 import { buildRuntime, type Runtime } from "../server.ts";
+import { LiveServer } from "./live-server.ts";
+
+/** A `ws` socket as the LiveServer sees it, driven from the test. */
+class FakeSocket extends EventEmitter {
+  readonly OPEN = 1;
+  readyState = this.OPEN;
+  readonly sent: ServerMessage[] = [];
+
+  send(data: string): void {
+    this.sent.push(JSON.parse(data) as ServerMessage);
+  }
+
+  close(): void {
+    this.readyState = 3;
+    this.emit("close");
+  }
+
+  receive(message: ClientMessage): void {
+    this.emit("message", Buffer.from(JSON.stringify(message)));
+  }
+
+  reply(requestId: string): Extract<ServerMessage, { type: "reply" }> {
+    const found = this.sent.find(
+      (message) => message.type === "reply" && message.requestId === requestId,
+    );
+    if (found?.type !== "reply") throw new Error(`No reply to ${requestId}.`);
+    return found;
+  }
+}
 
 let dir: string;
 let runtime: Runtime;
@@ -324,6 +368,66 @@ describe("live protocol", () => {
     ).rejects.toThrow("Unknown address");
     studio.close();
     output.close();
+  });
+
+  it("answers a command whose apply throws with ok:false and keeps serving", async () => {
+    const registry = createBuiltInRegistry();
+    registry.register(
+      defineCommand({
+        name: "test.explode",
+        kind: "authoring",
+        description: "Throws inside apply.",
+        payload: z.object({}).strict(),
+        apply() {
+          throw new Error("boom");
+        },
+      }) as unknown as CommandDefinition<never>,
+    );
+    const store = new DocumentStore({ projectsDir: dir, registry });
+    const logged: string[] = [];
+    const live = new LiveServer({
+      store,
+      catalog: emptyCatalog,
+      runtimeName: "test",
+      runtimeVersion: "0",
+      log: (message) => logged.push(message),
+    });
+    const created = await store.create("Living");
+    const documentId = created.ok ? created.result.id : "";
+    const socket = new FakeSocket();
+    live.accept(socket as unknown as WebSocket);
+    socket.receive({
+      type: "hello",
+      protocolVersion: PROTOCOL_VERSION,
+      client: { kind: "cli" },
+    });
+
+    socket.receive({
+      type: "command",
+      requestId: "r1",
+      documentId,
+      name: "test.explode",
+      payload: {},
+    });
+    expect(socket.reply("r1").outcome).toEqual({
+      ok: false,
+      error: "Command “test.explode” failed inside the runtime: boom",
+    });
+    expect(logged).toEqual(["command “test.explode” threw: boom"]);
+
+    socket.receive({
+      type: "command",
+      requestId: "r2",
+      documentId,
+      name: "output.create",
+      payload: { id: "out_a", name: "TV" },
+    });
+    expect(socket.reply("r2").outcome).toMatchObject({
+      ok: true,
+      result: { revision: 1, changed: true },
+    });
+    expect(socket.readyState).toBe(socket.OPEN);
+    live.close();
   });
 
   it("reports the Catalog as metadata without implementations", async () => {

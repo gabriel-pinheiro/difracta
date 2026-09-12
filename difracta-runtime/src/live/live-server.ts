@@ -19,6 +19,8 @@ import type { RawData, WebSocket } from "ws";
 import type {
   DocumentDelta,
   DocumentEvent,
+  DocumentSession,
+  SessionCommandResult,
 } from "../documents/document-session.ts";
 import type { DocumentStore } from "../documents/document-store.ts";
 import { OutputPresence } from "./output-presence.ts";
@@ -145,7 +147,30 @@ export class LiveServer {
     if (documentSession === undefined) return;
     if (documentSession.document.operational.calibration?.owner !== session.id)
       return;
-    documentSession.execute("calibration.exit", {}, session.actor);
+    this.#execute(documentSession, "calibration.exit", {}, session.actor);
+  }
+
+  /**
+   * Runs a command on the document, turning an exception inside it into a
+   * failed result: a reducer that throws must not take the socket, let alone
+   * the show, down with it.
+   */
+  #execute(
+    documentSession: DocumentSession,
+    name: string,
+    payload: unknown,
+    actor: string,
+  ): SessionCommandResult {
+    try {
+      return documentSession.execute(name, payload, actor);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.#options.log(`command “${name}” threw: ${message}`);
+      return {
+        ok: false,
+        error: `Command “${name}” failed inside the runtime: ${message}`,
+      };
+    }
   }
 
   /** Follows the store's current document; presence belongs to it. */
@@ -311,13 +336,14 @@ export class LiveServer {
         break;
       case "input": {
         const documentSession = this.#options.store.session(message.documentId);
-        const result = documentSession?.execute(
+        if (documentSession === undefined) break;
+        const result = this.#execute(
+          documentSession,
           "address.set",
           { address: message.address, value: message.value },
           session.actor,
         );
-        if (result !== undefined && !result.ok)
-          this.#options.log(`input rejected: ${result.error}`);
+        if (!result.ok) this.#options.log(`input rejected: ${result.error}`);
         break;
       }
       case "request":
@@ -373,7 +399,8 @@ export class LiveServer {
       });
       return;
     }
-    const result = documentSession.execute(
+    const result = this.#execute(
+      documentSession,
       message.name,
       message.payload,
       session.actor,

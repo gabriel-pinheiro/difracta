@@ -9,6 +9,7 @@ import { CalibrationDrawing } from "./calibration-drawing.ts";
 import { FilterChain } from "./filter-chain.ts";
 import { FilterPlayers, type FilterPass } from "./filter-players.ts";
 import { homography } from "./homography.ts";
+import { frameIssues, type RenderIssue } from "./issues.ts";
 import { LayerPlayers, type LayerFrame } from "./layer-players.ts";
 import { MaskTextures } from "./masks.ts";
 import { planFrame, type SurfaceDraw } from "./plan.ts";
@@ -56,10 +57,13 @@ export interface FrameReport {
     readonly running: number;
     readonly executed: number;
   };
+  /** Planned Layers drawing nothing because their Visual or Filter cannot run. */
+  readonly issues: readonly RenderIssue[];
 }
 
 const NO_LAYERS = { planned: 0, running: 0, rendered: 0 } as const;
 const NO_FILTERS = { planned: 0, running: 0, executed: 0 } as const;
+const NO_ISSUES: readonly RenderIssue[] = [];
 
 interface Resources {
   readonly gl: WebGL2RenderingContext;
@@ -132,6 +136,7 @@ class WebGLCompositor implements Compositor {
         layers: NO_LAYERS,
         shaders: NO_LAYERS,
         filters: NO_FILTERS,
+        issues: NO_ISSUES,
       };
     const dt =
       this.#lastNow === undefined
@@ -159,6 +164,12 @@ class WebGLCompositor implements Compositor {
       running: chain.running,
       executed: chain.executed,
     };
+    const issues = frameIssues(
+      step,
+      chain,
+      (id) => resources.shaderPrograms.failure(id),
+      (id) => resources.chain.failure(id),
+    );
     const last = this.#last;
     if (
       !step.changed &&
@@ -173,13 +184,14 @@ class WebGLCompositor implements Compositor {
         layers,
         shaders: { ...shaders, rendered: 0 },
         filters: { ...filters, executed: 0 },
+        issues,
       };
     this.#last = { document, outputId, width, height };
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, width, height);
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    if (plan.blackout) return { drew: true, layers, shaders, filters };
+    if (plan.blackout) return { drew: true, layers, shaders, filters, issues };
 
     // With a Filter to run, the Layers accumulate in the chain's target
     // instead of the screen, each pass transforms what is there so far,
@@ -226,7 +238,7 @@ class WebGLCompositor implements Compositor {
       resources.calibration.draw(draw, maskTexture, matrix, width, height);
     }
     resources.masks.retain(masked);
-    return { drew: true, layers, shaders, filters };
+    return { drew: true, layers, shaders, filters, issues };
   }
 
   trigger(layerId: string, key: string): void {

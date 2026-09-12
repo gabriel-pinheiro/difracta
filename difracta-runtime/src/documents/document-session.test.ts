@@ -1,4 +1,8 @@
-import { createBuiltInRegistry, emptyDocument } from "@difracta/core";
+import {
+  applyPatches,
+  createBuiltInRegistry,
+  emptyDocument,
+} from "@difracta/core";
 import { describe, expect, it } from "vitest";
 
 import { DocumentSession, type DocumentDelta } from "./document-session.ts";
@@ -88,6 +92,44 @@ describe("DocumentSession", () => {
 
     expect(doc.execute("history.redo", {}, "studio").ok).toBe(true);
     expect(doc.document.outputs.out_a?.name).toBe("TV");
+  });
+
+  it("replaceDocument sets every table, so a replica catches up in one delta", () => {
+    const { doc, deltas } = session();
+    doc.execute("output.create", { id: "out_a", name: "TV" }, "studio");
+    doc.execute("scene.create", { id: "s1", name: "One" }, "studio");
+    doc.execute(
+      "address.set",
+      { address: "installation/blackout", value: true },
+      "osc",
+    );
+    const replica = doc.document;
+
+    const other = new DocumentSession(
+      { ...emptyDocument("Living"), installation: replica.installation },
+      createBuiltInRegistry(),
+    );
+    other.execute("surface.create", { id: "sur_a", name: "Wall" }, "studio");
+    other.execute("scene.create", { id: "s2", name: "Two" }, "studio");
+    other.execute(
+      "layer.create",
+      { id: "v", sceneId: "s2", kind: "visual" },
+      "studio",
+    );
+    const next = other.document;
+
+    doc.replaceDocument(next, "runtime");
+    const delta = deltas.at(-1)!;
+    expect(delta.patches.map((patch) => patch.path)).toEqual(
+      Object.keys(next)
+        .filter((table) => table !== "operational")
+        .map((table) => [table]),
+    );
+    const caughtUp = applyPatches(replica, delta.patches);
+    expect(caughtUp).toEqual({ ...next, operational: replica.operational });
+    expect(caughtUp.operational.blackout).toBe(true);
+    expect(doc.document).toEqual(caughtUp);
+    expect(doc.dirty).toBe(false);
   });
 
   it("reports unknown commands", () => {

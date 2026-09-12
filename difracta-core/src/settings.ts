@@ -26,8 +26,10 @@ export const settings = {
     limit: 500,
   },
   autosave: {
-    /** Delay between a document becoming dirty and its sidecar being written. */
+    /** Delay between the last change to a dirty document and its sidecar being written. */
     delayMs: 5_000,
+    /** A run of changes never keeps a sidecar waiting longer than this since the previous write. */
+    maxWaitMs: 30_000,
   },
   masks: {
     /** A new Mask is the Surface minus this fraction on each side. */

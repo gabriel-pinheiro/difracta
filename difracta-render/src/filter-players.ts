@@ -1,5 +1,6 @@
 import type { Catalog, ParameterValues } from "@difracta/core";
 
+import { reportIssue, type RenderIssue } from "./issues.ts";
 import type { FilterDraw } from "./plan.ts";
 import { isShaderFilter, type ShaderFilter } from "./sdk/filter.ts";
 import { createFilterPlayer, type FilterPlayer } from "./sdk/filter-player.ts";
@@ -24,18 +25,28 @@ export interface FilterStepReport {
   readonly planned: number;
   readonly running: number;
   readonly executed: number;
+  /** The Filters whose instance failed, one issue each, on every frame they stay planned. */
+  readonly issues: readonly RenderIssue[];
 }
 
+/**
+ * A failed entry keeps its key and its place in the map, so its Filter is
+ * retried exactly when a live entry would be replaced: the Layer leaves
+ * the plan or its Filter changes.
+ */
 interface Entry {
   readonly filter: string;
   readonly player: FilterPlayer;
+  issue: RenderIssue | undefined;
 }
 
 /**
  * The Filter instances of one Output, one per planned Filter Layer. An
  * instance exists exactly while its Layer is in the plan, like a Visual's,
  * and a change of Filter replaces it. No GPU here: this decides which
- * passes run and with what; the chain runs them.
+ * passes run and with what; the chain runs them. An instance that throws
+ * is stopped by its player; the Filter is logged once, treated as identity
+ * and reported as an issue on every frame until its entry is replaced.
  */
 export class FilterPlayers {
   readonly #catalog: Catalog;
@@ -52,6 +63,7 @@ export class FilterPlayers {
     height: number,
   ): FilterStepReport {
     const passes: FilterPass[] = [];
+    const issues: RenderIssue[] = [];
     const seen = new Set<string>();
     let changed = false;
     let running = 0;
@@ -60,6 +72,10 @@ export class FilterPlayers {
       if (definition === undefined || !isShaderFilter(definition)) continue;
       seen.add(draw.layer.id);
       const entry = this.#entry(draw, definition, width, height);
+      if (entry.issue !== undefined) {
+        issues.push(entry.issue);
+        continue;
+      }
       running += 1;
       const result = entry.player.frame(
         dt,
@@ -68,6 +84,16 @@ export class FilterPlayers {
         height,
       );
       if (result.changed) changed = true;
+      if (result.failure !== undefined) {
+        // Logged once here; reported on every frame from now on.
+        entry.issue = reportIssue(
+          "Filter",
+          draw.layer,
+          draw.filter,
+          result.failure,
+        );
+        issues.push(entry.issue);
+      }
       if (result.identity) continue;
       passes.push({
         draw,
@@ -88,6 +114,7 @@ export class FilterPlayers {
       planned: draws.length,
       running,
       executed: passes.length,
+      issues,
     };
   }
 
@@ -112,6 +139,7 @@ export class FilterPlayers {
         height,
         seed: draw.layer.id,
       }),
+      issue: undefined,
     };
     this.#entries.set(draw.layer.id, entry);
     return entry;

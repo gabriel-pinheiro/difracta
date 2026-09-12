@@ -2,6 +2,7 @@ import type { ParameterDefinition, ParameterValues } from "@difracta/core";
 
 import { parameterDeclarations, uniformName } from "./filter-shaders.ts";
 import { compileProgram, setUniform, uniform } from "./gl.ts";
+import { errorMessage } from "./issues.ts";
 import {
   pathDeclarations,
   pathUniformPoints,
@@ -76,12 +77,14 @@ export function visualFragmentSource(visual: ShaderVisual): string {
  * Draws shader Visuals: one program per Visual, compiled on first use and
  * kept, run over the Surface's quad through the same vertex shader as
  * everything else so the fragment sees Surface Space. A Visual that fails
- * to compile is reported once and skipped.
+ * to compile is logged once and skipped; `failure` tells the compositor
+ * why, so every Layer using it is reported as an issue.
  */
 export class ShaderVisualPrograms {
   readonly #gl: WebGL2RenderingContext;
   readonly #quad: WebGLBuffer;
   readonly #programs = new Map<string, ProgramEntry | undefined>();
+  readonly #failures = new Map<string, string>();
 
   constructor(gl: WebGL2RenderingContext, quad: WebGLBuffer) {
     this.#gl = gl;
@@ -115,10 +118,16 @@ export class ShaderVisualPrograms {
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }
 
+  /** Why the Visual's program did not compile, once a draw has tried it. */
+  failure(visualId: string): string | undefined {
+    return this.#failures.get(visualId);
+  }
+
   dispose(): void {
     for (const entry of this.#programs.values())
       if (entry !== undefined) this.#gl.deleteProgram(entry.program);
     this.#programs.clear();
+    this.#failures.clear();
   }
 
   #program(visual: ShaderVisual): ProgramEntry | undefined {
@@ -145,6 +154,7 @@ export class ShaderVisualPrograms {
       };
     } catch (error: unknown) {
       console.error(`Visual “${visual.id}” cannot run:`, error);
+      this.#failures.set(visual.id, errorMessage(error));
     }
     this.#programs.set(visual.id, entry);
     return entry;

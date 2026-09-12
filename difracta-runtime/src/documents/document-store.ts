@@ -20,12 +20,16 @@ import {
   serializeDocument,
   writeFileAtomically,
 } from "./document-file.ts";
+import { Autosave } from "./autosave.ts";
 import { DocumentSession } from "./document-session.ts";
 
 export interface DocumentStoreOptions {
   readonly projectsDir: string;
   readonly registry: CommandRegistry;
+  /** Overrides `settings.autosave.delayMs`. */
   readonly autosaveIntervalMs?: number;
+  /** Overrides `settings.autosave.maxWaitMs`. */
+  readonly autosaveMaxWaitMs?: number;
   readonly log?: (message: string) => void;
 }
 
@@ -49,13 +53,19 @@ const UNSAVED_CHANGES =
  * autosave: the document starts dirty and `recovered`, so nothing is lost by
  * a crash and nothing is written until someone saves. `revert` reloads the
  * file as saved and drops the autosaves.
+ *
+ * The sidecar trails the document by at most the autosave delay: every
+ * change to the saved part restarts the delay, and a run of changes longer
+ * than the max wait writes anyway, so an hour of OSC input still leaves a
+ * fresh sidecar behind. `flush` writes whatever the newest sidecar lacks.
  */
 export class DocumentStore {
   #session: DocumentSession | undefined;
   #unsubscribeSession: (() => void) | undefined;
   readonly #options: DocumentStoreOptions;
   readonly #listeners = new Set<() => void>();
-  #autosaveTimer: NodeJS.Timeout | undefined;
+  /** The open session's sidecar clock. */
+  #autosave: Autosave | undefined;
 
   constructor(options: DocumentStoreOptions) {
     this.#options = options;
@@ -141,7 +151,7 @@ export class DocumentStore {
         ok: false,
         error: "The file on disk is a different Installation.",
       };
-    this.#cancelAutosave();
+    await this.#settleAutosave();
     await removeAutosaves(session.path);
     session.replaceDocument(loaded.result, "runtime");
     return { ok: true, result: session.summary() };
@@ -176,6 +186,7 @@ export class DocumentStore {
         ok: false,
         error: "This Installation has no file yet; supply a path.",
       };
+    await this.#settleAutosave();
     try {
       await writeFileAtomically(filePath, serializeDocument(session.document));
       await removeAutosaves(filePath);
@@ -185,7 +196,6 @@ export class DocumentStore {
         error: `Cannot write ${filePath}: ${(error as Error).message}`,
       };
     }
-    this.#cancelAutosave();
     if (session.path !== filePath) session.bindPath(filePath);
     session.markSaved();
     return { ok: true, result: session.summary() };
@@ -227,58 +237,60 @@ export class DocumentStore {
     return entries.sort((a, b) => b.modifiedAt - a.modifiedAt);
   }
 
-  /** Flushes a pending autosave; call before process exit. */
+  /** Writes the sidecar if the document changed since the newest one; call before process exit. */
   async flush(): Promise<void> {
-    if (this.#autosaveTimer !== undefined) await this.#autosave();
+    await this.#autosave?.flush();
+  }
+
+  /** Drops the pending autosave and waits for one in flight, before the file changes under it. */
+  async #settleAutosave(): Promise<void> {
+    this.#autosave?.cancel();
+    await this.#autosave?.settle();
   }
 
   /** Swaps the open document; a discarded dirty document loses its autosaves. */
   async #replace(next: DocumentSession | undefined): Promise<void> {
     const previous = this.#session;
-    this.#cancelAutosave();
+    await this.#settleAutosave();
     this.#unsubscribeSession?.();
     this.#unsubscribeSession = undefined;
     if (previous?.dirty === true && previous.path !== null)
       await removeAutosaves(previous.path);
 
     this.#session = next;
+    this.#autosave = undefined;
     if (next !== undefined) {
-      this.#unsubscribeSession = next.onMeta(() => {
-        if (next.dirty) this.#scheduleAutosave();
-        this.#emit();
+      const autosave = new Autosave({
+        delayMs: this.#options.autosaveIntervalMs ?? settings.autosave.delayMs,
+        maxWaitMs:
+          this.#options.autosaveMaxWaitMs ?? settings.autosave.maxWaitMs,
+        write: () => this.#writeSidecar(next),
       });
-      if (next.dirty) this.#scheduleAutosave();
+      this.#autosave = autosave;
+      const unsubscribeMeta = next.onMeta(() => this.#emit());
+      const unsubscribeChange = next.onChange(() => autosave.changed());
+      this.#unsubscribeSession = () => {
+        unsubscribeMeta();
+        unsubscribeChange();
+      };
+      if (next.dirty) autosave.schedule();
     }
     this.#emit();
   }
 
-  #scheduleAutosave(): void {
-    if (this.#autosaveTimer !== undefined) return;
-    const timer = setTimeout(() => {
-      void this.#autosave();
-    }, this.#options.autosaveIntervalMs ?? settings.autosave.delayMs);
-    timer.unref();
-    this.#autosaveTimer = timer;
-  }
-
-  #cancelAutosave(): void {
-    if (this.#autosaveTimer !== undefined) clearTimeout(this.#autosaveTimer);
-    this.#autosaveTimer = undefined;
-  }
-
-  async #autosave(): Promise<void> {
-    this.#cancelAutosave();
-    const session = this.#session;
-    if (session === undefined || !session.dirty || session.path === null)
-      return;
+  /** Writes the session's sidecar; false when there is nothing to write or it failed. */
+  async #writeSidecar(session: DocumentSession): Promise<boolean> {
+    if (!session.dirty || session.path === null) return false;
     try {
       const sidecar = autosavePathFor(session.path);
       await writeFileAtomically(sidecar, serializeDocument(session.document));
       await removeAutosaves(session.path, sidecar);
+      return true;
     } catch (error) {
       this.#options.log?.(
         `Autosave failed for ${session.path}: ${(error as Error).message}`,
       );
+      return false;
     }
   }
 

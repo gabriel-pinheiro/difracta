@@ -56,6 +56,7 @@ export class DocumentSession {
   readonly #listeners = new Set<(delta: DocumentDelta) => void>();
   readonly #eventListeners = new Set<(event: DocumentEvent) => void>();
   readonly #metaListeners = new Set<() => void>();
+  readonly #changeListeners = new Set<() => void>();
 
   constructor(
     document: Document,
@@ -107,15 +108,19 @@ export class DocumentSession {
   }
 
   /**
-   * Replaces the whole content in place, as one delta, keeping the id and the
-   * subscribers. Used to revert to the file as saved. History is cleared and
-   * the document is clean afterwards.
+   * Replaces the whole content in place, as one delta that sets every table
+   * of the Document, keeping the id, the subscribers and the operational
+   * state. Used to revert to the file as saved. History is cleared and the
+   * document is clean afterwards.
    */
   replaceDocument(document: Document, sessionId: string): void {
-    const patches: Patch[] = [
-      { op: "set", path: ["installation"], value: document.installation },
-      { op: "set", path: ["outputs"], value: document.outputs },
-    ];
+    const patches: Patch[] = Object.keys(document)
+      .filter((table) => table !== "operational")
+      .map((table) => ({
+        op: "set",
+        path: [table],
+        value: document[table as keyof Document],
+      }));
     this.#history = new History();
     this.#commit(
       { ...document, operational: this.#document.operational },
@@ -157,6 +162,15 @@ export class DocumentSession {
   onMeta(listener: () => void): () => void {
     this.#metaListeners.add(listener);
     return () => this.#metaListeners.delete(listener);
+  }
+
+  /**
+   * Fires after each change to the saved part of the document, the part the
+   * file holds; a change to `operational` alone (Blackout) does not fire it.
+   */
+  onChange(listener: () => void): () => void {
+    this.#changeListeners.add(listener);
+    return () => this.#changeListeners.delete(listener);
   }
 
   execute(
@@ -202,7 +216,7 @@ export class DocumentSession {
     // Dirty means the saved part differs from the file, whichever channel
     // changed it: a played Scene or an OSC opacity counts, Blackout does not.
     if (result.patches.some((patch) => patch.path[0] !== "operational"))
-      this.#markDirty();
+      this.#changed();
     return {
       ok: true,
       revision: this.#revision,
@@ -242,7 +256,7 @@ export class DocumentSession {
       step.patches,
       sessionId,
     );
-    this.#markDirty();
+    this.#changed();
     return {
       ok: true,
       revision: this.#revision,
@@ -277,10 +291,13 @@ export class DocumentSession {
     }
   }
 
-  #markDirty(): void {
-    if (this.#dirty) return;
-    this.#dirty = true;
-    this.#notifyMeta();
+  /** The saved part changed: the document is dirty and the autosave clock restarts. */
+  #changed(): void {
+    if (!this.#dirty) {
+      this.#dirty = true;
+      this.#notifyMeta();
+    }
+    for (const listener of this.#changeListeners) listener();
   }
 
   #notifyMeta(): void {

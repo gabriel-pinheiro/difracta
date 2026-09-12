@@ -15,6 +15,20 @@ const Count = z
   .strict();
 export type WorkloadCount = z.infer<typeof Count>;
 
+/** How many issues one telemetry report carries at most; the Output keeps the first ones. */
+export const MAX_TELEMETRY_ISSUES = 8;
+
+/** A planned Layer drawing nothing on the Output because its Visual or Filter cannot run. */
+export const OutputIssueSchema = z
+  .object({
+    layerId: z.string(),
+    /** The Visual or Filter definition id. */
+    definition: z.string(),
+    message: z.string(),
+  })
+  .strict();
+export type OutputIssue = z.infer<typeof OutputIssueSchema>;
+
 export const OutputTelemetrySchema = z
   .object({
     /** Canvas size in device pixels after the pixel-ratio policy. */
@@ -32,6 +46,12 @@ export const OutputTelemetrySchema = z
         filters: Count,
       })
       .strict(),
+    /**
+     * Layers that failed on this Output, empty when all run. Optional so a
+     * report without it still validates; a reader treats a missing list as
+     * empty.
+     */
+    issues: z.array(OutputIssueSchema).max(MAX_TELEMETRY_ISSUES).optional(),
   })
   .strict();
 export type OutputTelemetry = z.infer<typeof OutputTelemetrySchema>;

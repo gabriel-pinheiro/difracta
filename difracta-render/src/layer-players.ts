@@ -5,6 +5,7 @@ import {
 } from "@difracta/core";
 
 import { createScratchCanvas, createTexture } from "./gl.ts";
+import { reportIssue, type RenderIssue } from "./issues.ts";
 import type { LayerDraw } from "./plan.ts";
 import { resolveParameters } from "./sdk/parameters.ts";
 import { createVisualPlayer, type VisualPlayer } from "./sdk/player.ts";
@@ -43,8 +44,16 @@ export interface StepReport {
   readonly changed: boolean;
   readonly canvas: Workload;
   readonly shaders: Workload;
+  /** The Layers whose instance failed, one issue each, on every frame they stay planned. */
+  readonly issues: readonly RenderIssue[];
 }
 
+/**
+ * A failed entry keeps its key and its place in the map, so its Visual is
+ * retried exactly when a live entry would be replaced: the Layer leaves
+ * the plan, or its Visual (or, for a canvas Visual, its canvas size)
+ * changes.
+ */
 interface CanvasEntry {
   readonly kind: "canvas";
   readonly visual: string;
@@ -54,12 +63,14 @@ interface CanvasEntry {
   readonly player: VisualPlayer;
   readonly texture: WebGLTexture;
   blank: boolean;
+  issue: RenderIssue | undefined;
 }
 
 interface ShaderEntry {
   readonly kind: "shader";
   readonly visual: string;
   readonly player: ShaderPlayer;
+  issue: RenderIssue | undefined;
 }
 
 type Entry = CanvasEntry | ShaderEntry;
@@ -77,7 +88,9 @@ interface Counter {
  * An instance exists exactly while its Layer is in the plan: playing
  * another Scene, disabling the Layer, or losing its Target disposes it,
  * and a Visual or canvas-size change replaces it. Cues reach the instance
- * of the Layer they were fired on.
+ * of the Layer they were fired on. An instance that throws is stopped by
+ * its player; the Layer is logged once, draws nothing and is reported as
+ * an issue on every frame until its entry is replaced.
  */
 export class LayerPlayers {
   readonly #gl: WebGL2RenderingContext;
@@ -98,6 +111,7 @@ export class LayerPlayers {
     outputHeight: number,
   ): StepReport {
     const frames: LayerFrame[] = [];
+    const issues: RenderIssue[] = [];
     const seen = new Set<string>();
     let changed = false;
     const canvas: Counter = { planned: 0, running: 0, rendered: 0 };
@@ -123,13 +137,19 @@ export class LayerPlayers {
           definition,
           size(draw.surface.renderScale),
         );
+        if (entry.issue !== undefined) {
+          issues.push(entry.issue);
+          return;
+        }
         counter.running += 1;
         const result = entry.player.frame(
           dt,
           draw.layer.parameters,
           draw.paths,
         );
-        if (result.rendered) {
+        if (result.failure !== undefined)
+          this.#fail(entry, draw, result.failure, issues);
+        else if (result.rendered) {
           this.#upload(entry);
           counter.rendered += 1;
           changed = true;
@@ -141,6 +161,10 @@ export class LayerPlayers {
       } else if (isShaderVisual(definition)) {
         seen.add(draw.layer.id);
         const entry = this.#shaderEntry(draw, definition);
+        if (entry.issue !== undefined) {
+          issues.push(entry.issue);
+          return;
+        }
         counter.running += 1;
         const { width, height } = size(1);
         const result = entry.player.frame(
@@ -151,6 +175,8 @@ export class LayerPlayers {
           draw.paths,
         );
         if (result.changed) changed = true;
+        if (result.failure !== undefined)
+          this.#fail(entry, draw, result.failure, issues);
         if (result.blank) return;
         counter.rendered += 1;
         frames.push({
@@ -174,7 +200,7 @@ export class LayerPlayers {
       this.#entries.delete(id);
       changed = true;
     }
-    return { frames, changed, canvas, shaders };
+    return { frames, changed, canvas, shaders, issues };
   }
 
   /** Delivers a Cue fired on a Layer to its instance, if it is running. */
@@ -216,9 +242,21 @@ export class LayerPlayers {
       }),
       texture: createTexture(this.#gl),
       blank: false,
+      issue: undefined,
     };
     this.#entries.set(draw.layer.id, entry);
     return entry;
+  }
+
+  /** The instance threw: logged once here, reported on every frame from now on. */
+  #fail(
+    entry: Entry,
+    draw: LayerDraw,
+    error: Error,
+    issues: RenderIssue[],
+  ): void {
+    entry.issue = reportIssue("Visual", draw.layer, draw.visual, error);
+    issues.push(entry.issue);
   }
 
   #shaderEntry(draw: LayerDraw, definition: ShaderVisual): ShaderEntry {
@@ -234,6 +272,7 @@ export class LayerPlayers {
         height: 1,
         seed: draw.layer.id,
       }),
+      issue: undefined,
     };
     this.#entries.set(draw.layer.id, entry);
     return entry;

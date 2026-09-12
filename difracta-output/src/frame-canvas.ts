@@ -3,6 +3,7 @@ import {
   createCompositor,
   type Compositor,
   type FrameReport,
+  type RenderIssue,
 } from "@difracta/render";
 import { builtInCatalog } from "@difracta/visuals";
 
@@ -12,6 +13,8 @@ import { builtInCatalog } from "@difracta/visuals";
  * itself, cheaply: one timestamp per frame and two around the draw, folded
  * into rolling averages that the page reports once a second. Frames the
  * compositor skips (nothing changed) count as zero work, which is the truth.
+ * A frame that throws is logged (once per distinct error, not per frame)
+ * and the loop goes on: the next frame is requested whatever happened.
  */
 export interface FrameMetrics {
   readonly width: number;
@@ -37,6 +40,8 @@ export interface FrameMetrics {
     readonly running: number;
     readonly planned: number;
   };
+  /** The Layers the last frame reported as unable to run. */
+  readonly issues: readonly RenderIssue[];
 }
 
 /** Weight of the newest sample in the rolling averages. */
@@ -56,11 +61,14 @@ export class FrameCanvas {
   #renderedPerFrame = 0;
   #shadersPerFrame = 0;
   #executedPerFrame = 0;
-  #lastReport: Pick<FrameReport, "layers" | "shaders" | "filters"> = {
-    layers: { planned: 0, running: 0, rendered: 0 },
-    shaders: { planned: 0, running: 0, rendered: 0 },
-    filters: { planned: 0, running: 0, executed: 0 },
-  };
+  #frameError: string | undefined;
+  #lastReport: Pick<FrameReport, "layers" | "shaders" | "filters" | "issues"> =
+    {
+      layers: { planned: 0, running: 0, rendered: 0 },
+      shaders: { planned: 0, running: 0, rendered: 0 },
+      filters: { planned: 0, running: 0, executed: 0 },
+      issues: [],
+    };
 
   constructor(canvas: HTMLCanvasElement) {
     this.#canvas = canvas;
@@ -99,6 +107,7 @@ export class FrameCanvas {
         running: this.#lastReport.filters.running,
         planned: this.#lastReport.filters.planned,
       },
+      issues: this.#lastReport.issues,
     };
   }
 
@@ -117,12 +126,20 @@ export class FrameCanvas {
         );
       this.#lastFrameAt = now;
       const started = performance.now();
-      this.#draw(now);
-      this.#renderWorkMs = smooth(
-        this.#renderWorkMs,
-        performance.now() - started,
-      );
-      this.#animationFrame = requestAnimationFrame(tick);
+      try {
+        this.#draw(now);
+        this.#frameError = undefined;
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message !== this.#frameError) console.error("Frame failed:", error);
+        this.#frameError = message;
+      } finally {
+        this.#renderWorkMs = smooth(
+          this.#renderWorkMs,
+          performance.now() - started,
+        );
+        this.#animationFrame = requestAnimationFrame(tick);
+      }
     };
     this.#animationFrame = requestAnimationFrame(tick);
   }

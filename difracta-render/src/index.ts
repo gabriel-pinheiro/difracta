@@ -4,6 +4,7 @@ export {
   type FrameReport,
 } from "./compositor.ts";
 export { homography, project } from "./homography.ts";
+export type { RenderIssue } from "./issues.ts";
 export { MASK_TEXTURE_SIZE } from "./masks.ts";
 export {
   planFrame,

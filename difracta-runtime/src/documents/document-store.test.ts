@@ -1,5 +1,5 @@
 import { createBuiltInRegistry } from "@difracta/core";
-import { mkdtemp, readFile, rm, utimes } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -14,6 +14,8 @@ import { DocumentStore } from "./document-store.ts";
 
 let dir: string;
 let store: DocumentStore;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 beforeEach(async () => {
   dir = await mkdtemp(path.join(tmpdir(), "difracta-"));
@@ -130,16 +132,19 @@ describe("DocumentStore", () => {
       dirty: false,
       recovered: false,
     });
-    expect(deltas).toEqual([
-      [
-        {
-          op: "set",
-          path: ["installation"],
-          value: { id: documentId, name: "Living", activeScene: null },
-        },
-        { op: "set", path: ["outputs"], value: {} },
-      ],
-    ]);
+    // One set per table, so a replica catches up whatever the file holds.
+    expect(deltas).toHaveLength(1);
+    const patches = deltas[0] as { path: string[]; value: unknown }[];
+    expect(patches.map((patch) => patch.path)).toEqual(
+      Object.keys(store.session(documentId)!.document)
+        .filter((table) => table !== "operational")
+        .map((table) => [table]),
+    );
+    expect(patches[0]?.value).toEqual({
+      id: documentId,
+      name: "Living",
+      activeScene: null,
+    });
     expect(await listAutosaves(filePath)).toEqual([]);
     expect(
       store.session(documentId)!.execute("history.undo", {}, "test").ok,
@@ -152,6 +157,79 @@ describe("DocumentStore", () => {
     await store.save(documentId);
     expect(await listAutosaves(filePath)).toEqual([]);
     expect(await readFile(filePath, "utf8")).toContain("Living 3");
+  });
+
+  it("keeps the sidecar at most one delay behind the last of several changes", async () => {
+    const created = await store.create("Living");
+    const documentId = created.ok ? created.result.id : "";
+    await store.save(documentId, "living");
+    const filePath = path.join(dir, "living.difracta");
+    const session = store.session(documentId)!;
+    for (const name of ["Living 1", "Living 2", "Living 3"])
+      session.execute("installation.rename", { name }, "test");
+    await sleep(60);
+    let sidecars = await listAutosaves(filePath);
+    expect(sidecars).toHaveLength(1);
+    expect(await readFile(sidecars[0]!, "utf8")).toContain("Living 3");
+
+    // Changes after the first sidecar reach the next one as well.
+    session.execute("installation.rename", { name: "Living 4" }, "test");
+    await sleep(60);
+    sidecars = await listAutosaves(filePath);
+    expect(sidecars).toHaveLength(1);
+    expect(await readFile(sidecars[0]!, "utf8")).toContain("Living 4");
+  });
+
+  it("flush writes what changed since the last sidecar, and nothing otherwise", async () => {
+    const created = await store.create("Living");
+    const documentId = created.ok ? created.result.id : "";
+    await store.save(documentId, "living");
+    const filePath = path.join(dir, "living.difracta");
+    const session = store.session(documentId)!;
+    session.execute("installation.rename", { name: "Living 2" }, "test");
+    await sleep(60);
+    expect(await listAutosaves(filePath)).toHaveLength(1);
+
+    session.execute("installation.rename", { name: "Living 3" }, "test");
+    await store.flush();
+    const sidecars = await listAutosaves(filePath);
+    expect(sidecars).toHaveLength(1);
+    expect(await readFile(sidecars[0]!, "utf8")).toContain("Living 3");
+
+    const past = new Date(Date.now() - 60_000);
+    await utimes(sidecars[0]!, past, past);
+    await store.flush();
+    expect((await stat(sidecars[0]!)).mtimeMs).toBeLessThan(
+      past.getTime() + 1_000,
+    );
+  });
+
+  it("writes by the max wait while changes keep coming", async () => {
+    store = new DocumentStore({
+      projectsDir: dir,
+      registry: createBuiltInRegistry(),
+      autosaveIntervalMs: 60,
+      autosaveMaxWaitMs: 120,
+    });
+    const created = await store.create("Living");
+    const documentId = created.ok ? created.result.id : "";
+    await store.save(documentId, "living");
+    const filePath = path.join(dir, "living.difracta");
+    const session = store.session(documentId)!;
+    for (let step = 1; step <= 20; step += 1) {
+      session.execute(
+        "installation.rename",
+        { name: `Living ${step}` },
+        "test",
+      );
+      await sleep(15);
+      // 180ms in: changes come faster than the delay, only the max wait writes.
+      if (step === 12) expect(await listAutosaves(filePath)).toHaveLength(1);
+    }
+    await sleep(100);
+    const sidecars = await listAutosaves(filePath);
+    expect(sidecars).toHaveLength(1);
+    expect(await readFile(sidecars[0]!, "utf8")).toContain("Living 20");
   });
 
   it("names autosaves after the file with a filesystem-safe ISO timestamp", () => {

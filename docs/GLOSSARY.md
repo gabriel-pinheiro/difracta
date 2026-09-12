@@ -120,6 +120,9 @@ Surface patterns and bounds, the Surface's pattern already masked with the Mask
 or Path being aligned drawn over it with its points marked, or a filled Region
 over its dimmed Surface.
 
+Blackout takes precedence: while it is on, the calibrated Output shows black and
+the pattern returns when Blackout is released.
+
 Masks are applied while calibrating a Mask or a Path, so the operator aligns
 against the shape the audience will actually see. They are not applied while
 calibrating a Surface's quadrilateral, where a Mask would hide the corners being
@@ -386,8 +389,10 @@ Installation, so a show reopens where it left off.
 ### Blackout
 
 A temporary per-Installation Runtime state that replaces ordinary Scene output
-with black without changing the Active Scene. Blackout is not persisted;
-Calibration Mode takes precedence on its selected Output.
+with black without changing the Active Scene. Blackout is not persisted. It
+takes precedence over Calibration Mode: an Output under Blackout shows black
+even while one of its Surfaces is being calibrated, so the wall is dark the
+moment the performer asks for it.
 
 ## Applications and user interface
 

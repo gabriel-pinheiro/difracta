@@ -1,6 +1,10 @@
 import type { DifractaClient, DocumentView } from "@difracta/client";
 import { settings } from "@difracta/core";
-import type { DocumentSummary, OutputTelemetry } from "@difracta/protocol";
+import {
+  MAX_TELEMETRY_ISSUES,
+  type DocumentSummary,
+  type OutputTelemetry,
+} from "@difracta/protocol";
 
 import { FrameCanvas } from "./frame-canvas.ts";
 
@@ -97,7 +101,8 @@ export class OutputPage {
   }
 
   #report(): void {
-    const { layers, shaders, filters, ...metrics } = this.#frame.metrics();
+    const { layers, shaders, filters, issues, ...metrics } =
+      this.#frame.metrics();
     const telemetry: OutputTelemetry = {
       ...metrics,
       workload: {
@@ -117,6 +122,7 @@ export class OutputPage {
           relevant: filters.planned,
         },
       },
+      issues: issues.slice(0, MAX_TELEMETRY_ISSUES),
     };
     this.#options.client.report(telemetry);
   }

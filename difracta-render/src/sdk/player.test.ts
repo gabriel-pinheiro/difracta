@@ -30,6 +30,28 @@ const probe = defineVisual({
   }),
 });
 
+let faultyUpdates = 0;
+
+/** Draws once, then throws from its second update. */
+const faulty = defineVisual({
+  id: "faulty",
+  name: "Faulty",
+  description: "Throws on its second frame.",
+  parameters: {},
+  create: () => ({
+    update() {
+      faultyUpdates += 1;
+      if (faultyUpdates > 1) throw new Error("boom");
+    },
+    render({ context, width, height }) {
+      context.fillRect(0, 0, width, height);
+    },
+    dispose() {
+      disposed += 1;
+    },
+  }),
+});
+
 function player() {
   const recording = recordingContext();
   frames.length = 0;
@@ -106,6 +128,32 @@ describe("visual player", () => {
     const { instance } = player();
     instance.frame(0.016, {});
     instance.dispose();
+    instance.dispose();
+    expect(disposed).toBe(1);
+  });
+
+  it("stops an instance that throws and reports the failure on every later frame", () => {
+    const recording = recordingContext();
+    faultyUpdates = 0;
+    disposed = 0;
+    const instance = createVisualPlayer(faulty, {
+      context: recording.context,
+      width: 320,
+      height: 180,
+      seed: "layer_a",
+    });
+    expect(instance.frame(0.016, {})).toEqual({ rendered: true, blank: false });
+    const failed = instance.frame(0.016, {});
+    expect(failed).toMatchObject({ rendered: false, blank: true });
+    expect(failed.failure?.message).toBe("boom");
+    expect(disposed).toBe(1);
+    // The instance is gone: later frames and Cues never reach it.
+    expect(() => instance.cue("hit")).not.toThrow();
+    const later = instance.frame(0.016, {});
+    expect(later).toMatchObject({ rendered: false, blank: true });
+    expect(later.failure).toBe(failed.failure);
+    expect(faultyUpdates).toBe(2);
+    expect(recording.callsTo("fillRect")).toHaveLength(1);
     instance.dispose();
     expect(disposed).toBe(1);
   });

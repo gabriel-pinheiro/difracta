@@ -8,6 +8,7 @@ import {
   uniformName,
 } from "./filter-shaders.ts";
 import { compileProgram, createTexture, setUniform, uniform } from "./gl.ts";
+import { errorMessage } from "./issues.ts";
 
 interface Target {
   readonly framebuffer: WebGLFramebuffer;
@@ -28,13 +29,16 @@ interface ProgramEntry {
  * writes the other, then the roles swap; `present` copies the active one
  * to the screen. Two suffice for any number of Filters, and they exist
  * only once a frame has needed them. Programs are compiled once per
- * Filter and kept; one that fails to compile is reported once and skipped.
+ * Filter and kept; one that fails to compile is logged once and skipped,
+ * and `failure` tells the compositor why, so every Layer using it is
+ * reported as an issue.
  */
 export class FilterChain {
   readonly #gl: WebGL2RenderingContext;
   readonly #quad: WebGLBuffer;
   readonly #present: WebGLProgram;
   readonly #programs = new Map<string, ProgramEntry | undefined>();
+  readonly #failures = new Map<string, string>();
   #targets: readonly [Target, Target] | undefined;
   #width = 0;
   #height = 0;
@@ -124,11 +128,17 @@ export class FilterChain {
     gl.enable(gl.BLEND);
   }
 
+  /** Why the Filter's program did not compile, once a pass has tried it. */
+  failure(filterId: string): string | undefined {
+    return this.#failures.get(filterId);
+  }
+
   dispose(): void {
     const gl = this.#gl;
     for (const entry of this.#programs.values())
       if (entry !== undefined) gl.deleteProgram(entry.program);
     this.#programs.clear();
+    this.#failures.clear();
     gl.deleteProgram(this.#present);
     for (const target of this.#targets ?? []) {
       gl.deleteFramebuffer(target.framebuffer);
@@ -175,6 +185,7 @@ export class FilterChain {
       };
     } catch (error: unknown) {
       console.error(`Filter “${id}” cannot run:`, error);
+      this.#failures.set(id, errorMessage(error));
     }
     this.#programs.set(id, entry);
     return entry;
