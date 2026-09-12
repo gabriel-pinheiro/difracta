@@ -28,6 +28,8 @@ export type CommandOutcome =
       readonly patches: readonly Patch[];
       /** Trigger Addresses fired: announced to every subscriber, never stored. */
       readonly events?: readonly string[];
+      /** What a best-effort command could not do, one line each, for the caller to show. */
+      readonly warnings?: readonly string[];
     }
   | { readonly ok: false; readonly error: string };
 
@@ -64,8 +66,12 @@ export function rejected(error: string): CommandOutcome {
 export function accepted(
   patches: readonly Patch[],
   events?: readonly string[],
+  warnings?: readonly string[],
 ): CommandOutcome {
-  return events === undefined
-    ? { ok: true, patches }
-    : { ok: true, patches, events };
+  return {
+    ok: true,
+    patches,
+    ...(events === undefined ? {} : { events }),
+    ...(warnings === undefined ? {} : { warnings }),
+  };
 }

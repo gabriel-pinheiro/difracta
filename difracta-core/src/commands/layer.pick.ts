@@ -15,11 +15,13 @@ import {
   type CommandOutcome,
 } from "../command/command.ts";
 import { linkable } from "../address/address.ts";
+import { actionProblem } from "../address/fire.ts";
 import { linksOfLayer } from "../address/links.ts";
+import { dropActions } from "../document/macros.ts";
 import type { FilterLayer, VisualLayer } from "../document/document.ts";
 import { childLayers, LAYER_LABELS } from "../document/layers.ts";
 import { uniqueName } from "../document/names.ts";
-import type { Patch } from "../document/patch.ts";
+import { applyPatches, type Patch } from "../document/patch.ts";
 
 /**
  * Picking what a Layer is made of: `layer.visual` sets a Visual Layer's
@@ -92,6 +94,19 @@ function pick(
       );
     if (!keep) patches.push({ op: "remove", path: ["links", link.id] });
   }
+  // Macro actions on Parameters or Cues the new definition lacks go too.
+  const swapped = applyPatches(document, patches);
+  patches.push(
+    ...dropActions(
+      document,
+      (action) =>
+        !action.address.startsWith(`layer/${layer.id}/`) ||
+        actionProblem(swapped, catalog, action) === undefined ||
+        actionProblem(swapped, catalog, action)?.includes(
+          "is controlled by",
+        ) === true,
+    ),
+  );
   const previous =
     currentId === null ? undefined : catalog.definition(field, currentId);
   const generated = [LAYER_LABELS[layer.kind], previous?.name]

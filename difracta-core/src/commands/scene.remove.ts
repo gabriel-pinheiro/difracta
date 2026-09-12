@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { accepted, defineCommand, rejected } from "../command/command.ts";
 import { tableEntries } from "../document/document.ts";
+import { dropActionsUnder } from "../document/macros.ts";
 import type { Patch } from "../document/patch.ts";
 import { removeLinksOfLayers } from "./layer.remove.ts";
 
@@ -26,6 +27,12 @@ export const sceneRemove = defineCommand({
     const patches: Patch[] = removeLinksOfLayers(
       document,
       layers.map((layer) => layer.id),
+    );
+    patches.push(
+      ...dropActionsUnder(document, [
+        `scene/${scene.id}/`,
+        ...layers.map((layer) => `layer/${layer.id}/`),
+      ]),
     );
     for (const layer of layers)
       patches.push({ op: "remove", path: ["layers", layer.id] });

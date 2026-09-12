@@ -176,6 +176,7 @@ describe("DocumentStore", () => {
         layers: {},
         controllers: {},
         links: {},
+        macros: {},
         operational: { blackout: true, calibration: null },
       }),
     );

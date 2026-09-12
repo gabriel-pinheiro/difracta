@@ -20,6 +20,7 @@ const labels: Record<OrderedTableName, string> = {
   scenes: "Scene",
   layers: "Layer",
   controllers: "Controller",
+  macros: "Macro",
 };
 
 /** Places an entity right after a sibling (or first) among its siblings: its table, or its parent's children. */

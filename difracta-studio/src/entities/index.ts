@@ -3,6 +3,7 @@ import type { ComponentType } from "react";
 
 import { controllerEntity } from "./controller/controller-entity";
 import { layerEntity } from "./layer/layer-entity";
+import { macroEntity } from "./macro/macro-entity";
 import { maskEntity } from "./mask/mask-entity";
 import { outputEntity } from "./output/output-entity";
 import { sceneEntity } from "./scene/scene-entity";
@@ -31,6 +32,7 @@ export const entities = {
   scene: sceneEntity,
   layer: layerEntity,
   controller: controllerEntity,
+  macro: macroEntity,
 } as const satisfies Record<string, EntityModule>;
 
 export type EntityKind = keyof typeof entities;

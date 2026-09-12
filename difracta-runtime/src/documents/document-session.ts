@@ -34,6 +34,8 @@ export type SessionCommandResult =
       readonly revision: number;
       readonly changed: boolean;
       readonly label?: string;
+      /** What a best-effort command (a Macro run) skipped. */
+      readonly warnings?: readonly string[];
     }
   | { readonly ok: false; readonly error: string };
 
@@ -172,22 +174,22 @@ export class DocumentSession {
       payload,
     );
     if (!result.ok) return result;
-    for (const address of result.events) {
-      const event: DocumentEvent = {
-        documentId: this.id,
-        address,
-        originSessionId: sessionId,
-      };
-      for (const listener of this.#eventListeners) listener(event);
-    }
-    if (result.patches.length === 0)
+    const warnings =
+      result.warnings.length === 0 ? {} : { warnings: result.warnings };
+    if (result.patches.length === 0) {
+      this.#announce(result.events, sessionId);
       return {
         ok: true,
         revision: this.#revision,
         changed: result.events.length > 0,
+        ...warnings,
       };
+    }
 
+    // The change lands before its events are announced, so a Macro that
+    // enables a Layer and fires its Cue reaches an Output in that order.
     this.#commit(result.document, result.patches, sessionId);
+    this.#announce(result.events, sessionId);
     if (result.definition.kind === "authoring") {
       this.#history.push({
         sessionId,
@@ -206,7 +208,19 @@ export class DocumentSession {
       revision: this.#revision,
       changed: true,
       label: result.label,
+      ...warnings,
     };
+  }
+
+  #announce(events: readonly string[], sessionId: string): void {
+    for (const address of events) {
+      const event: DocumentEvent = {
+        documentId: this.id,
+        address,
+        originSessionId: sessionId,
+      };
+      for (const listener of this.#eventListeners) listener(event);
+    }
   }
 
   #executeHistory(

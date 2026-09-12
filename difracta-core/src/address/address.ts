@@ -14,6 +14,7 @@ import {
   type Surface,
 } from "../document/document.ts";
 import { orderedEntries } from "../document/order.ts";
+import { flattenTree } from "../document/tree.ts";
 import type { PatchPath } from "../document/patch.ts";
 
 /**
@@ -63,12 +64,19 @@ export interface ResolvedAddress {
 /** What resolving needs from a Document: the tables that own Addresses. */
 export type AddressSource = Pick<
   Document,
-  "layers" | "surfaces" | "controllers"
+  "layers" | "surfaces" | "controllers" | "scenes" | "macros"
 >;
 
 /** A source with nothing but the given entities, for resolving one entity's own Addresses. */
 export function addressSource(partial: Partial<AddressSource>): AddressSource {
-  return { layers: {}, surfaces: {}, controllers: {}, ...partial };
+  return {
+    layers: {},
+    surfaces: {},
+    controllers: {},
+    scenes: {},
+    macros: {},
+    ...partial,
+  };
 }
 
 interface AddressPattern {
@@ -145,6 +153,38 @@ const patterns: readonly AddressPattern[] = [
       default: false,
     }),
     list: () => [[]],
+  },
+  {
+    pattern: ["scene", "*", "play"],
+    resolve: (document, _catalog, [id = ""]) => {
+      const scene = document.scenes[id];
+      if (scene === undefined) return undefined;
+      return {
+        label: "Play",
+        owner: scene.name,
+        path: ["scenes", id, "play"],
+        type: "trigger",
+      };
+    },
+    list: (document) =>
+      orderedEntries(document.scenes).map((scene) => [scene.id]),
+  },
+  {
+    pattern: ["macro", "*", "run"],
+    resolve: (document, _catalog, [id = ""]) => {
+      const macro = document.macros[id];
+      if (macro === undefined || macro.kind === "group") return undefined;
+      return {
+        label: "Run",
+        owner: macro.name,
+        path: ["macros", id, "run"],
+        type: "trigger",
+      };
+    },
+    list: (document) =>
+      flattenTree(document.macros)
+        .filter((macro) => macro.kind === "macro")
+        .map((macro) => [macro.id]),
   },
   {
     pattern: ["surface", "*", "render-scale"],

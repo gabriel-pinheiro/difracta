@@ -65,6 +65,7 @@ Document
 │                                     filter: filter, parameters, mix
 ├── controllers { [id]: Controller }  kind, parentId, order; number: value 0..1; color: value
 ├── links { [id]: Link }              controllerId, address, anchors
+├── macros { [id]: Macro }            kind, parentId, order; macro: actions [set|toggle|trigger]
 └── operational { blackout, calibration }   replicated, never saved
 ```
 
@@ -213,6 +214,49 @@ one patch. **Why Links target Addresses and not entity fields:** a Link to
 `layer/<id>/opacity` and one to `layer/<id>/param/speed` are the same record, so
 anything that becomes an Address becomes linkable for free.
 
+### Macros
+
+A Macro (`macros` table) is a named, ordered list of actions run as one
+performance step: a look, a hit, a state. Each action is one of three things on
+one Address: `set` writes a value, `toggle` flips a switch, `trigger` fires a
+trigger Address. Nothing else, because everything a show needs to move is an
+Address: showing a Layer is a set of its `enabled`, a Scene change is a trigger
+of `scene/<id>/play`, Blackout is a toggle of `installation/blackout`, and a
+Macro that runs other Macros triggers their `macro/<id>/run`. Macros share the
+Controllers' tree shape (`kind`, `parentId`, `order`; `document/tree.ts` holds
+the move, ungroup and duplicate rules both use), so Groups arrange them the same
+way. Actions live inside the Macro as an array with their own ids; a Macro is a
+short list edited as a whole, not a table.
+
+Running is `address.trigger` on `macro/<id>/run`, the same path a Pad, OSC or
+the CLI takes. The actions run in order against the document as the previous
+ones left it, so a later action sees an earlier one's effect, and best-effort:
+an action that cannot run (its target gone, its Address driven by a Controller)
+is skipped, the rest run, and the command's result carries one warning per
+skipped action, which Studio toasts and the CLI prints. One run is one commit,
+one revision, never undone, dirtying like any performance write. Every Macro
+runs at most once per firing, so Macros may run each other in any graph without
+a loop. `actionProblem` tells the inspector which actions would be skipped
+today, so a broken one is seen at rehearsal rather than heard at the show.
+
+Adding actions takes any number of Addresses at once (`macro.actions.add`), each
+captured with what the Address holds now, so ticking fifteen opacities records
+the state the wall is in. Removing a Layer, Scene, Controller or Macro drops the
+actions on it; picking another Visual drops the actions on Parameters or Cues
+the new one lacks; duplicating a Layer does not copy actions, since a Macro
+names its targets on purpose.
+
+**Why three action kinds and not a catalog of verbs:** v1-style unions (play
+scene, show item, set opacity, trigger cue…) grow with every controllable thing
+and each verb needs its own inspector, router and discovery entry. Over
+Addresses, a Macro can do anything a slider or an OSC message can, including
+what does not exist yet. **Why best-effort:** a Macro is fired mid-set from a
+Pad; refusing the whole run because one Layer was deleted yesterday takes the
+performer's hit away. Skipping with a warning keeps the show going and tells the
+truth afterwards. **Why once per run rather than a depth limit:** a diamond (A
+runs B and C, both run D) should run D once, and a cycle should stop without
+counting; a visited set does both.
+
 ### Catalog and Parameters
 
 The Catalog is the set of Visual and Filter definitions a runtime knows
@@ -314,12 +358,12 @@ An Address names a controllable property or trigger, such as
 `installation/blackout` or `layer/<id>/opacity`. `resolveAddress` maps it to a
 document path, a value type (boolean, number, color, choice or trigger), a
 default, and for numbers a range and for choices the options; `listAddresses`
-enumerates every reachable one. The entries today are Blackout, a Surface's
-`render-scale`, a Controller's `value`, and, per Layer, `enabled`, `opacity` and
-`blend` (Visual Layers), `mix` (Filter Layers), `param/<name>` for every
-Parameter of the Layer's definition and `cue/<key>` for every Cue it declares,
-typed from the Catalog. Controllers, Macros, Pads, OSC, and the CLI all read and
-write Addresses.
+enumerates every reachable one. The entries today are Blackout, a Scene's
+`play`, a Macro's `run`, a Surface's `render-scale`, a Controller's `value`,
+and, per Layer, `enabled`, `opacity` and `blend` (Visual Layers), `mix` (Filter
+Layers), `param/<name>` for every Parameter of the Layer's definition and
+`cue/<key>` for every Cue it declares, typed from the Catalog. Controllers,
+Macros, Pads, OSC, and the CLI all read and write Addresses.
 
 Two commands write one: `address.edit` is the authoring write the inspector
 sends, undoable, labelled by the property ("Change Opacity", "Change Speed") and
@@ -327,12 +371,13 @@ coalescing per Address so a drag is one step; `address.set` is the same write
 for show control, never undone. Both share one reducer, which refuses an unknown
 Address, a value the type does not accept, and an Address a Controller drives,
 which cannot be written directly by anyone. A trigger Address is fired rather
-than written: `address.trigger` changes nothing in the document and returns an
-event instead, which the runtime announces to every session subscribed to the
-document after the deltas of the same tick, so a Macro's Parameter changes are
-in place before its Cue lands. An event is never stored, undone or replayed to a
-session that connects later; an Output hands it to the Layer's Visual instance
-as `cue(key)`.
+than written, through `address.trigger` and `address/fire.ts`: a Layer's Cue
+changes nothing in the document and returns an event instead, a Scene's play
+sets the active Scene, a Macro's run performs its actions. The runtime commits a
+command's patches before announcing its events to every session subscribed to
+the document, so a Macro's Parameter changes are in place before its Cue lands.
+An event is never stored, undone or replayed to a session that connects later;
+an Output hands it to the Layer's Visual instance as `cue(key)`.
 
 **Why:** hand-written target unions mean every new controllable thing needs
 changes in the domain, protocol, inspector, OSC router and discovery tree. With
@@ -676,6 +721,17 @@ link menu: "Link to" lists the Controllers of the right kind, and a linked row
 shows the effective value read-only, a chip with the Controller's name and value
 that opens it, and Unlink, so there is no control to mistake for an override. A
 Layer whose Enabled is linked shows a link glyph in place of its eye.
+
+The Macros section has the same shape, each Macro row with its action count and
+a Run button, and starts closed unless it is empty. The Macro inspector has the
+name, Run, and the actions in the order they run: each with its target, the
+value it sets edited with the same control the Address has in its own inspector,
+a Set or Toggle choice on switches, a grip to drag it elsewhere in the list, and
+the reason it would be skipped, if any. "Add action…" opens the same picker as
+Links, now over every Address in the Installation under its Scene, Controllers,
+Macros, Scenes and Installation headings; each pick becomes a set of the current
+value, or a trigger. A run that skipped anything shows a toast naming what and
+why.
 
 The Library is the picker for Visuals and Filters. It is bound to one Visual or
 Filter Layer and takes over the center column while open: a search box, three

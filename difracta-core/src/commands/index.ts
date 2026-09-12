@@ -24,6 +24,16 @@ import { layerUpdate } from "./layer.update.ts";
 import { linkCreate } from "./link.create.ts";
 import { linkRemove } from "./link.remove.ts";
 import { linkUpdate } from "./link.update.ts";
+import { macroActionMove } from "./macro.action.move.ts";
+import { macroActionRemove } from "./macro.action.remove.ts";
+import { macroActionUpdate } from "./macro.action.update.ts";
+import { macroActionsAdd } from "./macro.actions.add.ts";
+import { macroCreate } from "./macro.create.ts";
+import { macroDuplicate } from "./macro.duplicate.ts";
+import { macroMove } from "./macro.move.ts";
+import { macroRemove } from "./macro.remove.ts";
+import { macroRename } from "./macro.rename.ts";
+import { macroUngroup } from "./macro.ungroup.ts";
 import { installationRename } from "./installation.rename.ts";
 import { maskCreate } from "./mask.create.ts";
 import {
@@ -98,6 +108,16 @@ export const builtInCommands: readonly CommandDefinition<never>[] = [
   linkCreate,
   linkUpdate,
   linkRemove,
+  macroCreate,
+  macroRename,
+  macroMove,
+  macroUngroup,
+  macroDuplicate,
+  macroRemove,
+  macroActionsAdd,
+  macroActionUpdate,
+  macroActionRemove,
+  macroActionMove,
   addressEdit,
   addressSet,
   addressToggle,

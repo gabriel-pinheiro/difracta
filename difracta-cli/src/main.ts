@@ -306,13 +306,20 @@ program
 program
   .command("trigger <address...>")
   .description(
-    "Fire trigger Addresses, e.g. trigger layer/lay_1/cue/flash; several at once fire together.",
+    "Fire trigger Addresses: layer/<id>/cue/<key>, scene/<id>/play or macro/<id>/run; several at once fire together, and a Macro run lists what it skipped.",
   )
   .action((addresses: string[]) =>
     withDocument(async (client, summary) => {
-      for (const address of addresses)
-        await client.command(summary.id, "address.trigger", { address });
-      print(addresses, () => addresses.map((a) => `${a} fired`).join("\n"));
+      const lines: string[] = [];
+      for (const address of addresses) {
+        const result = await client.command<{
+          warnings?: readonly string[];
+        }>(summary.id, "address.trigger", { address });
+        lines.push(`${address} fired`);
+        for (const warning of result.warnings ?? [])
+          lines.push(`  skipped: ${warning}`);
+      }
+      print(lines, () => lines.join("\n"));
     }),
   );
 

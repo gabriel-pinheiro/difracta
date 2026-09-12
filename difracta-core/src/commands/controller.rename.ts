@@ -1,8 +1,7 @@
 import { z } from "zod";
 
 import { accepted, defineCommand, rejected } from "../command/command.ts";
-import { childControllers } from "../document/controllers.ts";
-import { uniqueName } from "../document/names.ts";
+import { treeRename } from "../document/tree.ts";
 
 export const controllerRename = defineCommand({
   name: "controller.rename",
@@ -20,15 +19,11 @@ export const controllerRename = defineCommand({
     const controller = document.controllers[payload.controllerId];
     if (controller === undefined)
       return rejected(`Controller “${payload.controllerId}” does not exist.`);
-    const name = uniqueName(
-      childControllers(document.controllers, controller.parentId)
-        .filter((sibling) => sibling.id !== controller.id)
-        .map((sibling) => sibling.name),
+    const patches = treeRename(
+      { name: "controllers", table: document.controllers, noun: "Controller" },
+      controller,
       payload.name,
     );
-    if (name === controller.name) return accepted([]);
-    return accepted([
-      { op: "set", path: ["controllers", controller.id, "name"], value: name },
-    ]);
+    return "error" in patches ? rejected(patches.error) : accepted(patches);
   },
 });

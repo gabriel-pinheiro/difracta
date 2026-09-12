@@ -154,7 +154,11 @@ export interface DropInside {
   readonly onDrop: (sourceId: string) => void;
 }
 
-/** One draggable row and drop target; shows a line on the edge a drop would land on. */
+/**
+ * One draggable row and drop target; shows a line on the edge a drop would
+ * land on. A descendant marked `data-drag-handle` becomes the only place a
+ * drag starts, for rows holding controls of their own.
+ */
 export function SortableItem({
   id,
   inside,
@@ -184,9 +188,11 @@ export function SortableItem({
     const acceptsInside = (sourceKind: unknown): boolean =>
       typeof sourceKind === "string" &&
       insideKinds.split(" ").includes(sourceKind);
+    const handle = element.querySelector<HTMLElement>("[data-drag-handle]");
     return combine(
       draggable({
         element,
+        ...(handle === null ? {} : { dragHandle: handle }),
         getInitialData: () => ({ kind, id, listId }),
         // A translucent copy of the row follows the pointer, so the drop line
         // underneath stays readable.

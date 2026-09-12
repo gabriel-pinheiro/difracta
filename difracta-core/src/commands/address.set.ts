@@ -1,49 +1,16 @@
 import { z } from "zod";
 
-import {
-  addressValueProblem,
-  resolveAddress,
-  sameAddressValue,
-  type ResolvedAddress,
-} from "../address/address.ts";
-import { linkAt } from "../address/links.ts";
+import { toggleAddress, writeAddress } from "../address/write.ts";
 import {
   accepted,
   defineCommand,
   rejected,
-  type CommandContext,
   type CommandOutcome,
 } from "../command/command.ts";
-import { getAtPath } from "../document/patch.ts";
+import type { Written } from "../address/write.ts";
 
-/**
- * Writing a value to an Address, shared by the performance write here and
- * the authoring `address.edit`: the Address must exist, be settable and
- * accept the value. Writing what is already there changes nothing.
- */
-export function writeAddress(
-  { document, catalog }: CommandContext<unknown>,
-  address: string,
-  value: unknown,
-): CommandOutcome & { readonly resolved?: ResolvedAddress } {
-  const resolved = resolveAddress(document, address, catalog);
-  if (resolved === undefined) return rejected(`Unknown address “${address}”.`);
-  if (resolved.type === "trigger")
-    return rejected(`Address “${address}” is a trigger; use address.trigger.`);
-  const link = linkAt(document, address);
-  if (link !== undefined)
-    return rejected(
-      `${resolved.label} is controlled by ${document.controllers[link.controllerId]?.name ?? "a Controller"}.`,
-    );
-  const problem = addressValueProblem(resolved, value);
-  if (problem !== undefined)
-    return rejected(`Address “${address}” ${problem}.`);
-  if (sameAddressValue(getAtPath(document, resolved.path), value))
-    return { ...accepted([]), resolved };
-  return {
-    ...accepted([{ op: "set", path: resolved.path, value }]),
-    resolved,
-  };
+export function outcomeOf(written: Written): CommandOutcome {
+  return written.ok ? accepted(written.patches) : rejected(written.error);
 }
 
 /**
@@ -58,11 +25,9 @@ export const addressSet = defineCommand({
   payload: z
     .object({ address: z.string().min(1), value: z.unknown() })
     .strict(),
-  apply(context) {
-    return writeAddress(
-      context,
-      context.payload.address,
-      context.payload.value,
+  apply({ document, catalog, payload }) {
+    return outcomeOf(
+      writeAddress(document, catalog, payload.address, payload.value),
     );
   },
 });
@@ -72,14 +37,7 @@ export const addressToggle = defineCommand({
   kind: "performance",
   description: "Toggle a boolean Address.",
   payload: z.object({ address: z.string().min(1) }).strict(),
-  apply({ document, payload, catalog }) {
-    const resolved = resolveAddress(document, payload.address, catalog);
-    if (resolved === undefined)
-      return rejected(`Unknown address “${payload.address}”.`);
-    if (resolved.type !== "boolean") {
-      return rejected(`Address “${payload.address}” is not a boolean.`);
-    }
-    const current = getAtPath(document, resolved.path) === true;
-    return accepted([{ op: "set", path: resolved.path, value: !current }]);
+  apply({ document, catalog, payload }) {
+    return outcomeOf(toggleAddress(document, catalog, payload.address));
   },
 });

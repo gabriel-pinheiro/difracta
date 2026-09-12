@@ -196,6 +196,7 @@ describe("addresses", () => {
       listAddresses(stage(), catalog).map((entry) => entry.address),
     ).toEqual([
       "installation/blackout",
+      "scene/s/play",
       "layer/g/enabled",
       "layer/f/enabled",
       "layer/v/enabled",
@@ -254,8 +255,10 @@ describe("addresses", () => {
       resolveAddress(document, "layer/f/cue/flash", catalog),
     ).toBeUndefined();
     expect(
-      listAddresses(document, catalog).filter((e) => e.type === "trigger"),
-    ).toHaveLength(1);
+      listAddresses(document, catalog)
+        .filter((e) => e.type === "trigger")
+        .map((e) => e.address),
+    ).toEqual(["scene/s/play", "layer/v/cue/flash"]);
   });
 
   it("checks values against the resolved type", () => {

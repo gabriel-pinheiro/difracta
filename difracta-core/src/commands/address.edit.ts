@@ -1,8 +1,9 @@
 import { z } from "zod";
 
 import { resolveAddress } from "../address/address.ts";
+import { writeAddress } from "../address/write.ts";
 import { defineCommand } from "../command/command.ts";
-import { writeAddress } from "./address.set.ts";
+import { outcomeOf } from "./address.set.ts";
 
 /**
  * The authoring write to an Address: what the inspector sends when a person
@@ -21,11 +22,9 @@ export const addressEdit = defineCommand({
   label: ({ address }, { document, catalog }) =>
     `Change ${resolveAddress(document, address, catalog)?.label ?? address}`,
   coalesceKey: ({ address }) => `address.edit:${address}`,
-  apply(context) {
-    return writeAddress(
-      context,
-      context.payload.address,
-      context.payload.value,
+  apply({ document, catalog, payload }) {
+    return outcomeOf(
+      writeAddress(document, catalog, payload.address, payload.value),
     );
   },
 });

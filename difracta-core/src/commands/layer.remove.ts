@@ -4,6 +4,7 @@ import { accepted, defineCommand, rejected } from "../command/command.ts";
 import { linksOfLayer } from "../address/links.ts";
 import type { Document } from "../document/document.ts";
 import { descendantLayers } from "../document/layers.ts";
+import { dropActionsUnder } from "../document/macros.ts";
 import type { Patch } from "../document/patch.ts";
 
 /** Patches removing every Link whose target is on one of `layerIds`. */
@@ -19,7 +20,7 @@ export function removeLinksOfLayers(
   );
 }
 
-/** Removing a Group removes everything inside it, and every Link to what goes. */
+/** Removing a Group removes everything inside it, every Link to what goes, and every Macro action on it. */
 export const layerRemove = defineCommand({
   name: "layer.remove",
   kind: "authoring",
@@ -35,6 +36,12 @@ export const layerRemove = defineCommand({
       layer.id,
     ];
     const patches: Patch[] = removeLinksOfLayers(document, going);
+    patches.push(
+      ...dropActionsUnder(
+        document,
+        going.map((id) => `layer/${id}/`),
+      ),
+    );
     for (const id of going)
       patches.push({ op: "remove", path: ["layers", id] });
     return accepted(patches);

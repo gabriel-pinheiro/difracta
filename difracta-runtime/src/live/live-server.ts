@@ -368,6 +368,7 @@ export class LiveServer {
               revision: result.revision,
               changed: result.changed,
               label: result.label,
+              warnings: result.warnings,
             },
           }
         : { ok: false, error: result.error },

@@ -7,6 +7,7 @@ import {
   type InstallationId,
   type LinkId,
   type LayerId,
+  type MacroId,
   type MaskId,
   type SceneId,
   type OutputId,
@@ -291,6 +292,78 @@ export const LinkSchema = z
 export type Link = Entity<typeof LinkSchema, LinkId>;
 export type LinkAnchors = NonNullable<Link["anchors"]>;
 
+/** Fields every Macro has, whatever its kind. */
+const MacroBase = {
+  id: z.string().min(1),
+  name: EntityName,
+  /** The Group containing the Macro, or null at the section's root. */
+  parentId: z.string().min(1).nullable(),
+  /** Position among the Macros of the same parent. */
+  order: z.string().min(1).default(DEFAULT_ORDER_KEY),
+};
+
+export const MACRO_KINDS = ["macro", "group"] as const;
+export type MacroKind = (typeof MACRO_KINDS)[number];
+
+/** What an Address can hold: a number, a switch, a choice's value or a color. */
+export const AddressValueSchema = z.union([
+  z.number(),
+  z.boolean(),
+  z.string(),
+  ColorSchema,
+]);
+
+/**
+ * One step of a Macro, on one Address: `set` writes a value, `toggle` flips
+ * a boolean, `trigger` fires a trigger Address such as a Cue, a Scene's play
+ * or another Macro's run.
+ */
+export const MacroActionSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      id: z.string().min(1),
+      kind: z.literal("set"),
+      address: z.string().min(1),
+      value: AddressValueSchema,
+    })
+    .strict(),
+  z
+    .object({
+      id: z.string().min(1),
+      kind: z.literal("toggle"),
+      address: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      id: z.string().min(1),
+      kind: z.literal("trigger"),
+      address: z.string().min(1),
+    })
+    .strict(),
+]);
+/** Action ids are plain strings: unique within their Macro, never a table key. */
+export type MacroAction = z.infer<typeof MacroActionSchema>;
+export type MacroActionKind = MacroAction["kind"];
+
+/**
+ * A Macro is a named, ordered list of actions run as one performance step
+ * from its trigger Address `macro/<id>/run`: a look, a hit, a state. A Group
+ * only arranges Macros in the navigator.
+ */
+export const MacroSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      ...MacroBase,
+      kind: z.literal("macro"),
+      actions: z.array(MacroActionSchema),
+    })
+    .strict(),
+  z.object({ ...MacroBase, kind: z.literal("group") }).strict(),
+]);
+export type Macro = Entity<typeof MacroSchema, MacroId>;
+export type RunnableMacro = Extract<Macro, { kind: "macro" }>;
+
 export const OperationalSchema = z
   .object({
     blackout: z.boolean(),
@@ -313,6 +386,7 @@ export const DocumentSchema = z
     layers: z.record(z.string(), LayerSchema),
     controllers: z.record(z.string(), ControllerSchema),
     links: z.record(z.string(), LinkSchema),
+    macros: z.record(z.string(), MacroSchema),
     operational: OperationalSchema,
   })
   .strict();
@@ -326,6 +400,7 @@ export interface Document {
   readonly layers: Table<Layer>;
   readonly controllers: Table<Controller>;
   readonly links: Table<Link>;
+  readonly macros: Table<Macro>;
   readonly operational: Operational;
 }
 
@@ -338,6 +413,7 @@ export const TABLE_SCHEMAS = {
   layers: LayerSchema,
   controllers: ControllerSchema,
   links: LinkSchema,
+  macros: MacroSchema,
 } as const;
 export type TableName = keyof typeof TABLE_SCHEMAS;
 
@@ -349,6 +425,7 @@ export const ORDERED_TABLES = [
   "scenes",
   "layers",
   "controllers",
+  "macros",
 ] as const satisfies readonly TableName[];
 export type OrderedTableName = (typeof ORDERED_TABLES)[number];
 
@@ -362,6 +439,7 @@ export const PARENT_FIELDS: Partial<
   masks: ["surfaceId"],
   layers: ["sceneId", "parentId"],
   controllers: ["parentId"],
+  macros: ["parentId"],
 };
 
 /** The entities of `table` that share `entity`'s parent, `entity` included. */
@@ -398,6 +476,7 @@ export function emptyDocument(name: string): Document {
     layers: {},
     controllers: {},
     links: {},
+    macros: {},
     operational: defaultOperational,
   };
 }

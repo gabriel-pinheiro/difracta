@@ -83,7 +83,8 @@ export function AddressRow({
   );
 }
 
-function Control({
+/** The control for an Address by its type, with nothing around it: shared with a Macro action's value. */
+export function Control({
   resolved,
   value,
   send,

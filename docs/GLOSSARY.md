@@ -267,15 +267,18 @@ frozen at the last effective value, when the Link goes.
 
 ### Macro
 
-An Installation-owned, named, reusable ordered list of performance actions.
-Triggering a Macro evaluates its actions in creation order and publishes the
-successful final Installation and operational state together. Execution is
-best-effort: a failed action is logged by Runtime and later actions continue.
+An Installation-owned, named, ordered list of actions run as one performance
+step from its trigger Address `macro/<id>/run`. Each action sets an Address,
+toggles a switch Address, or fires a trigger Address: a Layer's Cue, a Scene's
+play, another Macro's run. Actions run in order, each seeing the effects of the
+ones before, best-effort: an action that cannot run is skipped and reported, the
+rest run. A Macro runs at most once per firing, however many Macros run it.
+Macros are arranged in Groups like Controllers. Macro is not a synonym for Cue.
 
-The initial actions can play a Scene, set a Controller value, show, hide, or
-toggle a Layer, set Layer opacity, and enable, disable, or toggle Blackout. They
-can also trigger a Cue declared by a Layer's current Visual. Macro is not a
-synonym for Cue.
+### Macro Group
+
+A named folder of Macros in the navigator, nested as needed. A Group only
+arranges; it has no run of its own.
 
 ### Pad
 

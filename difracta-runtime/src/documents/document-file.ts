@@ -34,6 +34,7 @@ const DocumentFileSchema = z
     layers: DocumentSchema.shape.layers.default({}),
     controllers: DocumentSchema.shape.controllers.default({}),
     links: DocumentSchema.shape.links.default({}),
+    macros: DocumentSchema.shape.macros.default({}),
   })
   .strict();
 
@@ -59,6 +60,7 @@ export function serializeDocument(document: Document): string {
     layers: document.layers,
     controllers: document.controllers,
     links: document.links,
+    macros: document.macros,
   };
   return `${JSON.stringify(sortKeys(file), null, 2)}\n`;
 }
@@ -94,6 +96,7 @@ export function parseDocumentFile(text: string): ParsedDocumentFile {
       layers: parsed.data.layers as Document["layers"],
       controllers: parsed.data.controllers as Document["controllers"],
       links: parsed.data.links as Document["links"],
+      macros: parsed.data.macros as Document["macros"],
       operational: defaultOperational,
     },
   };

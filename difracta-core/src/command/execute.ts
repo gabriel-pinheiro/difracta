@@ -13,6 +13,7 @@ export type ExecutionResult =
       readonly inverse: readonly Patch[];
       /** Trigger Addresses the command fired. */
       readonly events: readonly string[];
+      readonly warnings: readonly string[];
       readonly label: string;
       readonly coalesceKey: string | undefined;
     }
@@ -68,6 +69,7 @@ export function executeCommand(
     patches: outcome.patches,
     inverse: invertPatches(document, outcome.patches),
     events: outcome.events ?? [],
+    warnings: outcome.warnings ?? [],
     label:
       definition.label?.(payload, { document, catalog: registry.catalog }) ??
       definition.name,
