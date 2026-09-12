@@ -228,16 +228,16 @@ the move, ungroup and duplicate rules both use), so Groups arrange them the same
 way. Actions live inside the Macro as an array with their own ids; a Macro is a
 short list edited as a whole, not a table.
 
-Running is `address.trigger` on `macro/<id>/run`, the same path a Pad, OSC or
-the CLI takes. The actions run in order against the document as the previous
-ones left it, so a later action sees an earlier one's effect, and best-effort:
-an action that cannot run (its target gone, its Address driven by a Controller)
-is skipped, the rest run, and the command's result carries one warning per
-skipped action, which Studio toasts and the CLI prints. One run is one commit,
-one revision, never undone, dirtying like any performance write. Every Macro
-runs at most once per firing, so Macros may run each other in any graph without
-a loop. `actionProblem` tells the inspector which actions would be skipped
-today, so a broken one is seen at rehearsal rather than heard at the show.
+Running is `address.trigger` on `macro/<id>/run`, the same path OSC or the CLI
+takes. The actions run in order against the document as the previous ones left
+it, so a later action sees an earlier one's effect, and best-effort: an action
+that cannot run (its target gone, its Address driven by a Controller) is
+skipped, the rest run, and the command's result carries one warning per skipped
+action, which Studio toasts and the CLI prints. One run is one commit, one
+revision, never undone, dirtying like any performance write. Every Macro runs at
+most once per firing, so Macros may run each other in any graph without a loop.
+`actionProblem` tells the inspector which actions would be skipped today, so a
+broken one is seen at rehearsal rather than heard at the show.
 
 Adding actions takes any number of Addresses at once (`macro.actions.add`), each
 captured with what the Address holds now, so ticking fifteen opacities records
@@ -363,7 +363,7 @@ enumerates every reachable one. The entries today are Blackout, a Scene's
 and, per Layer, `enabled`, `opacity` and `blend` (Visual Layers), `mix` (Filter
 Layers), `param/<name>` for every Parameter of the Layer's definition and
 `cue/<key>` for every Cue it declares, typed from the Catalog. Controllers,
-Macros, Pads, OSC, and the CLI all read and write Addresses.
+Macros, OSC and the CLI all read and write Addresses.
 
 Two commands write one: `address.edit` is the authoring write the inspector
 sends, undoable, labelled by the property ("Change Opacity", "Change Speed") and
@@ -434,6 +434,52 @@ client. Per-path deltas make a Macro that changes twelve values cost one packet
 of twelve pairs, and let Studio components subscribe to single paths. The
 separate input channel keeps continuous values out of the acknowledged path and
 out of undo.
+
+## OSC and OSCQuery
+
+The show-control door (`difracta-runtime/src/osc/`): OSC over UDP in, OSCQuery
+over HTTP for discovery, and the OSCQuery WebSocket both ways, all on one port
+(`settings.osc.port`, `--osc-port`, `--no-osc`; a machine setting, never part of
+the file). The runtime announces itself with Zeroconf as `_oscjson._tcp` and
+`_osc._udp`, named "Difracta on <hostname>", fixed for the machine so a hub's
+saved module reconnects whatever Installation is open; the open Installation's
+name is the root node's DESCRIPTION.
+
+The tree has two branches, one leaf per Controller at `/controller/<id>` and one
+per Macro at `/macro/<id>`, keyed by id so a rename or a move into a Group never
+breaks a mapping; the name, with its Group ("Looks · Tint"), is the leaf's
+DESCRIPTION. A Number Controller is a float with RANGE 0..1 and CLIPMODE both, a
+Color Controller an RGBA color, a Macro an impulse. Groups are not nodes.
+Nothing else is exposed: a Layer's Parameters are reached through a Controller,
+so that a value a hub drives is marked as driven in every inspector, and through
+Macros for everything else.
+
+An incoming message becomes the command Studio would send, under the actor
+"osc": a Controller message is `address.set` on `controller/<id>/value` (one
+number or a boolean for a Number Controller, clamped to 0..1 and rounded past
+float32 noise; one RGBA argument or three or four numbers for a Color
+Controller), a Macro message is `address.trigger` on `macro/<id>/run` with any
+or no arguments. Bundles apply in order, their time tags ignored; wildcard
+addresses are rejected. Rejections are logged once per reason per window with a
+count of what was suppressed, so a misrouted fader does not flood the log.
+
+The WebSocket carries the OSCQuery commands LISTEN and IGNORE, after which the
+runtime streams every change to a listened Controller as a binary OSC message,
+coalesced per event-loop turn like the deltas, and announces PATH_ADDED,
+PATH_REMOVED and PATH_CHANGED (a rename, or a move into another Group) so the
+hub refreshes its tree by itself. Binary frames on the same socket are OSC
+input, the same as UDP. The number of connected WebSocket clients and the port
+are part of the live state (`live/osc`), which Studio's status strip shows.
+
+**Why one port for all three:** OSCQuery's HOST_INFO advertises OSC_PORT and
+WS_PORT; keeping them equal to the HTTP port means one number to open in a
+firewall and one to type when Zeroconf is blocked. **Why ids in paths and names
+in descriptions:** Chataigne shows names while mapping and stores paths; a path
+made of the name would break every mapping on a rename. **Why Controllers and
+Macros only:** the case for driving a Layer Parameter directly is convenience,
+and the case against is a value that changes with nothing in Studio saying who
+moved it. A Controller made from the row's own link menu is one click, and it
+leaves the mark.
 
 ## Undo
 
@@ -717,10 +763,12 @@ search box matching Scene, Layer, Visual and Parameter names word by word, tick
 boxes, "Select all results" and one Link button, so one Controller reaches the
 same Parameter on thirty Layers in a few keystrokes; an Address linked elsewhere
 shows its Controller and moves on pick. On a Layer, every Address row ends in a
-link menu: "Link to" lists the Controllers of the right kind, and a linked row
-shows the effective value read-only, a chip with the Controller's name and value
-that opens it, and Unlink, so there is no control to mistake for an override. A
-Layer whose Enabled is linked shows a link glyph in place of its eye.
+link menu: "Link to" lists the Controllers of the right kind, "New Number
+Controller" or "New Color Controller" makes one named after the row ("Koi Pond
+Opacity") and links it in one step, and a linked row shows the effective value
+read-only, a chip with the Controller's name and value that opens it, and
+Unlink, so there is no control to mistake for an override. A Layer whose Enabled
+is linked shows a link glyph in place of its eye.
 
 The Macros section has the same shape, each Macro row with its action count and
 a Run button, and starts closed unless it is empty. The Macro inspector has the

@@ -39,7 +39,7 @@ export class OutputPresence {
     return () => this.#listeners.delete(listener);
   }
 
-  state(): LiveState {
+  state(): Pick<LiveState, "outputs"> {
     const outputs: Record<
       string,
       { sessions: Record<string, OutputSessionLive> }

@@ -11,6 +11,14 @@ export const settings = {
     /** Where the live websocket is served. */
     livePath: "/live",
   },
+  osc: {
+    /** UDP for OSC input, HTTP and WebSocket for OSCQuery, all on this port. */
+    port: 9000,
+    /** How the runtime announces itself to Chataigne and other OSCQuery browsers. */
+    name: "Difracta",
+    /** Rejected OSC input is logged at most once per reason within this window. */
+    rejectionLogIntervalMs: 5_000,
+  },
   history: {
     /** Consecutive same-key entries from one actor within this window merge into one undo step. */
     coalesceWindowMs: 1_000,

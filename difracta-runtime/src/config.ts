@@ -14,6 +14,8 @@ export interface RuntimeConfig {
   readonly studioDist: string | undefined;
   readonly outputDist: string | undefined;
   readonly autosaveIntervalMs: number;
+  /** OSC and OSCQuery port; undefined keeps the door closed. */
+  readonly oscPort: number | undefined;
 }
 
 const packageRoot = fileURLToPath(new URL("../..", import.meta.url));
@@ -28,6 +30,8 @@ export function configFromEnvironment(
       host: { type: "string" },
       port: { type: "string" },
       "projects-dir": { type: "string" },
+      "osc-port": { type: "string" },
+      "no-osc": { type: "boolean" },
     },
   });
   if (positionals.length > 1)
@@ -55,5 +59,14 @@ export function configFromEnvironment(
       env.DIFRACTA_OUTPUT_DIST ??
       path.join(packageRoot, "difracta-output", "dist"),
     autosaveIntervalMs: settings.autosave.delayMs,
+    oscPort:
+      values["no-osc"] === true || env.DIFRACTA_NO_OSC === "1"
+        ? undefined
+        : Number.parseInt(
+            values["osc-port"] ??
+              env.DIFRACTA_OSC_PORT ??
+              String(settings.osc.port),
+            10,
+          ),
   };
 }

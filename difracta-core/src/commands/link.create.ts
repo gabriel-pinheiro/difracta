@@ -3,9 +3,44 @@ import { z } from "zod";
 import { resolveAddress } from "../address/address.ts";
 import { defaultAnchors, linkAt, linkProblem } from "../address/links.ts";
 import { accepted, defineCommand, rejected } from "../command/command.ts";
-import type { Link } from "../document/document.ts";
+import type { Catalog } from "../catalog/catalog.ts";
+import type { Controller, Document, Link } from "../document/document.ts";
 import type { Patch } from "../document/patch.ts";
 import { generateId } from "../ids.ts";
+
+/** Patches linking `controller` to each Address, or why one of them cannot be linked. */
+export function linkPatches(
+  document: Document,
+  catalog: Catalog,
+  controller: Controller,
+  addresses: readonly string[],
+  anchors?: NonNullable<Link["anchors"]>,
+): Patch[] | { readonly error: string } {
+  const patches: Patch[] = [];
+  for (const address of new Set(addresses)) {
+    const resolved = resolveAddress(document, address, catalog);
+    if (resolved === undefined)
+      return { error: `Unknown address “${address}”.` };
+    const problem = linkProblem(controller, resolved);
+    if (problem !== undefined) return { error: problem };
+    const existing = linkAt(document, address);
+    if (existing?.controllerId === controller.id) continue;
+    if (existing !== undefined)
+      patches.push({ op: "remove", path: ["links", existing.id] });
+    const id = generateId("link");
+    const link: Link = {
+      id,
+      controllerId: controller.id,
+      address,
+      anchors:
+        resolved.type === "number"
+          ? (anchors ?? defaultAnchors(resolved))
+          : null,
+    };
+    patches.push({ op: "set", path: ["links", id], value: link });
+  }
+  return patches;
+}
 
 /**
  * Links one Controller to one or more Addresses in one step, so wiring a
@@ -39,29 +74,13 @@ export const linkCreate = defineCommand({
     const controller = document.controllers[payload.controllerId];
     if (controller === undefined)
       return rejected(`Controller “${payload.controllerId}” does not exist.`);
-    const patches: Patch[] = [];
-    for (const address of new Set(payload.addresses)) {
-      const resolved = resolveAddress(document, address, catalog);
-      if (resolved === undefined)
-        return rejected(`Unknown address “${address}”.`);
-      const problem = linkProblem(controller, resolved);
-      if (problem !== undefined) return rejected(problem);
-      const existing = linkAt(document, address);
-      if (existing?.controllerId === controller.id) continue;
-      if (existing !== undefined)
-        patches.push({ op: "remove", path: ["links", existing.id] });
-      const id = generateId("link");
-      const link: Link = {
-        id,
-        controllerId: controller.id,
-        address,
-        anchors:
-          resolved.type === "number"
-            ? (payload.anchors ?? defaultAnchors(resolved))
-            : null,
-      };
-      patches.push({ op: "set", path: ["links", id], value: link });
-    }
-    return accepted(patches);
+    const patches = linkPatches(
+      document,
+      catalog,
+      controller,
+      payload.addresses,
+      payload.anchors,
+    );
+    return "error" in patches ? rejected(patches.error) : accepted(patches);
   },
 });

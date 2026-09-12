@@ -102,6 +102,15 @@ export function LayerInspector({
           controllerId,
           addresses: [resolved.address],
         }),
+      onCreate: (kind) => {
+        const controllerId = `controller_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
+        void command("controller.create", {
+          id: controllerId,
+          kind,
+          name: `${layer.name} ${resolved.label}`,
+          addresses: [resolved.address],
+        }).then(() => select({ kind: "controller", id: controllerId }));
+      },
       onUnlink: () => {
         if (link !== undefined)
           void command("link.remove", { linkId: link.id });

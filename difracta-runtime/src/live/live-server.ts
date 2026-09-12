@@ -6,9 +6,12 @@ import {
 } from "@difracta/core";
 import {
   ClientMessageSchema,
+  EMPTY_LIVE_STATE,
   PROTOCOL_VERSION,
   RuntimeRequestSchemas,
   type ClientMessage,
+  type LiveState,
+  type OscLive,
   type ServerMessage,
 } from "@difracta/protocol";
 import type { RawData, WebSocket } from "ws";
@@ -51,6 +54,13 @@ export interface LiveServerOptions {
   readonly runtimeName: string;
   readonly runtimeVersion: string;
   readonly log: (message: string) => void;
+  /** The OSC door's state, part of the live state Studio shows. */
+  readonly osc?:
+    | {
+        state(): OscLive;
+        onChange(listener: (state: OscLive) => void): () => void;
+      }
+    | undefined;
 }
 
 /**
@@ -67,6 +77,7 @@ export class LiveServer {
   readonly #presence = new OutputPresence();
   readonly #unsubscribeStore: () => void;
   readonly #unsubscribePresence: () => void;
+  readonly #unsubscribeOsc: (() => void) | undefined;
   #unsubscribeDeltas: (() => void) | undefined;
   #unsubscribeEvents: (() => void) | undefined;
   #attachedDocumentId: string | undefined;
@@ -81,12 +92,24 @@ export class LiveServer {
     this.#unsubscribePresence = this.#presence.onChange((patches) =>
       this.#fanOutLive(patches),
     );
+    this.#unsubscribeOsc = options.osc?.onChange((state) =>
+      this.#fanOutLive([{ op: "set", path: ["osc"], value: state }]),
+    );
     this.#attachSession();
+  }
+
+  /** The whole live state, for a snapshot. */
+  #liveState(): LiveState {
+    return {
+      osc: this.#options.osc?.state() ?? EMPTY_LIVE_STATE.osc,
+      ...this.#presence.state(),
+    };
   }
 
   close(): void {
     this.#unsubscribeStore();
     this.#unsubscribePresence();
+    this.#unsubscribeOsc?.();
     this.#unsubscribeDeltas?.();
     this.#unsubscribeEvents?.();
     this.#presence.close();
@@ -322,7 +345,7 @@ export class LiveServer {
       documentId,
       revision: documentSession.revision,
       document: documentSession.document,
-      ...(live ? { live: this.#presence.state() } : {}),
+      ...(live ? { live: this.#liveState() } : {}),
     });
   }
 

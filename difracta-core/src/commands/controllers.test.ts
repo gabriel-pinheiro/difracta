@@ -88,6 +88,36 @@ const layer = (document: Document, id: string): VisualLayer =>
   document.layers[id] as VisualLayer;
 
 describe("Controllers", () => {
+  it("creates a Controller linked to Addresses in one step", () => {
+    let document = stage();
+    const result = run(document, "controller.create", {
+      id: "hold",
+      kind: "number",
+      name: "A Hold",
+      addresses: ["layer/a/param/hold"],
+    });
+    expect(result.label).toBe("Add Number Controller");
+    document = result.document;
+    expect(linkAt(document, "layer/a/param/hold")).toMatchObject({
+      controllerId: "hold",
+      anchors: { from: 0, to: 2000 },
+    });
+    // Starts where the target is, so linking changes nothing on the wall.
+    expect(document.controllers.hold).toMatchObject({ value: 0.05 });
+    expect(
+      effectiveValue(
+        document,
+        resolveAddress(document, "layer/a/param/hold", catalog)!,
+      ),
+    ).toBe(100);
+    expect(
+      failure(document, "controller.create", {
+        kind: "color",
+        addresses: ["layer/a/param/hold"],
+      }),
+    ).toMatch(/cannot be driven/);
+  });
+
   it("creates, groups, moves, duplicates and removes Controllers", () => {
     let document = stage();
     expect(document.controllers.energy).toMatchObject({

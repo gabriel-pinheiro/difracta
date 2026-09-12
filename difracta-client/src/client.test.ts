@@ -133,7 +133,7 @@ describe("DifractaClient subscriptions", () => {
       documentId: "doc",
       revision: 1,
       document: emptyDocument("Living"),
-      live: { outputs: {} },
+      live: { osc: { port: null, listeners: 0 }, outputs: {} },
     });
     const seen: unknown[] = [];
     view.subscribePath(["live", "outputs", "out_a"], () =>

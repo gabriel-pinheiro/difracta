@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import type { RuntimeConfig } from "./config.ts";
 import { DocumentStore } from "./documents/document-store.ts";
 import { LiveServer } from "./live/live-server.ts";
+import { OscServer } from "./osc/osc-server.ts";
 
 export const RUNTIME_VERSION = "0.0.0";
 
@@ -45,12 +46,17 @@ export async function buildRuntime(
     autosaveIntervalMs: config.autosaveIntervalMs,
     log,
   });
+  const osc =
+    config.oscPort === undefined
+      ? undefined
+      : new OscServer({ store, port: config.oscPort, host: config.host, log });
   const live = new LiveServer({
     store,
     catalog: builtInCatalog,
     runtimeName: "Difracta Runtime",
     runtimeVersion: RUNTIME_VERSION,
     log,
+    osc,
   });
 
   await app.register(fastifyWebsocket);
@@ -58,6 +64,7 @@ export async function buildRuntime(
     name: "Difracta Runtime",
     version: RUNTIME_VERSION,
     document: store.current()?.name ?? null,
+    osc: osc?.state() ?? { port: null, listeners: 0 },
   }));
   app.get(settings.runtime.livePath, { websocket: true }, (socket) => {
     live.accept(socket);
@@ -100,10 +107,22 @@ export async function buildRuntime(
             `Recovered unsaved changes for ${config.openPath} from its autosave.`,
           );
       }
-      return app.listen({ host: config.host, port: config.port });
+      const address = await app.listen({
+        host: config.host,
+        port: config.port,
+      });
+      if (osc !== undefined) {
+        try {
+          await osc.start();
+        } catch (error) {
+          log(`OSC is off: ${String(error)}`);
+        }
+      }
+      return address;
     },
     async close() {
       live.close();
+      await osc?.close();
       await store.flush();
       await app.close();
     },

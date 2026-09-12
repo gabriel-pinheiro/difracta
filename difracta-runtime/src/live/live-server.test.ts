@@ -37,6 +37,7 @@ beforeEach(async () => {
     studioDist: undefined,
     outputDist: undefined,
     autosaveIntervalMs: 60_000,
+    oscPort: undefined,
   });
   const address = await runtime.listen();
   url = `${address.replace("http", "ws")}/live`;
@@ -235,7 +236,10 @@ describe("live protocol", () => {
     );
     expect(studioView.revision.get()).toBe(1);
     // The Output page did not ask for live state and never receives it.
-    expect(pageView.liveState.get()).toEqual({ outputs: {} });
+    expect(pageView.liveState.get()).toEqual({
+      osc: { port: null, listeners: 0 },
+      outputs: {},
+    });
 
     // Removing the Output drops its sessions; closing the page drops the rest.
     await studio.command(created.id, "output.remove", { outputId: "out_a" });

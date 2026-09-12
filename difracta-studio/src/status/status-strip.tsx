@@ -54,6 +54,7 @@ export function StatusStrip() {
 function DocumentStatus({ view }: { readonly view: DocumentView }) {
   const outputs = useDocumentPath<Table<Output>>(view, ["outputs"]) ?? {};
   const live = useDocumentPath<LiveState["outputs"]>(view, ["live", "outputs"]);
+  const osc = useDocumentPath<LiveState["osc"]>(view, ["live", "osc"]);
   const blackout =
     useDocumentPath<boolean>(view, ["operational", "blackout"]) ?? false;
   const count = Object.keys(outputs).length;
@@ -66,6 +67,12 @@ function DocumentStatus({ view }: { readonly view: DocumentView }) {
         {String(connected)} of {String(count)}{" "}
         {count === 1 ? "Output" : "Outputs"} connected
       </span>
+      {osc?.port != null && (
+        <span title="OSC and OSCQuery port, and the OSCQuery clients connected">
+          OSC {String(osc.port)} · {String(osc.listeners)}{" "}
+          {osc.listeners === 1 ? "listener" : "listeners"}
+        </span>
+      )}
       <CalibrationStatus view={view} />
       {blackout && (
         <span className="rounded-sm bg-destructive px-1.5 font-semibold tracking-wider text-white uppercase">

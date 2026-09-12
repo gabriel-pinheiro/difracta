@@ -18,7 +18,7 @@ near-synonyms.
   Never add a central switch for a new command.
 - Everything a control surface can move is an Address
   (`difracta-core/src/address/`). Add the address; do not add a special case to
-  Macros, OSC, Pads or the CLI.
+  Macros, OSC or the CLI.
 - Commands return patches; they never mutate. Performance commands (Blackout,
   Controller values, Cues) are `kind: "performance"`: replicated, not undoable,
   not dirtying.

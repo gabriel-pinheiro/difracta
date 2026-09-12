@@ -51,8 +51,15 @@ export const OutputSessionLiveSchema = z
   .strict();
 export type OutputSessionLive = z.infer<typeof OutputSessionLiveSchema>;
 
+/** The runtime's OSC door: which port, and how many OSCQuery clients listen for values. */
+export const OscLiveSchema = z
+  .object({ port: z.number().int().nullable(), listeners: z.number().int() })
+  .strict();
+export type OscLive = z.infer<typeof OscLiveSchema>;
+
 export const LiveStateSchema = z
   .object({
+    osc: OscLiveSchema,
     outputs: z.record(
       z.string(),
       z
@@ -63,4 +70,7 @@ export const LiveStateSchema = z
   .strict();
 export type LiveState = z.infer<typeof LiveStateSchema>;
 
-export const EMPTY_LIVE_STATE: LiveState = { outputs: {} };
+export const EMPTY_LIVE_STATE: LiveState = {
+  osc: { port: null, listeners: 0 },
+  outputs: {},
+};

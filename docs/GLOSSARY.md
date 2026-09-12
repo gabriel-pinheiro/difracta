@@ -11,7 +11,7 @@ terms in code, UI text, docs, and conversation.
 One complete projection setup and its configuration.
 
 An Installation owns Outputs, Surfaces, Surface Mappings, Regions, Masks,
-Guides, Scenes, Controllers, Parameter Links, Macros, Pads, and Color Pickers.
+Guides, Scenes, Controllers, Parameter Links, and Macros.
 
 ### Projector
 
@@ -280,32 +280,6 @@ Macros are arranged in Groups like Controllers. Macro is not a synonym for Cue.
 A named folder of Macros in the navigator, nested as needed. A Group only
 arranges; it has no run of its own.
 
-### Pad
-
-One of the 64 fixed positional performance controls in an Installation's 8×8
-Launchpad. A Pad has an optional name, display color, Macro to trigger on press,
-Macro to trigger on release, and physical keyboard-code binding.
-
-Pad press and release are best-effort Studio browser events rather than
-authoritative held state in Runtime. A Pad is not a Macro or Cue; it invokes its
-currently assigned Macros through the ordinary Macro trigger path.
-
-### Color Picker
-
-An Installation-owned, named performance control with the fixed ordered colors
-White, Red, Orange, Amber, Yellow, Green, Cyan, Blue, Purple, and Magenta. A
-Color Picker targets zero or more Color Controllers and other Color Pickers.
-Selecting one color applies its exact opaque RGBA value to every reachable Color
-Controller and transiently selects the same color on every reachable Color
-Picker. OSC may instead apply any RGBA value through the same Picker graph; the
-exact value reaches the Controllers while the nearest fixed color is selected
-transiently for Studio presentation.
-
-Color Picker configuration is persisted, but its selected color is not. Studio
-therefore loads and reconnects with every Color Picker unselected. Picker graphs
-may contain cycles; one selection visits each reachable Picker once. A Color
-Picker is not a Color Controller or a user-authored Palette.
-
 ### Cue
 
 A named performable behavior declared in a Visual's code metadata and invoked on
@@ -443,17 +417,18 @@ and Output pages.
 
 ### OSC
 
-Open Sound Control, the trusted-LAN transport through which external
-show-control software can trigger Macros and set Controller values while Studio
-is closed. Difracta accepts exact, stable ID-based addresses; OSC is an inbound
-protocol boundary, not an Installation-owned entity or an automation engine.
+Open Sound Control, the trusted-LAN transport through which a show-control hub
+such as Chataigne sets Controller values and runs Macros, with or without Studio
+open. The Runtime listens on one UDP port; a Controller's address is
+`/controller/<id>`, a Macro's `/macro/<id>`, stable across renames. An OSC
+message becomes the same command Studio would send.
 
 ### OSCQuery
 
-The read-only HTTP discovery protocol that describes Difracta's writable OSC
-Macro and Controller methods. It supplies current human-facing names and values
-while stable identities remain in each OSC address. OSCQuery does not mutate
-Runtime state and is distinct from OSC message transport.
+The HTTP and WebSocket protocol through which a hub discovers the Runtime's OSC
+tree with names, types, ranges and current values, listens for value changes
+streamed back to it, and learns when the tree changes. The Runtime announces it
+on the local network with Zeroconf.
 
 ### Revision
 
@@ -467,9 +442,9 @@ resubscribes. Revision is distinct from the file format version.
 The name of one controllable property or trigger in an Installation, such as
 `installation/blackout` or `layer/<id>/opacity`. An Address resolves to a value
 type, a default and, for numbers, a range. Layer enabled, opacity, blend mode,
-mix and every Parameter have one. Controllers, Parameter Links, Macros, Pads,
-Color Pickers, OSC, and the CLI all read and write Addresses; the Inspector
-edits them through undoable commands.
+mix and every Parameter have one. Controllers, Parameter Links, Macros, OSC and
+the CLI all read and write Addresses; the Inspector edits them through undoable
+commands.
 
 ### Command
 

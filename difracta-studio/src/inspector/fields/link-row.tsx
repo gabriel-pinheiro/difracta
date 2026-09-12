@@ -4,7 +4,7 @@ import {
   type Link,
   type ResolvedAddress,
 } from "@difracta/core";
-import { Link2, Link2Off, SquareArrowOutUpRight } from "lucide-react";
+import { Link2, Link2Off, Plus, SquareArrowOutUpRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -33,11 +33,13 @@ export interface RowLinks {
   /** Controllers able to drive this row, in navigator order. */
   readonly candidates: readonly Controller[];
   readonly onLink: (controllerId: string) => void;
+  /** Makes a new Controller named after the row and links it. */
+  readonly onCreate: (kind: "number" | "color") => void;
   readonly onUnlink: () => void;
   readonly onOpen: (controllerId: string) => void;
 }
 
-/** The row's Link menu: "Link to" a Controller, or the Controller it has and Unlink. */
+/** The row's Link menu: "Link to" a Controller or a new one named after the row, or the Controller it has and Unlink. */
 export function LinkMenu({
   resolved,
   links,
@@ -74,6 +76,7 @@ export function LinkMenu({
     );
   if (resolved.type === "choice" || resolved.type === "trigger")
     return <span className="size-5" />;
+  const kind = resolved.type === "color" ? "color" : "number";
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -99,13 +102,9 @@ export function LinkMenu({
             ))}
           </DropdownMenuSubContent>
         </DropdownMenuSub>
-        {candidates.length === 0 && (
-          <DropdownMenuGroup>
-            <DropdownMenuLabel className="font-normal text-muted-foreground">
-              No {resolved.type === "color" ? "Color" : "Number"} Controller yet
-            </DropdownMenuLabel>
-          </DropdownMenuGroup>
-        )}
+        <DropdownMenuItem onClick={() => links.onCreate(kind)}>
+          <Plus /> New {kind === "color" ? "Color" : "Number"} Controller
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
