@@ -26,16 +26,20 @@ function generateControllerId(): string {
  * Navigator section listing the Controllers as a tree of Groups. Number and
  * Color Controllers are values Parameter Links spread over Layers; Groups
  * only arrange them. Creating asks for a name, since a Controller is named
- * for what it drives ("Energy", "Strobe Color") rather than numbered.
+ * for what it drives ("Energy", "Strobe Color") rather than numbered. The
+ * section starts collapsed unless it is empty, where the hint to add one
+ * is the whole content.
  */
 export function ControllersSection({ view }: { readonly view: DocumentView }) {
   const command = useCommand(view);
   const { select } = useSelection();
   const { setExpanded } = useExpansion();
-  const controllers =
-    useDocumentPath<Table<Controller>>(view, ["controllers"]) ?? {};
+  const table = useDocumentPath<Table<Controller>>(view, ["controllers"]);
+  const controllers = table ?? {};
   const [naming, setNaming] = useState<NameRequest | undefined>(undefined);
   const roots = childControllers(controllers, null);
+  // The default open state depends on the Installation, so wait for it.
+  if (table === undefined) return null;
 
   function requestCreate(kind: ControllerKind, parentId: string | null): void {
     const siblings = childControllers(controllers, parentId);
@@ -68,6 +72,7 @@ export function ControllersSection({ view }: { readonly view: DocumentView }) {
       <NavigatorSection
         storageKey="controller"
         label="Controllers"
+        defaultExpanded={roots.length === 0}
         empty={
           roots.length === 0 ? "No Controllers. Press + to add one." : undefined
         }

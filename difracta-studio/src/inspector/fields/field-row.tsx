@@ -9,7 +9,8 @@ import { cn } from "@/lib/utils";
  * at the right a reset button when the value is not the default. Every row
  * has the same three columns so a long list of Parameters scans as a table.
  * When the inspector is too narrow to give a slider a usable length, the
- * control moves under the label and takes the whole width. `trailing` adds
+ * control moves under the label and takes the whole width; a `wide`
+ * control, such as a linked row's chip, moves down sooner. `trailing` adds
  * a fourth column after the reset, such as a row menu.
  */
 export function FieldRow({
@@ -17,6 +18,7 @@ export function FieldRow({
   description,
   onReset,
   trailing,
+  wide = false,
   children,
 }: {
   readonly label: string;
@@ -24,6 +26,7 @@ export function FieldRow({
   /** Present when the value differs from its default. */
   readonly onReset?: (() => void) | undefined;
   readonly trailing?: ReactNode;
+  readonly wide?: boolean | undefined;
   readonly children: ReactNode;
 }) {
   return (
@@ -31,8 +34,20 @@ export function FieldRow({
       className={cn(
         "grid min-h-6 items-center gap-x-2 gap-y-0.5",
         trailing === undefined
-          ? "grid-cols-[minmax(0,5.5rem)_minmax(0,1fr)_1.25rem] @max-[18rem]:grid-cols-[minmax(0,1fr)_1.25rem]"
-          : "grid-cols-[minmax(0,5.5rem)_minmax(0,1fr)_1.25rem_1.25rem] @max-[18rem]:grid-cols-[minmax(0,1fr)_1.25rem_1.25rem]",
+          ? "grid-cols-[minmax(0,5.5rem)_minmax(0,1fr)_1.25rem]"
+          : "grid-cols-[minmax(0,5.5rem)_minmax(0,1fr)_1.25rem_1.25rem]",
+        trailing === undefined &&
+          !wide &&
+          "@max-[18rem]:grid-cols-[minmax(0,1fr)_1.25rem]",
+        trailing === undefined &&
+          wide &&
+          "@max-[24rem]:grid-cols-[minmax(0,1fr)_1.25rem]",
+        trailing !== undefined &&
+          !wide &&
+          "@max-[18rem]:grid-cols-[minmax(0,1fr)_1.25rem_1.25rem]",
+        trailing !== undefined &&
+          wide &&
+          "@max-[24rem]:grid-cols-[minmax(0,1fr)_1.25rem_1.25rem]",
       )}
     >
       <span
@@ -43,10 +58,12 @@ export function FieldRow({
       </span>
       <div
         className={cn(
-          "flex min-w-0 items-center gap-1.5 @max-[18rem]:order-last",
-          trailing === undefined
-            ? "@max-[18rem]:col-span-2"
-            : "@max-[18rem]:col-span-3",
+          "flex min-w-0 items-center gap-1.5",
+          wide ? "@max-[24rem]:order-last" : "@max-[18rem]:order-last",
+          trailing === undefined && !wide && "@max-[18rem]:col-span-2",
+          trailing === undefined && wide && "@max-[24rem]:col-span-2",
+          trailing !== undefined && !wide && "@max-[18rem]:col-span-3",
+          trailing !== undefined && wide && "@max-[24rem]:col-span-3",
         )}
       >
         {children}

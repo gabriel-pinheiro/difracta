@@ -72,6 +72,7 @@ export function AddressRow({
           <LinkMenu resolved={resolved} links={links} />
         )
       }
+      wide={linked}
     >
       {linked ? (
         <LinkedControl resolved={resolved} links={links} />

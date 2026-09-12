@@ -15,6 +15,11 @@ import { useEffect, useState, type KeyboardEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { formatNumber, parseNumber } from "@/inspector/fields/address-format";
 import { AddressRow } from "@/inspector/fields/address-row";
 import { InspectorHeading } from "@/inspector/fields/inspector-heading";
@@ -29,7 +34,9 @@ import { LinkPicker } from "./link-picker";
 /**
  * A Controller's name, its value as the same row a Parameter gets, and the
  * Links it drives: each target with its Layer and Scene, a number Link's
- * mapping editable in place, unlink, and a picker to add many at once.
+ * mapping editable in place, unlink, and a picker to add many at once. A
+ * target's name wraps to a second line before it is cut, and the mapping
+ * fields move under it when the two do not fit side by side.
  */
 export function ControllerInspector({
   view,
@@ -97,27 +104,27 @@ export function ControllerInspector({
               {own.map(({ link, target }) => (
                 <li
                   key={link.id}
-                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-0.5"
+                  className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2"
                 >
-                  <button
-                    type="button"
-                    className="min-w-0 truncate text-left text-xs hover:text-foreground"
-                    title={`${target.text}${target.scene === undefined ? "" : ` in ${target.scene}`}`}
-                    disabled={target.layerId === undefined}
-                    onClick={() => {
-                      if (target.layerId !== undefined)
-                        select({ kind: "layer", id: target.layerId });
-                    }}
-                  >
-                    <span className="text-muted-foreground">
-                      {target.layer}
-                    </span>{" "}
-                    <span className="text-muted-foreground/60">·</span>{" "}
-                    {target.label}
-                  </button>
-                  <div className="flex items-center gap-1">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                    <button
+                      type="button"
+                      className="line-clamp-2 min-w-0 flex-1 basis-40 py-0.5 text-left text-xs wrap-anywhere hover:text-foreground"
+                      title={`${target.text}${target.scene === undefined ? "" : ` in ${target.scene}`}`}
+                      disabled={target.layerId === undefined}
+                      onClick={() => {
+                        if (target.layerId !== undefined)
+                          select({ kind: "layer", id: target.layerId });
+                      }}
+                    >
+                      <span className="text-muted-foreground">
+                        {target.layer}
+                      </span>{" "}
+                      <span className="text-muted-foreground/60">·</span>{" "}
+                      {target.label}
+                    </button>
                     {link.anchors !== null && target.range !== undefined && (
-                      <>
+                      <div className="flex items-center gap-1">
                         <AnchorField
                           label={`${target.label} at 0%`}
                           value={link.anchors.from}
@@ -143,20 +150,26 @@ export function ControllerInspector({
                             })
                           }
                         />
-                      </>
+                      </div>
                     )}
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      aria-label={`Unlink ${target.text}`}
-                      title="Unlink; the Parameter keeps its current value"
-                      onClick={() =>
-                        void command("link.remove", { linkId: link.id })
+                  </div>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label={`Unlink ${target.text}`}
+                          onClick={() =>
+                            void command("link.remove", { linkId: link.id })
+                          }
+                        />
                       }
                     >
                       <Link2Off />
-                    </Button>
-                  </div>
+                    </TooltipTrigger>
+                    <TooltipContent>Unlink</TooltipContent>
+                  </Tooltip>
                 </li>
               ))}
             </ul>

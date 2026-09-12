@@ -11,10 +11,14 @@ import { isBoolean, useStoredState } from "@/lib/storage";
 
 import { NavigatorEmptyRow, type CreateItem } from "./navigator-row";
 
-/** Collapsible group of rows with a create button; the open state is remembered per browser. */
+/**
+ * Collapsible group of rows with a create button; the open state is
+ * remembered per browser, starting from `defaultExpanded`.
+ */
 export function NavigatorSection({
   storageKey,
   label,
+  defaultExpanded = true,
   empty,
   onCreate,
   createItems,
@@ -22,6 +26,7 @@ export function NavigatorSection({
 }: {
   readonly storageKey: string;
   readonly label: string;
+  readonly defaultExpanded?: boolean | undefined;
   /** Shown in place of rows while the section has none. */
   readonly empty?: string | undefined;
   readonly onCreate?: (() => void) | undefined;
@@ -31,7 +36,7 @@ export function NavigatorSection({
 }) {
   const [expanded, setExpanded] = useStoredState(
     `difracta.navigator.${storageKey}`,
-    true,
+    defaultExpanded,
     isBoolean,
   );
   return (

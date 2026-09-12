@@ -15,7 +15,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -141,11 +140,6 @@ export function LinkPicker({
       >
         <DialogHeader>
           <DialogTitle>Link to {controller.name}</DialogTitle>
-          <DialogDescription>
-            Every {controller.kind === "number" ? "number and switch" : "color"}{" "}
-            Parameter in the Installation. Tick what {controller.name} should
-            drive; Enter ticks, Ctrl+Enter links.
-          </DialogDescription>
         </DialogHeader>
         <div className="flex items-center gap-2">
           <Input

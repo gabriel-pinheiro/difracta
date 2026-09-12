@@ -19,7 +19,6 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 
 import { colorToHex, displayUnit, formatNumber } from "./address-format";
@@ -112,7 +111,11 @@ export function LinkMenu({
   );
 }
 
-/** The effective value, read-only, and a chip with the Controller's name and value that opens it. */
+/**
+ * The effective value, read-only, and a chip with the Controller's name and
+ * value that opens it. A number shows as its readout alone: the chip needs
+ * the room a slider would take, and the value is not draggable here anyway.
+ */
 export function LinkedControl({
   resolved,
   links,
@@ -126,21 +129,13 @@ export function LinkedControl({
   return (
     <>
       {resolved.type === "number" && (
-        <>
-          <Slider
-            aria-label={resolved.label}
-            className="min-w-0 flex-1"
-            disabled
-            min={range.min}
-            max={range.max}
-            step={range.step ?? (range.max - range.min) / 100}
-            value={typeof effective === "number" ? effective : 0}
-          />
-          <span className="w-14 shrink-0 truncate px-1 text-right text-[0.6875rem] text-muted-foreground tabular-nums">
-            {formatNumber(typeof effective === "number" ? effective : 0, range)}
-            {displayUnit(range)}
-          </span>
-        </>
+        <span
+          aria-label={resolved.label}
+          className="w-14 shrink-0 truncate px-1 text-right text-[0.6875rem] text-muted-foreground tabular-nums"
+        >
+          {formatNumber(typeof effective === "number" ? effective : 0, range)}
+          {displayUnit(range)}
+        </span>
       )}
       {resolved.type === "boolean" && (
         <Switch
@@ -166,7 +161,7 @@ export function LinkedControl({
       <Button
         variant="outline"
         size="xs"
-        className="max-w-32 min-w-0 border-selection/60 text-foreground"
+        className="max-w-full min-w-0 shrink border-selection/60 text-foreground"
         title={`Controlled by ${controller.name}. Change it on the Controller.`}
         onClick={() => links.onOpen(controller.id)}
       >

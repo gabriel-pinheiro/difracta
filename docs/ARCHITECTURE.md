@@ -661,7 +661,8 @@ all, one `layer.reset` step. Section open states are remembered per section.
 
 The Controllers section is a tree like a Scene's: Number and Color Controllers
 with their live value at the right (a percentage, a swatch), Groups that open
-and close, drag among siblings and into Groups. The section's "+" offers the
+and close, drag among siblings and into Groups. It starts closed unless it is
+empty, where the hint to add one is all there is. The section's "+" offers the
 three kinds and asks for a name, since a Controller is named for what it drives.
 The Controller inspector has the name, the value as the same Address row a
 Parameter gets, and a Links section listing every target with its Layer, a
