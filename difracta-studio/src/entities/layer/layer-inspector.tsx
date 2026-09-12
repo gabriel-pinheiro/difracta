@@ -1,10 +1,16 @@
 import type { DocumentView } from "@difracta/client";
 import {
+  effectiveValue,
+  flattenControllers,
   layerAddresses,
+  linkAt,
+  linkable,
   orderedEntries,
   sameAddressValue,
   type AddressValue,
+  type Controller,
   type Layer,
+  type Link,
   type ResolvedAddress,
   type Surface,
   type Table,
@@ -19,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { AddressRow } from "@/inspector/fields/address-row";
+import { AddressRow, type RowLinks } from "@/inspector/fields/address-row";
 import { FieldRow } from "@/inspector/fields/field-row";
 import { InspectorHeading } from "@/inspector/fields/inspector-heading";
 import { InspectorSection } from "@/inspector/fields/inspector-section";
@@ -43,7 +49,8 @@ function valueAt(layer: Layer, resolved: ResolvedAddress): AddressValue {
  * as Address rows in two collapsible sections, and its Cues as buttons in a
  * third. Every row is one Address, so opacity and a Visual's Parameter are
  * edited through the same command and a Cue fires through the same Address
- * a Macro or OSC would.
+ * a Macro or OSC would. A row a Controller drives shows the Controller
+ * instead of a control; the row menu links and unlinks.
  */
 export function LayerInspector({
   view,
@@ -56,6 +63,10 @@ export function LayerInspector({
   const { select } = useSelection();
   const layer = useDocumentPath<Layer>(view, ["layers", id]);
   const surfaces = useDocumentPath<Table<Surface>>(view, ["surfaces"]) ?? {};
+  const links = useDocumentPath<Table<Link>>(view, ["links"]) ?? {};
+  const controllers =
+    useDocumentPath<Table<Controller>>(view, ["controllers"]) ?? {};
+  const ordered = flattenControllers(controllers);
 
   useEffect(() => {
     if (layer === undefined) select({ kind: "installation" });
@@ -70,6 +81,35 @@ export function LayerInspector({
   const cues = addresses.filter(isCue);
   const definition =
     layer.kind === "group" ? undefined : definitionOf(layer).definition;
+  const rowLinks = (resolved: ResolvedAddress): RowLinks => {
+    const link = linkAt({ links }, resolved.address);
+    const controller =
+      link === undefined ? undefined : controllers[link.controllerId];
+    const document = view.get();
+    return {
+      link,
+      controller,
+      effective:
+        document === undefined
+          ? valueAt(layer, resolved)
+          : effectiveValue(document, resolved),
+      candidates: ordered.filter(
+        (candidate) =>
+          candidate.kind !== "group" && linkable(resolved, candidate.kind),
+      ),
+      onLink: (controllerId) =>
+        void command("link.create", {
+          controllerId,
+          addresses: [resolved.address],
+        }),
+      onUnlink: () => {
+        if (link !== undefined)
+          void command("link.remove", { linkId: link.id });
+      },
+      onOpen: (controllerId) =>
+        select({ kind: "controller", id: controllerId }),
+    };
+  };
   const row = (resolved: ResolvedAddress) => (
     <AddressRow
       key={resolved.address}
@@ -79,10 +119,13 @@ export function LayerInspector({
       onEdit={(value) =>
         command("address.edit", { address: resolved.address, value })
       }
+      links={rowLinks(resolved)}
     />
   );
-  const allDefault = parameters.every((entry) =>
-    sameAddressValue(valueAt(layer, entry), entry.default),
+  const allDefault = parameters.every(
+    (entry) =>
+      linkAt({ links }, entry.address) !== undefined ||
+      sameAddressValue(valueAt(layer, entry), entry.default),
   );
 
   return (

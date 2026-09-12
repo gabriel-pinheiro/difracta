@@ -236,25 +236,34 @@ Parameter name; picking a definition sets them to the definition's defaults.
 
 ### Controller
 
-An Installation-owned, named shared value used to coordinate compatible
-Parameters and Filter mix across Scenes. A Controller has a fixed type and a
-current authored value. Color Controllers contain one RGBA color; Number
-Controllers contain a normalized value from zero through one.
+An Installation-owned, named value that Parameter Links spread over many Layers
+across Scenes. A Controller has a fixed kind and a value that is saved with the
+Installation: a Number Controller holds a value from zero through one, shown as
+a percentage; a Color Controller holds one RGBA color. Its value is the Address
+`controller/<id>/value`, so Macros, OSC and the CLI move it like anything else.
 
 Do not call a Color Controller a Palette. A Palette retains its deferred
 multi-color meaning.
 
+### Controller Group
+
+A folder in the Controllers section of the navigator. It arranges Controllers
+and other Groups and has no value of its own.
+
 ### Parameter Link
 
-The Installation-owned relationship through which one Controller drives one
-compatible Visual Parameter on a Layer, Filter Parameter, or universal Filter
-mix. A concrete target may have at most one Parameter Link. In UI prose, the
-target is "controlled by" its Controller.
+The relationship through which one Controller drives one Layer Address: a
+number, boolean or color Parameter, opacity, mix or enabled. An Address has at
+most one Parameter Link; linking it to another Controller moves it. In UI prose,
+the target is "controlled by" its Controller, and the row shows the effective
+value with no control of its own.
 
-Color links apply RGBA exactly. Number links map Controller values zero and one
-to two legal values in the target Parameter's range, then linearly interpolate
-and quantize to that Parameter's minimum-anchored step grid. Choice Parameters
-cannot be linked.
+Color links copy the color. Number links map Controller values zero and one to
+two anchors in the target's units, interpolate linearly between them (reversed
+anchors invert), and clamp and snap to the target's range and step. A boolean
+target is on from one half. Choice Parameters cannot be linked. The value
+authored under a linked Address stays in the document and takes over again,
+frozen at the last effective value, when the Link goes.
 
 ### Macro
 

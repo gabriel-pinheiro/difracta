@@ -5,6 +5,12 @@ import { addressEdit } from "./address.edit.ts";
 import { addressSet, addressToggle } from "./address.set.ts";
 import { addressTrigger } from "./address.trigger.ts";
 import { calibrationExit, calibrationSet } from "./calibration.ts";
+import { controllerCreate } from "./controller.create.ts";
+import { controllerDuplicate } from "./controller.duplicate.ts";
+import { controllerMove } from "./controller.move.ts";
+import { controllerRemove } from "./controller.remove.ts";
+import { controllerRename } from "./controller.rename.ts";
+import { controllerUngroup } from "./controller.ungroup.ts";
 import { entityMove } from "./entity.move.ts";
 import { layerCreate } from "./layer.create.ts";
 import { layerDuplicate } from "./layer.duplicate.ts";
@@ -15,6 +21,9 @@ import { layerRemove } from "./layer.remove.ts";
 import { layerRename } from "./layer.rename.ts";
 import { layerReset } from "./layer.reset.ts";
 import { layerUpdate } from "./layer.update.ts";
+import { linkCreate } from "./link.create.ts";
+import { linkRemove } from "./link.remove.ts";
+import { linkUpdate } from "./link.update.ts";
 import { installationRename } from "./installation.rename.ts";
 import { maskCreate } from "./mask.create.ts";
 import {
@@ -80,6 +89,15 @@ export const builtInCommands: readonly CommandDefinition<never>[] = [
   layerGroup,
   layerUngroup,
   layerRemove,
+  controllerCreate,
+  controllerRename,
+  controllerMove,
+  controllerDuplicate,
+  controllerUngroup,
+  controllerRemove,
+  linkCreate,
+  linkUpdate,
+  linkRemove,
   addressEdit,
   addressSet,
   addressToggle,

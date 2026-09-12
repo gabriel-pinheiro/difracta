@@ -1,9 +1,15 @@
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 import type { ReactNode } from "react";
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { isBoolean, useStoredState } from "@/lib/storage";
 
-import { NavigatorEmptyRow } from "./navigator-row";
+import { NavigatorEmptyRow, type CreateItem } from "./navigator-row";
 
 /** Collapsible group of rows with a create button; the open state is remembered per browser. */
 export function NavigatorSection({
@@ -11,13 +17,16 @@ export function NavigatorSection({
   label,
   empty,
   onCreate,
+  createItems,
   children,
 }: {
   readonly storageKey: string;
   readonly label: string;
   /** Shown in place of rows while the section has none. */
   readonly empty?: string | undefined;
-  readonly onCreate: () => void;
+  readonly onCreate?: (() => void) | undefined;
+  /** Several kinds of entries: the "+" opens a menu of these instead. */
+  readonly createItems?: readonly CreateItem[] | undefined;
   readonly children: ReactNode;
 }) {
   const [expanded, setExpanded] = useStoredState(
@@ -41,15 +50,35 @@ export function NavigatorSection({
           )}
           <span className="truncate">{label}</span>
         </button>
-        <button
-          type="button"
-          aria-label={`Add to ${label}`}
-          title={`Add to ${label}`}
-          className="grid size-5 place-items-center rounded-sm text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
-          onClick={onCreate}
-        >
-          <Plus className="size-3" />
-        </button>
+        {onCreate !== undefined && (
+          <button
+            type="button"
+            aria-label={`Add to ${label}`}
+            title={`Add to ${label}`}
+            className={createButtonClass}
+            onClick={onCreate}
+          >
+            <Plus className="size-3" />
+          </button>
+        )}
+        {createItems !== undefined && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-label={`Add to ${label}`}
+              title={`Add to ${label}`}
+              className={createButtonClass}
+            >
+              <Plus className="size-3" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {createItems.map((item) => (
+                <DropdownMenuItem key={item.label} onClick={item.onSelect}>
+                  <item.icon /> {item.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
       {expanded &&
         (empty === undefined ? (
@@ -60,3 +89,6 @@ export function NavigatorSection({
     </section>
   );
 }
+
+const createButtonClass =
+  "grid size-5 place-items-center rounded-sm text-muted-foreground hover:bg-sidebar-accent hover:text-foreground";

@@ -1,6 +1,8 @@
 import {
   createBuiltInRegistry,
+  effectiveValue,
   getAtPath,
+  linkAt,
   listAddresses,
   type Definition,
   type Document,
@@ -187,15 +189,33 @@ program
         readDocument(client, summary.id),
         fetchCatalog(client),
       ]);
-      const items = listAddresses(document, catalog).map((entry) => ({
-        ...entry,
-        value: getAtPath(document, entry.path),
-      }));
+      const items = listAddresses(document, catalog).map((entry) => {
+        const link = linkAt(document, entry.address);
+        const controller =
+          link === undefined
+            ? undefined
+            : document.controllers[link.controllerId];
+        return {
+          ...entry,
+          value: getAtPath(document, entry.path),
+          ...(link === undefined
+            ? {}
+            : {
+                link: {
+                  id: link.id,
+                  controllerId: link.controllerId,
+                  anchors: link.anchors,
+                  effective: effectiveValue(document, entry),
+                },
+              }),
+          controlledBy: controller?.name,
+        };
+      });
       print(items, () =>
         items
           .map(
             (item) =>
-              `${item.address.padEnd(32)} ${item.type.padEnd(8)} ${item.type === "trigger" ? "-" : JSON.stringify(item.value)}  ${item.label}`,
+              `${item.address.padEnd(32)} ${item.type.padEnd(8)} ${item.type === "trigger" ? "-" : JSON.stringify(item.link?.effective ?? item.value)}  ${item.label}${item.controlledBy === undefined ? "" : `  ← ${item.controlledBy}`}`,
           )
           .join("\n"),
       );
@@ -229,6 +249,59 @@ for (const [name, command, purpose] of [
       }),
     );
 }
+
+program
+  .command("link <controllerId> <address...>")
+  .description(
+    "Link a Controller to Addresses, e.g. link ctl_1 layer/lay_1/param/color; one undoable step.",
+  )
+  .option("--from <number>", "target value at Controller 0 (number targets)")
+  .option("--to <number>", "target value at Controller 1 (number targets)")
+  .action(
+    (
+      controllerId: string,
+      addresses: string[],
+      local: { from?: string; to?: string },
+    ) =>
+      withDocument(async (client, summary) => {
+        const anchors =
+          local.from === undefined || local.to === undefined
+            ? undefined
+            : { from: Number(local.from), to: Number(local.to) };
+        const result = await client.command<{ changed: boolean }>(
+          summary.id,
+          "link.create",
+          { controllerId, addresses, ...(anchors ? { anchors } : {}) },
+        );
+        print(result, () =>
+          result.changed
+            ? addresses.map((a) => `${a} → ${controllerId}`).join("\n")
+            : "No change.",
+        );
+      }),
+  );
+
+program
+  .command("unlink <address...>")
+  .description(
+    "Release Addresses from their Controllers; each keeps its current value.",
+  )
+  .action((addresses: string[]) =>
+    withDocument(async (client, summary) => {
+      const document = await readDocument(client, summary.id);
+      const lines: string[] = [];
+      for (const address of addresses) {
+        const link = linkAt(document, address);
+        if (link === undefined) {
+          lines.push(`${address} is not linked`);
+          continue;
+        }
+        await client.command(summary.id, "link.remove", { linkId: link.id });
+        lines.push(`${address} released`);
+      }
+      print(lines, () => lines.join("\n"));
+    }),
+  );
 
 program
   .command("trigger <address...>")

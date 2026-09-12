@@ -14,6 +14,8 @@ import {
   type CommandContext,
   type CommandOutcome,
 } from "../command/command.ts";
+import { linkable } from "../address/address.ts";
+import { linksOfLayer } from "../address/links.ts";
 import type { FilterLayer, VisualLayer } from "../document/document.ts";
 import { childLayers, LAYER_LABELS } from "../document/layers.ts";
 import { uniqueName } from "../document/names.ts";
@@ -28,7 +30,8 @@ import type { Patch } from "../document/patch.ts";
  *
  * A Layer still called by its generated name, or by the name of what it
  * held before, takes the new definition's name, and the generated name again
- * when left with nothing; a name the user typed stays.
+ * when left with nothing; a name the user typed stays. Links to Parameters
+ * the new definition lacks, or of another type, go; the rest stay wired.
  */
 const PickPayload = z
   .object({
@@ -69,6 +72,26 @@ function pick(
     { op: "set", path: ["layers", layer.id, field], value: nextId },
     { op: "set", path: ["layers", layer.id, "parameters"], value: parameters },
   ];
+  for (const link of linksOfLayer(document.links, layer.id)) {
+    const [, , kind, name] = link.address.split("/");
+    if (kind !== "param") continue;
+    const parameter = next?.parameters[name ?? ""];
+    const controller = document.controllers[link.controllerId];
+    const keep =
+      parameter !== undefined &&
+      controller !== undefined &&
+      controller.kind !== "group" &&
+      linkable(
+        {
+          address: link.address,
+          label: parameter.label,
+          path: ["layers", layer.id, "parameters", name ?? ""],
+          type: parameter.kind,
+        },
+        controller.kind,
+      );
+    if (!keep) patches.push({ op: "remove", path: ["links", link.id] });
+  }
   const previous =
     currentId === null ? undefined : catalog.definition(field, currentId);
   const generated = [LAYER_LABELS[layer.kind], previous?.name]

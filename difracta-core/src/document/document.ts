@@ -3,14 +3,16 @@ import { z, type ZodType } from "zod";
 import {
   generateId,
   type Id,
+  type ControllerId,
   type InstallationId,
+  type LinkId,
   type LayerId,
   type MaskId,
   type SceneId,
   type OutputId,
   type SurfaceId,
 } from "../ids.ts";
-import { ParameterValuesSchema } from "../catalog/parameters.ts";
+import { ColorSchema, ParameterValuesSchema } from "../catalog/parameters.ts";
 import { CornerNameSchema, PointSchema, QuadSchema } from "./geometry.ts";
 import { DEFAULT_ORDER_KEY } from "./order.ts";
 
@@ -234,6 +236,61 @@ export type VisualLayer = Extract<Layer, { kind: "visual" }>;
 export type FilterLayer = Extract<Layer, { kind: "filter" }>;
 export type GroupLayer = Extract<Layer, { kind: "group" }>;
 
+/** Fields every Controller has, whatever its kind. */
+const ControllerBase = {
+  id: z.string().min(1),
+  name: EntityName,
+  /** The Group containing the Controller, or null at the section's root. */
+  parentId: z.string().min(1).nullable(),
+  /** Position among the Controllers of the same parent. */
+  order: z.string().min(1).default(DEFAULT_ORDER_KEY),
+};
+
+export const CONTROLLER_KINDS = ["number", "color", "group"] as const;
+export type ControllerKind = (typeof CONTROLLER_KINDS)[number];
+
+/**
+ * A Controller is one Installation-wide value that Parameter Links spread
+ * over many Layers: a Number Controller holds 0 to 1, a Color Controller a
+ * color. Its value is part of the file, so a Color Controller doubles as a
+ * saved palette entry. A Group only arranges Controllers in the navigator.
+ */
+export const ControllerSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      ...ControllerBase,
+      kind: z.literal("number"),
+      value: z.number().min(0).max(1),
+    })
+    .strict(),
+  z
+    .object({ ...ControllerBase, kind: z.literal("color"), value: ColorSchema })
+    .strict(),
+  z.object({ ...ControllerBase, kind: z.literal("group") }).strict(),
+]);
+export type Controller = Entity<typeof ControllerSchema, ControllerId>;
+export type NumberController = Extract<Controller, { kind: "number" }>;
+export type ColorController = Extract<Controller, { kind: "color" }>;
+
+/**
+ * A Parameter Link makes a Controller drive one Address. A number link maps
+ * the Controller's 0 and 1 onto `from` and `to` in the target's units,
+ * linearly, reversed when `from` is the larger; a color link copies the
+ * color. An Address has at most one Link, and the value authored under it
+ * stays in the document, dormant until the Link goes.
+ */
+export const LinkSchema = z
+  .object({
+    id: z.string().min(1),
+    controllerId: z.string().min(1),
+    address: z.string().min(1),
+    /** Target values at Controller 0 and 1; null for color links. */
+    anchors: z.object({ from: z.number(), to: z.number() }).strict().nullable(),
+  })
+  .strict();
+export type Link = Entity<typeof LinkSchema, LinkId>;
+export type LinkAnchors = NonNullable<Link["anchors"]>;
+
 export const OperationalSchema = z
   .object({
     blackout: z.boolean(),
@@ -254,6 +311,8 @@ export const DocumentSchema = z
     masks: z.record(z.string(), MaskSchema),
     scenes: z.record(z.string(), SceneSchema),
     layers: z.record(z.string(), LayerSchema),
+    controllers: z.record(z.string(), ControllerSchema),
+    links: z.record(z.string(), LinkSchema),
     operational: OperationalSchema,
   })
   .strict();
@@ -265,6 +324,8 @@ export interface Document {
   readonly masks: Table<Mask>;
   readonly scenes: Table<Scene>;
   readonly layers: Table<Layer>;
+  readonly controllers: Table<Controller>;
+  readonly links: Table<Link>;
   readonly operational: Operational;
 }
 
@@ -275,6 +336,8 @@ export const TABLE_SCHEMAS = {
   masks: MaskSchema,
   scenes: SceneSchema,
   layers: LayerSchema,
+  controllers: ControllerSchema,
+  links: LinkSchema,
 } as const;
 export type TableName = keyof typeof TABLE_SCHEMAS;
 
@@ -285,6 +348,7 @@ export const ORDERED_TABLES = [
   "masks",
   "scenes",
   "layers",
+  "controllers",
 ] as const satisfies readonly TableName[];
 export type OrderedTableName = (typeof ORDERED_TABLES)[number];
 
@@ -297,6 +361,7 @@ export const PARENT_FIELDS: Partial<
 > = {
   masks: ["surfaceId"],
   layers: ["sceneId", "parentId"],
+  controllers: ["parentId"],
 };
 
 /** The entities of `table` that share `entity`'s parent, `entity` included. */
@@ -331,6 +396,8 @@ export function emptyDocument(name: string): Document {
     masks: {},
     scenes: {},
     layers: {},
+    controllers: {},
+    links: {},
     operational: defaultOperational,
   };
 }

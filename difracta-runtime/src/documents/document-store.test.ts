@@ -174,6 +174,8 @@ describe("DocumentStore", () => {
         masks: {},
         scenes: {},
         layers: {},
+        controllers: {},
+        links: {},
         operational: { blackout: true, calibration: null },
       }),
     );

@@ -6,6 +6,7 @@ import {
   sameAddressValue,
   type ResolvedAddress,
 } from "../address/address.ts";
+import { linkAt } from "../address/links.ts";
 import {
   accepted,
   defineCommand,
@@ -29,6 +30,11 @@ export function writeAddress(
   if (resolved === undefined) return rejected(`Unknown address “${address}”.`);
   if (resolved.type === "trigger")
     return rejected(`Address “${address}” is a trigger; use address.trigger.`);
+  const link = linkAt(document, address);
+  if (link !== undefined)
+    return rejected(
+      `${resolved.label} is controlled by ${document.controllers[link.controllerId]?.name ?? "a Controller"}.`,
+    );
   const problem = addressValueProblem(resolved, value);
   if (problem !== undefined)
     return rejected(`Address “${address}” ${problem}.`);

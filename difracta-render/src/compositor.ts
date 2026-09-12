@@ -1,4 +1,9 @@
-import type { Catalog, Document, Quad } from "@difracta/core";
+import {
+  effectiveDocument,
+  type Catalog,
+  type Document,
+  type Quad,
+} from "@difracta/core";
 
 import { CalibrationDrawing } from "./calibration-drawing.ts";
 import { FilterChain } from "./filter-chain.ts";
@@ -138,7 +143,12 @@ class WebGLCompositor implements Compositor {
     this.#lastNow = now;
     const resources = (this.#resources ??= this.#setup());
     const { gl, program } = resources;
-    const plan = planFrame(document, outputId);
+    // Parameter Links resolve here, once per frame: the Layers planned and
+    // drawn carry what their Controllers make of them.
+    const plan = planFrame(
+      effectiveDocument(document, this.#catalog),
+      outputId,
+    );
     const step = resources.players.step(plan.layers, dt, width, height);
     const chain = resources.filters.step(plan.filters, dt, width, height);
     const layers = step.canvas;

@@ -32,6 +32,8 @@ const DocumentFileSchema = z
     masks: DocumentSchema.shape.masks.default({}),
     scenes: DocumentSchema.shape.scenes.default({}),
     layers: DocumentSchema.shape.layers.default({}),
+    controllers: DocumentSchema.shape.controllers.default({}),
+    links: DocumentSchema.shape.links.default({}),
   })
   .strict();
 
@@ -55,6 +57,8 @@ export function serializeDocument(document: Document): string {
     masks: document.masks,
     scenes: document.scenes,
     layers: document.layers,
+    controllers: document.controllers,
+    links: document.links,
   };
   return `${JSON.stringify(sortKeys(file), null, 2)}\n`;
 }
@@ -88,6 +92,8 @@ export function parseDocumentFile(text: string): ParsedDocumentFile {
       masks: parsed.data.masks as Document["masks"],
       scenes: parsed.data.scenes as Document["scenes"],
       layers: parsed.data.layers as Document["layers"],
+      controllers: parsed.data.controllers as Document["controllers"],
+      links: parsed.data.links as Document["links"],
       operational: defaultOperational,
     },
   };

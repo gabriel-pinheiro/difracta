@@ -1,6 +1,7 @@
 import type { DocumentView } from "@difracta/client";
 import type { ComponentType } from "react";
 
+import { controllerEntity } from "./controller/controller-entity";
 import { layerEntity } from "./layer/layer-entity";
 import { maskEntity } from "./mask/mask-entity";
 import { outputEntity } from "./output/output-entity";
@@ -29,6 +30,7 @@ export const entities = {
   mask: maskEntity,
   scene: sceneEntity,
   layer: layerEntity,
+  controller: controllerEntity,
 } as const satisfies Record<string, EntityModule>;
 
 export type EntityKind = keyof typeof entities;

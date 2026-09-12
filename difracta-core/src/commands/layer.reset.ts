@@ -1,9 +1,13 @@
 import { z } from "zod";
 
-import { defaultParameterValues } from "../catalog/parameters.ts";
+import { linksOfLayer } from "../address/links.ts";
+import {
+  defaultParameterValues,
+  type ParameterValue,
+} from "../catalog/parameters.ts";
 import { accepted, defineCommand, rejected } from "../command/command.ts";
 
-/** Every Parameter of a Layer back to its definition's default, as one step. */
+/** Every unlinked Parameter of a Layer back to its definition's default, as one step. */
 export const layerReset = defineCommand({
   name: "layer.reset",
   kind: "authoring",
@@ -20,7 +24,15 @@ export const layerReset = defineCommand({
       id === null ? undefined : catalog.definition(layer.kind, id);
     if (definition === undefined)
       return rejected("The Layer has no Parameters to reset.");
-    const defaults = defaultParameterValues(definition.parameters);
+    const defaults: Record<string, ParameterValue> = {
+      ...defaultParameterValues(definition.parameters),
+    };
+    for (const link of linksOfLayer(document.links, layer.id)) {
+      const name = link.address.split("/")[3];
+      const authored = name === undefined ? undefined : layer.parameters[name];
+      if (name !== undefined && authored !== undefined)
+        defaults[name] = authored;
+    }
     return accepted([
       {
         op: "set",

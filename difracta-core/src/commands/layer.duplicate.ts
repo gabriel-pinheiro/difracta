@@ -1,7 +1,8 @@
 import { z } from "zod";
 
+import { linksOfLayer } from "../address/links.ts";
 import { accepted, defineCommand, rejected } from "../command/command.ts";
-import type { Document, Layer } from "../document/document.ts";
+import type { Document, Layer, Link } from "../document/document.ts";
 import { childLayers } from "../document/layers.ts";
 import { uniqueName } from "../document/names.ts";
 import { orderKeysAfter, orderKeysForMove } from "../document/order.ts";
@@ -12,7 +13,8 @@ import { generateId, id } from "../ids.ts";
  * Patches that copy `layers` (siblings, in order) with their contents under
  * `sceneId`/`parentId`, with fresh ids. `after` places the copies after that
  * sibling; undefined appends them to an otherwise empty destination, keeping
- * their keys.
+ * their keys. Links to the originals are copied onto the copies, so a
+ * duplicated Layer follows the same Controllers.
  */
 export function copyLayers(
   document: Document,
@@ -41,6 +43,18 @@ export function copyLayers(
       order: keys?.[index] ?? source.order,
     };
     patches.push({ op: "set", path: ["layers", copyId], value: copy });
+    for (const link of linksOfLayer(document.links, source.id)) {
+      const linkId = generateId("link");
+      const copied: Link = {
+        ...link,
+        id: linkId,
+        address: link.address.replace(
+          `layer/${source.id}/`,
+          `layer/${copyId}/`,
+        ),
+      };
+      patches.push({ op: "set", path: ["links", linkId], value: copied });
+    }
     if (source.kind === "group")
       patches.push(
         ...copyLayers(
@@ -97,6 +111,18 @@ export const layerDuplicate = defineCommand({
     const patches: Patch[] = [
       { op: "set", path: ["layers", copyId], value: copy },
     ];
+    for (const link of linksOfLayer(document.links, source.id)) {
+      const linkId = generateId("link");
+      const copied: Link = {
+        ...link,
+        id: linkId,
+        address: link.address.replace(
+          `layer/${source.id}/`,
+          `layer/${copyId}/`,
+        ),
+      };
+      patches.push({ op: "set", path: ["links", linkId], value: copied });
+    }
     for (const [changedId, order] of keys) {
       if (changedId === copyId) continue;
       patches.push({

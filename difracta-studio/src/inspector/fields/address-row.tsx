@@ -27,39 +27,57 @@ import {
   parseNumber,
 } from "./address-format";
 import { FieldRow } from "./field-row";
+import { LinkedControl, LinkMenu, type RowLinks } from "./link-row";
+
+export type { RowLinks } from "./link-row";
 
 /**
  * One controllable value as an inspector row. The Address says what it is
  * (type, range, options, default), so a Layer's opacity and a Visual's
  * Parameter are the same component. Continuous controls stream every
  * position through `onEdit`, one send in flight at a time, and show the
- * dragged value until the document catches up.
+ * dragged value until the document catches up. With `links`, the row ends
+ * in a menu to link it to a Controller; a linked row shows its effective
+ * value read-only with a chip naming the Controller, since the value is
+ * changed on the Controller and nowhere else.
  */
 export function AddressRow({
   resolved,
   value,
   description,
   onEdit,
+  links,
 }: {
   readonly resolved: ResolvedAddress;
   readonly value: AddressValue;
   readonly description?: string | undefined;
   readonly onEdit: (value: AddressValue) => Promise<unknown>;
+  readonly links?: RowLinks | undefined;
 }) {
   const send = useLatestWins(onEdit);
   const fallback = resolved.default;
   const isDefault = fallback === undefined || sameAddressValue(value, fallback);
+  const linked = links?.link !== undefined && links.controller !== undefined;
   return (
     <FieldRow
       label={resolved.label}
       description={description}
       onReset={
-        isDefault || fallback === undefined
+        isDefault || fallback === undefined || linked
           ? undefined
           : () => void onEdit(fallback)
       }
+      trailing={
+        links === undefined ? undefined : (
+          <LinkMenu resolved={resolved} links={links} />
+        )
+      }
     >
-      <Control resolved={resolved} value={value} send={send} />
+      {linked ? (
+        <LinkedControl resolved={resolved} links={links} />
+      ) : (
+        <Control resolved={resolved} value={value} send={send} />
+      )}
     </FieldRow>
   );
 }

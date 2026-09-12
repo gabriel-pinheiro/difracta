@@ -8,6 +8,7 @@ import {
   BLEND_MODE_LABELS,
   BLEND_MODES,
   RENDER_SCALE,
+  type Controller,
   type Document,
   type Layer,
   type Surface,
@@ -59,8 +60,16 @@ export interface ResolvedAddress {
   readonly options?: readonly ChoiceOption[];
 }
 
-/** What resolving needs from a Document: the Layers and the Surfaces so far. */
-export type AddressSource = Pick<Document, "layers" | "surfaces">;
+/** What resolving needs from a Document: the tables that own Addresses. */
+export type AddressSource = Pick<
+  Document,
+  "layers" | "surfaces" | "controllers"
+>;
+
+/** A source with nothing but the given entities, for resolving one entity's own Addresses. */
+export function addressSource(partial: Partial<AddressSource>): AddressSource {
+  return { layers: {}, surfaces: {}, controllers: {}, ...partial };
+}
 
 interface AddressPattern {
   /** Segments; `*` captures one id or name. */
@@ -153,6 +162,30 @@ const patterns: readonly AddressPattern[] = [
     },
     list: (document) =>
       orderedEntries(document.surfaces).map((surface) => [surface.id]),
+  },
+  {
+    pattern: ["controller", "*", "value"],
+    resolve: (document, _catalog, [id = ""]) => {
+      const controller = document.controllers[id];
+      if (controller === undefined || controller.kind === "group")
+        return undefined;
+      const base = {
+        label: "Value",
+        owner: controller.name,
+        path: ["controllers", id, "value"] as const,
+      };
+      return controller.kind === "number"
+        ? {
+            ...base,
+            type: "number",
+            range: { min: 0, max: 1, step: 0.01, percent: true },
+          }
+        : { ...base, type: "color" };
+    },
+    list: (document) =>
+      orderedEntries(document.controllers)
+        .filter((controller) => controller.kind !== "group")
+        .map((controller) => [controller.id]),
   },
   {
     pattern: ["layer", "*", "enabled"],
@@ -318,10 +351,7 @@ export function layerAddresses(
   layer: Layer,
   catalog: Catalog = emptyCatalog,
 ): readonly ResolvedAddress[] {
-  const document: AddressSource = {
-    layers: { [layer.id]: layer },
-    surfaces: {},
-  };
+  const document = addressSource({ layers: { [layer.id]: layer } });
   const own = ["enabled", "opacity", "blend", "mix"].map((field) =>
     resolveAddress(
       document,
@@ -351,10 +381,7 @@ export function layerAddresses(
 
 /** The Addresses of one Surface, in inspector order. */
 export function surfaceAddresses(surface: Surface): readonly ResolvedAddress[] {
-  const document: AddressSource = {
-    layers: {},
-    surfaces: { [surface.id]: surface },
-  };
+  const document = addressSource({ surfaces: { [surface.id]: surface } });
   return ["render-scale"].flatMap((field) => {
     const resolved = resolveAddress(
       document,
@@ -362,6 +389,31 @@ export function surfaceAddresses(surface: Surface): readonly ResolvedAddress[] {
     );
     return resolved === undefined ? [] : [resolved];
   });
+}
+
+/** The value Address of a Controller; a Group has none. */
+export function controllerAddress(
+  controller: Controller,
+): ResolvedAddress | undefined {
+  return resolveAddress(
+    addressSource({ controllers: { [controller.id]: controller } }),
+    formatAddress(["controller", controller.id, "value"]),
+  );
+}
+
+/**
+ * Whether a Controller of `kind` can drive `resolved`: Layer Addresses only,
+ * a Number Controller onto numbers and booleans, a Color Controller onto
+ * colors. Choices have no scale to map onto.
+ */
+export function linkable(
+  resolved: ResolvedAddress,
+  kind: "number" | "color",
+): boolean {
+  if (resolved.path[0] !== "layers") return false;
+  return kind === "number"
+    ? resolved.type === "number" || resolved.type === "boolean"
+    : resolved.type === "color";
 }
 
 /** Why `value` cannot be written to `resolved`, or undefined when it can. */

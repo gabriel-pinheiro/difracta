@@ -1,11 +1,23 @@
 import type { DocumentView } from "@difracta/client";
 import {
   childLayers,
+  effectiveDocument,
   layerEffectivelyEnabled,
+  linkAt,
+  type Controller,
   type Layer,
+  type Link,
   type Table,
 } from "@difracta/core";
-import { Copy, Eye, EyeOff, FolderPlus, Trash2, Ungroup } from "lucide-react";
+import {
+  Copy,
+  Eye,
+  EyeOff,
+  FolderPlus,
+  Link2,
+  Trash2,
+  Ungroup,
+} from "lucide-react";
 
 import {
   ContextMenu,
@@ -14,6 +26,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { catalog } from "@/lib/catalog";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useBrowser } from "@/library/browser-state";
 import { useExpansion } from "@/navigator/expansion";
@@ -32,7 +45,8 @@ import { useLayerActions } from "./use-layer-actions";
  * The Layers under one Scene root or Group as rows, topmost first, Groups
  * opening to their own rows. Rows can be dragged among siblings, into a
  * Group (its middle) and to other Scenes. Layers disabled by themselves or
- * by a Group above show faded.
+ * by a Group above show faded; a Layer whose Enabled a Controller drives
+ * shows a link glyph in place of the eye, since the eye would not obey.
  */
 export function LayerRows({
   view,
@@ -51,6 +65,15 @@ export function LayerRows({
   const { createItems } = useLayerActions(view);
   const browser = useBrowser();
   const layers = useDocumentPath<Table<Layer>>(view, ["layers"]) ?? {};
+  // Enabled may be linked: dimming follows what the Controllers make of it.
+  useDocumentPath<Table<Link>>(view, ["links"]);
+  const controllers =
+    useDocumentPath<Table<Controller>>(view, ["controllers"]) ?? {};
+  const document = view.get();
+  const effective =
+    document === undefined
+      ? layers
+      : effectiveDocument(document, catalog).layers;
   const rows = childLayers(layers, sceneId, parentId);
   const moveInto = (layerId: string, target: Layer): void =>
     void command("layer.move", {
@@ -80,6 +103,15 @@ export function LayerRows({
         const Icon = layerIcons[layer.kind];
         const group = layer.kind === "group";
         const expanded = group && isExpanded("layer", layer.id);
+        const shown = effective[layer.id] ?? layer;
+        const enabledLink =
+          document === undefined
+            ? undefined
+            : linkAt(document, `layer/${layer.id}/enabled`);
+        const enabledBy =
+          enabledLink === undefined
+            ? undefined
+            : controllers[enabledLink.controllerId]?.name;
         return (
           <SortableItem
             key={layer.id}
@@ -97,7 +129,7 @@ export function LayerRows({
                   label={layer.name}
                   depth={depth}
                   selected={isSelected(selection, "layer", layer.id)}
-                  dimmed={!layerEffectivelyEnabled(layers, layer)}
+                  dimmed={!layerEffectivelyEnabled(effective, shown)}
                   expanded={expanded}
                   onToggle={
                     group
@@ -117,26 +149,36 @@ export function LayerRows({
                     group ? createItems(sceneId, layer.id) : undefined
                   }
                   actions={
-                    <RowAction
-                      label={
-                        layer.enabled
-                          ? `Disable ${layer.name}`
-                          : `Enable ${layer.name}`
-                      }
-                      active={!layer.enabled}
-                      onClick={() =>
-                        void command("layer.update", {
-                          layerId: layer.id,
-                          enabled: !layer.enabled,
-                        })
-                      }
-                    >
-                      {layer.enabled ? (
-                        <Eye className="size-3" />
-                      ) : (
-                        <EyeOff className="size-3" />
-                      )}
-                    </RowAction>
+                    enabledBy !== undefined ? (
+                      <RowAction
+                        label={`Enabled controlled by ${enabledBy}, ${shown.enabled ? "on" : "off"}`}
+                        active
+                        onClick={() => select({ kind: "layer", id: layer.id })}
+                      >
+                        <Link2 className="size-3 text-selection" />
+                      </RowAction>
+                    ) : (
+                      <RowAction
+                        label={
+                          layer.enabled
+                            ? `Disable ${layer.name}`
+                            : `Enable ${layer.name}`
+                        }
+                        active={!layer.enabled}
+                        onClick={() =>
+                          void command("layer.update", {
+                            layerId: layer.id,
+                            enabled: !layer.enabled,
+                          })
+                        }
+                      >
+                        {layer.enabled ? (
+                          <Eye className="size-3" />
+                        ) : (
+                          <EyeOff className="size-3" />
+                        )}
+                      </RowAction>
+                    )
                   }
                 />
               </ContextMenuTrigger>

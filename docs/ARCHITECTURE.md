@@ -63,6 +63,8 @@ Document
 ├── layers { [id]: Layer }            kind, sceneId, parentId, enabled, order, + per kind
 │                                     visual: visual, parameters, target, opacity, blendMode
 │                                     filter: filter, parameters, mix
+├── controllers { [id]: Controller }  kind, parentId, order; number: value 0..1; color: value
+├── links { [id]: Link }              controllerId, address, anchors
 └── operational { blackout, calibration }   replicated, never saved
 ```
 
@@ -171,6 +173,46 @@ commands. **Why a nullable Visual:** a Layer's place in the stack, its name, its
 Group and its enabled state are worth authoring before any pixels exist, and the
 choice of Visual is a separate gesture with its own picker.
 
+### Controllers and Parameter Links
+
+A Controller is one Installation-wide value that many Layers follow: a Number
+Controller holds 0 to 1, a Color Controller a color, and both are Addresses
+(`controller/<id>/value`) written like any other, from the inspector, a Macro,
+OSC or the CLI. Controllers live in one `controllers` table with the same
+`parentId` and `order` shape as Layers, so Groups arrange them in the navigator
+with the same drag, move and ungroup commands; a Group has no value. Their
+values are part of the file: a Color Controller is also how a static
+Installation keeps its palette.
+
+A Parameter Link (`links` table) makes one Controller drive one Layer Address: a
+number, boolean or color Parameter, opacity, mix or enabled. A number link
+stores `anchors`, the target values at Controller 0 and 1, and maps linearly
+between them, clamped to the target's range and snapped to its step; reversed
+anchors invert. A boolean target is on from 0.5; a color link copies the color.
+An Address has at most one Link; linking it elsewhere moves it. `link.create`
+takes any number of Addresses, so wiring one Controller to the same Parameter on
+thirty Layers is one command and one undo step.
+
+Nothing is materialized. The Layer keeps its authored value in the document, and
+whoever needs what the Layer shows asks `effectiveValue` or `effectiveLayer`
+(`address/links.ts`), one rule in core that the Output runs once per frame
+(`effectiveDocument` before planning, cached per document revision) and Studio
+runs per row. A direct write to a linked Address is refused by name ("Speed is
+controlled by Pulse"); unlinking, or removing the Controller, first writes the
+effective value into the document so nothing on the wall changes. Removing a
+Layer or Scene removes its Links; duplicating one copies them onto the copies;
+picking another Visual drops the Links to Parameters the new definition lacks.
+Playing a Scene never touches a Controller.
+
+**Why resolve at read time rather than materialize:** materialized values need a
+second implementation of the same rule on every client that wants to show a
+change before the server confirms it, and the two drift. One function in core,
+called where the value is needed, cannot. **Why the authored value stays:** it
+is what the Layer goes back to when the Link goes, and it keeps Undo of a Link
+one patch. **Why Links target Addresses and not entity fields:** a Link to
+`layer/<id>/opacity` and one to `layer/<id>/param/speed` are the same record, so
+anything that becomes an Address becomes linkable for free.
+
 ### Catalog and Parameters
 
 The Catalog is the set of Visual and Filter definitions a runtime knows
@@ -273,24 +315,24 @@ An Address names a controllable property or trigger, such as
 document path, a value type (boolean, number, color, choice or trigger), a
 default, and for numbers a range and for choices the options; `listAddresses`
 enumerates every reachable one. The entries today are Blackout, a Surface's
-`render-scale`, and, per Layer, `enabled`, `opacity` and `blend` (Visual
-Layers), `mix` (Filter Layers), `param/<name>` for every Parameter of the
-Layer's definition and `cue/<key>` for every Cue it declares, typed from the
-Catalog. Controllers, Macros, Pads, OSC, and the CLI all read and write
-Addresses.
+`render-scale`, a Controller's `value`, and, per Layer, `enabled`, `opacity` and
+`blend` (Visual Layers), `mix` (Filter Layers), `param/<name>` for every
+Parameter of the Layer's definition and `cue/<key>` for every Cue it declares,
+typed from the Catalog. Controllers, Macros, Pads, OSC, and the CLI all read and
+write Addresses.
 
 Two commands write one: `address.edit` is the authoring write the inspector
 sends, undoable, labelled by the property ("Change Opacity", "Change Speed") and
 coalescing per Address so a drag is one step; `address.set` is the same write
 for show control, never undone. Both share one reducer, which refuses an unknown
-Address and a value the type does not accept. A Parameter Link will add one more
-refusal there: an Address a Controller drives cannot be written directly, by
-anyone. A trigger Address is fired rather than written: `address.trigger`
-changes nothing in the document and returns an event instead, which the runtime
-announces to every session subscribed to the document after the deltas of the
-same tick, so a Macro's Parameter changes are in place before its Cue lands. An
-event is never stored, undone or replayed to a session that connects later; an
-Output hands it to the Layer's Visual instance as `cue(key)`.
+Address, a value the type does not accept, and an Address a Controller drives,
+which cannot be written directly by anyone. A trigger Address is fired rather
+than written: `address.trigger` changes nothing in the document and returns an
+event instead, which the runtime announces to every session subscribed to the
+document after the deltas of the same tick, so a Macro's Parameter changes are
+in place before its Cue lands. An event is never stored, undone or replayed to a
+session that connects later; an Output hands it to the Layer's Visual instance
+as `cue(key)`.
 
 **Why:** hand-written target unions mean every new controllable thing needs
 changes in the domain, protocol, inspector, OSC router and discovery tree. With
@@ -616,6 +658,23 @@ color input with an editable hex and an alpha slider, choices a select, booleans
 a switch. Sliders and the color input stream every position through
 `address.edit`, one send in flight at a time. The Parameters header has Reset
 all, one `layer.reset` step. Section open states are remembered per section.
+
+The Controllers section is a tree like a Scene's: Number and Color Controllers
+with their live value at the right (a percentage, a swatch), Groups that open
+and close, drag among siblings and into Groups. The section's "+" offers the
+three kinds and asks for a name, since a Controller is named for what it drives.
+The Controller inspector has the name, the value as the same Address row a
+Parameter gets, and a Links section listing every target with its Layer, a
+number Link's anchors editable in place, unlink, and "Add link…". That opens the
+Link picker: every compatible Address in the Installation grouped by Scene, a
+search box matching Scene, Layer, Visual and Parameter names word by word, tick
+boxes, "Select all results" and one Link button, so one Controller reaches the
+same Parameter on thirty Layers in a few keystrokes; an Address linked elsewhere
+shows its Controller and moves on pick. On a Layer, every Address row ends in a
+link menu: "Link to" lists the Controllers of the right kind, and a linked row
+shows the effective value read-only, a chip with the Controller's name and value
+that opens it, and Unlink, so there is no control to mistake for an override. A
+Layer whose Enabled is linked shows a link glyph in place of its eye.
 
 The Library is the picker for Visuals and Filters. It is bound to one Visual or
 Filter Layer and takes over the center column while open: a search box, three
