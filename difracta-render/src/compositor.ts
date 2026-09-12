@@ -1,9 +1,4 @@
-import {
-  effectiveDocument,
-  type Catalog,
-  type Document,
-  type Quad,
-} from "@difracta/core";
+import { effectiveDocument, type Catalog, type Document } from "@difracta/core";
 
 import { CalibrationDrawing } from "./calibration-drawing.ts";
 import { FilterChain } from "./filter-chain.ts";
@@ -12,13 +7,13 @@ import {
   passesWithInput,
   type FilterPass,
 } from "./filter-players.ts";
-import { homography } from "./homography.ts";
 import { frameIssues, type RenderIssue } from "./issues.ts";
 import { LayerPlayers, type LayerFrame } from "./layer-players.ts";
 import { MaskTextures } from "./masks.ts";
-import { planFrame, plannedSurfaces, type SurfaceDraw } from "./plan.ts";
+import { planFrame, plannedSurfaces } from "./plan.ts";
 import { MAX_FRAME_SECONDS } from "./sdk/visual.ts";
 import { ShaderVisualPrograms } from "./shader-visuals.ts";
+import { SurfaceGeometries } from "./surface-geometry.ts";
 import { MODE, SurfaceProgram, WHOLE } from "./surface-program.ts";
 
 export interface Compositor {
@@ -78,8 +73,7 @@ interface Resources {
   readonly filters: FilterPlayers;
   readonly chain: FilterChain;
   readonly shaderPrograms: ShaderVisualPrograms;
-  /** Homographies by Surface, valid while the mapping's corners object is the same. */
-  readonly matrices: Map<string, { corners: Quad; matrix: Float32Array }>;
+  readonly geometries: SurfaceGeometries;
 }
 
 export function createCompositor(
@@ -218,16 +212,13 @@ class WebGLCompositor implements Compositor {
     };
     for (const frame of step.frames) {
       passesBelow(frame.index);
-      const matrix = this.#matrix(resources, frame.draw);
-      if (matrix === undefined) continue;
-      program.setHomography(matrix);
-      const maskTexture = resources.masks.get(
-        frame.draw.surface.id,
-        frame.draw.masks,
-      );
+      const geometry = resources.geometries.get(frame.draw, width, height);
+      if (geometry === undefined) continue;
+      program.setSurface(geometry);
+      const maskTexture = resources.masks.get(frame.draw, width, height);
       if (frame.kind === "canvas")
         this.#drawLayer(resources, frame, maskTexture);
-      else this.#drawShader(resources, frame, matrix, maskTexture);
+      else this.#drawShader(resources, frame, geometry.matrix, maskTexture);
     }
     passesBelow(plan.layers.length);
     if (filtered) {
@@ -235,11 +226,17 @@ class WebGLCompositor implements Compositor {
       program.use();
     }
     for (const draw of plan.draws) {
-      const matrix = this.#matrix(resources, draw);
-      if (matrix === undefined) continue;
-      program.setHomography(matrix);
-      const maskTexture = resources.masks.get(draw.surface.id, draw.masks);
-      resources.calibration.draw(draw, maskTexture, matrix, width, height);
+      const geometry = resources.geometries.get(draw, width, height);
+      if (geometry === undefined) continue;
+      program.setSurface(geometry);
+      const maskTexture = resources.masks.get(draw, width, height);
+      resources.calibration.draw(
+        draw,
+        maskTexture,
+        geometry.matrix,
+        width,
+        height,
+      );
     }
     // Mask textures follow the plan, not the draw: a Surface whose Layer is
     // hidden or blank this frame keeps its Masks rasterized.
@@ -267,9 +264,12 @@ class WebGLCompositor implements Compositor {
   }
 
   #setup(): Resources {
+    // No multisampling: Surface edges are feathered by the fragment
+    // programs (`edgeCoverage` in `shaders.ts`), which the Filter chain's
+    // textures need anyway, and a resolve per frame is spared.
     const gl = this.#canvas.getContext("webgl2", {
       alpha: false,
-      antialias: true,
+      antialias: false,
       depth: false,
       stencil: false,
       premultipliedAlpha: true,
@@ -289,24 +289,9 @@ class WebGLCompositor implements Compositor {
       players: new LayerPlayers(gl, this.#catalog),
       filters: new FilterPlayers(this.#catalog),
       chain: new FilterChain(gl, program.quad),
-      shaderPrograms: new ShaderVisualPrograms(gl, program.quad),
-      matrices: new Map(),
+      shaderPrograms: new ShaderVisualPrograms(gl, program.surface),
+      geometries: new SurfaceGeometries(),
     };
-  }
-
-  #matrix(
-    resources: Resources,
-    draw: Pick<SurfaceDraw, "surface" | "corners">,
-  ): Float32Array | undefined {
-    const cached = resources.matrices.get(draw.surface.id);
-    if (cached?.corners === draw.corners) return cached.matrix;
-    const matrix = homography(draw.corners);
-    if (matrix === undefined) {
-      resources.matrices.delete(draw.surface.id);
-      return undefined;
-    }
-    resources.matrices.set(draw.surface.id, { corners: draw.corners, matrix });
-    return matrix;
   }
 
   /** A shader Layer run over its Surface, with opacity, blend mode and the Surface's Masks. */
@@ -351,7 +336,7 @@ class WebGLCompositor implements Compositor {
     gl.uniform4f(uniforms.color, 1, 1, 1, layer.opacity);
     gl.uniform4f(uniforms.rect, ...WHOLE);
     if (layer.blendMode === "additive") gl.blendFunc(gl.ONE, gl.ONE);
-    program.drawQuad();
+    program.drawSurface();
     if (layer.blendMode === "additive")
       gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   }

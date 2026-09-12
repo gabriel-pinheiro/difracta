@@ -1,14 +1,23 @@
 import { z } from "zod";
 
 import { resolveAddress } from "../address/address.ts";
-import { defaultAnchors, linkAt, linkProblem } from "../address/links.ts";
+import {
+  anchorsProblem,
+  defaultAnchors,
+  linkAt,
+  linkProblem,
+} from "../address/links.ts";
 import { accepted, defineCommand, rejected } from "../command/command.ts";
 import type { Catalog } from "../catalog/catalog.ts";
 import type { Controller, Document, Link } from "../document/document.ts";
 import type { Patch } from "../document/patch.ts";
 import { generateId } from "../ids.ts";
 
-/** Patches linking `controller` to each Address, or why one of them cannot be linked. */
+/**
+ * Patches linking `controller` to each Address, or why one of them cannot
+ * be linked. Given anchors must fit every target: within its range and on
+ * its step, and only a number target takes them.
+ */
 export function linkPatches(
   document: Document,
   catalog: Catalog,
@@ -23,6 +32,9 @@ export function linkPatches(
       return { error: `Unknown address “${address}”.` };
     const problem = linkProblem(controller, resolved);
     if (problem !== undefined) return { error: problem };
+    const anchorProblem =
+      anchors === undefined ? undefined : anchorsProblem(resolved, anchors);
+    if (anchorProblem !== undefined) return { error: anchorProblem };
     const existing = linkAt(document, address);
     if (existing?.controllerId === controller.id) continue;
     if (existing !== undefined)
@@ -46,7 +58,8 @@ export function linkPatches(
  * Links one Controller to one or more Addresses in one step, so wiring a
  * Controller to the same Parameter on thirty Layers is one undo entry. An
  * Address already driven by another Controller moves to this one. Number
- * links start at the target's whole range unless anchors are given.
+ * links start at the target's whole range unless anchors are given, which
+ * must be values the target accepts.
  */
 export const linkCreate = defineCommand({
   name: "link.create",

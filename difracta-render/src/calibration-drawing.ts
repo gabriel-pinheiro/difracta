@@ -52,7 +52,7 @@ export class CalibrationDrawing {
     this.#labels = new Labels(gl);
   }
 
-  /** Draws one Surface; the program is current and its homography set. */
+  /** Draws one Surface; the program is current and the Surface set on it. */
   draw(
     draw: SurfaceDraw,
     maskTexture: WebGLTexture | undefined,
@@ -71,7 +71,7 @@ export class CalibrationDrawing {
     if (draw.style === "fill") {
       gl.uniform1i(uniforms.mode, MODE.flat);
       gl.uniform4f(uniforms.color, ...FILL);
-      program.drawQuad();
+      program.drawSurface();
       return;
     }
     gl.uniform1i(uniforms.mode, MODE.pattern);
@@ -81,7 +81,7 @@ export class CalibrationDrawing {
       uniforms.corner,
       draw.corner === undefined ? -1 : CORNER_INDEX[draw.corner],
     );
-    program.drawQuad();
+    program.drawSurface();
     if (!draw.highlighted) return;
 
     // Labels and the Mask or Path line sit on top, unmasked.

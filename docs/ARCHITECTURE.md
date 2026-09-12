@@ -219,10 +219,12 @@ A Parameter Link (`links` table) makes one Controller drive one Layer Address: a
 number, boolean or color Parameter, opacity, mix or enabled. A number link
 stores `anchors`, the target values at Controller 0 and 1, and maps linearly
 between them, clamped to the target's range and snapped to its step; reversed
-anchors invert. A boolean target is on from 0.5; a color link copies the color.
-An Address has at most one Link; linking it elsewhere moves it. `link.create`
-takes any number of Addresses, so wiring one Controller to the same Parameter on
-thirty Layers is one command and one undo step.
+anchors invert. Anchors are checked when written: both must lie within the
+target's range and on its step grid, so the endpoints the inspector shows are
+the values the Controller reaches. A boolean target is on from 0.5; a color link
+copies the color. An Address has at most one Link; linking it elsewhere moves
+it. `link.create` takes any number of Addresses, so wiring one Controller to the
+same Parameter on thirty Layers is one command and one undo step.
 
 Nothing is materialized. The Layer keeps its authored value in the document, and
 whoever needs what the Layer shows asks `effectiveValue` or `effectiveLayer`
@@ -399,10 +401,11 @@ Two commands write one: `address.edit` is the authoring write the inspector
 sends, undoable, labelled by the property ("Change Opacity", "Change Speed") and
 coalescing per Address so a drag is one step; `address.set` is the same write
 for show control, never undone. Both share one reducer, which refuses an unknown
-Address, a value the type does not accept, and an Address a Controller drives,
-which cannot be written directly by anyone. A trigger Address is fired rather
-than written, through `address.trigger` and `address/fire.ts`: a Layer's Cue
-changes nothing in the document and returns an event instead, a Scene's play
+Address, a value the type does not accept (a number outside its range or off its
+step grid is refused by name, never snapped), and an Address a Controller
+drives, which cannot be written directly by anyone. A trigger Address is fired
+rather than written, through `address.trigger` and `address/fire.ts`: a Layer's
+Cue changes nothing in the document and returns an event instead, a Scene's play
 sets the active Scene, a Macro's run performs its actions. The runtime commits a
 command's patches before announcing its events to every session subscribed to
 the document, so a Macro's Parameter changes are in place before its Cue lands.
@@ -633,25 +636,46 @@ Geometry: every vertex is a Surface Space position pushed through the Surface's
 homography in the vertex shader, with clip-space `w` carrying the projective
 term, so the GPU interpolates Surface Space perspective-correctly and every
 later shape drawn in Surface Space (Masks, Paths) inherits the mapping for free.
-The homography is computed once per mapping change and cached by the corners
-object's identity. The pattern is computed in the fragment shader from Surface
-Space coordinates and their screen-space derivatives, so its lines are about one
-pixel wide at any projection and cost no geometry. Labels are text rendered once
-per string into a small texture.
+The homography and the quad a Surface is drawn with are computed once per
+mapping change or frame resize and cached by the corners object's identity
+(`surface-geometry.ts`). The pattern is computed in the fragment shader from
+Surface Space coordinates and their screen-space derivatives, so its lines are
+about one pixel wide at any projection and cost no geometry. Labels are text
+rendered once per string into a small texture.
 
-Masks: one alpha texture per Surface at a fixed 512×512, rebuilt only when that
+Surface edges: every draw of a whole Surface, a Layer's canvas, a shader Visual
+or a calibration fill or pattern, fades out over one pixel centred on the edge
+in the fragment shader, from the Surface Space distance to the nearest edge and
+its screen-space gradient. For the outer half of that fade to be drawn, the quad
+is grown one pixel outward on the Output's pixels, each projected corner moved
+along the miter of its two edges and brought back into Surface Space through the
+inverse homography, so the vertex shader still projects it and interpolates
+Surface Space exactly; a Mask samples clamp past the edge and the fade decides
+there. The context has no multisampling: this feather is the only edge
+smoothing, so the edge looks the same drawn straight to the screen or into the
+Filter chain's textures, and the only lines left unsmoothed are the calibration
+outlines. **Why in the fragment shader and not multisampling:** the Filter
+chain's textures have no samples to resolve, so with a Filter active a
+multisampled context still showed every edge aliased, and the resolve it costs
+per frame on a TV bought nothing the feather does not.
+
+Masks: one alpha texture per Surface, sized like a Layer canvas from the
+Surface's extent on the Output (`maskTextureSize`: without Render Scale or the
+physical size, each side rounded up to the next 64 texels, at least 256, capped
+at the GPU's limit, width and height separately), rebuilt only when that
 Surface's Masks change (identity comparison, since the document is immutable per
-revision), sampled once per fragment. The texture is kept for as long as the
-Surface has a planned Layer or a calibration drawing on the Output, whether or
-not that Layer drew this frame, so a Visual that blinks does not rebuild its
-Surface's Masks on every flash. Feather is drawn inward from the polygon edge
-and clipped to it, so no Mask changes coverage outside its own boundary.
+revision) or that size does, and sampled once per fragment. The texture is kept
+for as long as the Surface has a planned Layer or a calibration drawing on the
+Output, whether or not that Layer drew this frame, so a Visual that blinks does
+not rebuild its Surface's Masks on every flash. Feather is drawn inward from the
+polygon edge and clipped to it, so no Mask changes coverage outside its own
+boundary. **Why sized to the Surface, in steps:** a Mask edge is only as sharp
+as its texels on the wall, and rounding the size up keeps a corner drag from
+re-rasterizing every step.
 
 **Why WebGL2 only:** the projector machines and smart TVs this runs on all have
 it, WebGPU still does not reach every such browser, and one engine is half the
-code of two. Why a fixed-size Mask texture: Masks are fractions of Surface
-Space, so the texture does not depend on the frame; a full-resolution texture
-would be rebuilt on every drag of a point and uploaded at megabytes a step.
+code of two.
 
 ### Visuals and Filters
 

@@ -1,4 +1,5 @@
 import { emptyCatalog, type Catalog } from "../catalog/catalog.ts";
+import { numberProblem } from "../catalog/parameters.ts";
 import type {
   Controller,
   Document,
@@ -171,4 +172,30 @@ export function defaultAnchors(resolved: ResolvedAddress): Link["anchors"] {
   if (resolved.type !== "number") return null;
   const range = resolved.range ?? { min: 0, max: 1 };
   return { from: range.min, to: range.max };
+}
+
+/**
+ * Why `anchors` cannot be stored for `resolved`, or undefined when they can:
+ * only a number target has anchors, and each must be a value the target
+ * accepts directly, within its range and on its step. Reversed anchors are
+ * fine; they invert the Controller.
+ */
+export function anchorsProblem(
+  resolved: ResolvedAddress,
+  anchors: NonNullable<Link["anchors"]>,
+): string | undefined {
+  if (resolved.type !== "number")
+    return `${resolved.label} is a ${resolved.type}; only a number target has anchors.`;
+  const range = resolved.range ?? { min: 0, max: 1 };
+  const grid =
+    range.step === undefined ? "" : ` in steps of ${String(range.step)}`;
+  for (const [end, value] of [
+    ["0", anchors.from],
+    ["1", anchors.to],
+  ] as const) {
+    const problem = numberProblem(range, value);
+    if (problem !== undefined)
+      return `${resolved.label} anchors must lie within ${String(range.min)} to ${String(range.max)}${grid}; the anchor at ${end} ${problem}.`;
+  }
+  return undefined;
 }

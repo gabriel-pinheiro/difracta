@@ -268,17 +268,15 @@ describe("addresses", () => {
     const tint = resolveAddress(document, "layer/v/param/tint", catalog);
     if (!speed || !palette || !tint) throw new Error("unresolved");
     expect(addressValueProblem(speed, 2)).toBeUndefined();
-    expect(addressValueProblem(speed, 5)).toBe(
-      "expects a number between 0 and 4",
-    );
-    expect(addressValueProblem(speed, "2")).toBe("expects a number");
+    expect(addressValueProblem(speed, 5)).toBe("must be between 0 and 4");
+    expect(addressValueProblem(speed, "2")).toBe("must be a number");
     expect(addressValueProblem(palette, "ocean")).toBeUndefined();
     expect(addressValueProblem(palette, "lava")).toBe(
-      "expects one of ember, ocean",
+      "must be one of ember, ocean",
     );
     expect(addressValueProblem(tint, [0, 0, 0, 1])).toBeUndefined();
     expect(addressValueProblem(tint, [0, 0, 2, 1])).toBe(
-      "expects a color of four components from 0 to 1",
+      "must be a color of four components from 0 to 1",
     );
     expect(sameAddressValue([1, 0, 0, 1], [1, 0, 0, 1])).toBe(true);
     expect(sameAddressValue([1, 0, 0, 1], [1, 0, 0, 0.5])).toBe(false);

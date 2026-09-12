@@ -1,6 +1,8 @@
 import { emptyCatalog, type Catalog } from "../catalog/catalog.ts";
 import {
   ColorSchema,
+  numberProblem,
+  type NumberBounds,
   type ParameterDefinition,
   type ParameterValue,
 } from "../catalog/parameters.ts";
@@ -33,10 +35,7 @@ export type AddressValueType =
 
 export type AddressValue = ParameterValue;
 
-export interface NumberRange {
-  readonly min: number;
-  readonly max: number;
-  readonly step?: number;
+export interface NumberRange extends NumberBounds {
   readonly unit?: string;
   /** Shown as 0 to 100 with a percent sign; the value itself stays 0 to 1. */
   readonly percent?: boolean;
@@ -456,30 +455,28 @@ export function linkable(
     : resolved.type === "color";
 }
 
-/** Why `value` cannot be written to `resolved`, or undefined when it can. */
+/**
+ * Why `value` cannot be written to `resolved`, or undefined when it can. A
+ * number must be within the range and on its step grid, the same rule a
+ * Parameter value is held to.
+ */
 export function addressValueProblem(
   resolved: ResolvedAddress,
   value: unknown,
 ): string | undefined {
   switch (resolved.type) {
     case "boolean":
-      return typeof value === "boolean" ? undefined : "expects true or false";
-    case "number": {
-      if (typeof value !== "number" || !Number.isFinite(value))
-        return "expects a number";
-      const range = resolved.range;
-      if (range !== undefined && (value < range.min || value > range.max))
-        return `expects a number between ${range.min} and ${range.max}`;
-      return undefined;
-    }
+      return typeof value === "boolean" ? undefined : "must be true or false";
+    case "number":
+      return numberProblem(resolved.range, value);
     case "color":
       return ColorSchema.safeParse(value).success
         ? undefined
-        : "expects a color of four components from 0 to 1";
+        : "must be a color of four components from 0 to 1";
     case "choice":
       return resolved.options?.some((option) => option.value === value)
         ? undefined
-        : `expects one of ${(resolved.options ?? []).map((option) => option.value).join(", ")}`;
+        : `must be one of ${(resolved.options ?? []).map((option) => option.value).join(", ")}`;
     case "trigger":
       return value === undefined || value === null
         ? undefined

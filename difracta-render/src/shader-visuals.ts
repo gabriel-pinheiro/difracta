@@ -10,7 +10,7 @@ import {
 } from "./sdk/path.ts";
 import type { ShaderVisual } from "./sdk/shader-visual.ts";
 import type { Uniforms } from "./sdk/uniforms.ts";
-import { VERTEX_SOURCE } from "./shaders.ts";
+import { EDGE_COVERAGE_SOURCE, VERTEX_SOURCE } from "./shaders.ts";
 
 /** One shader Layer to draw this frame, with everything its program needs. */
 export interface ShaderDrawInput {
@@ -58,14 +58,16 @@ float hash(float value) {
 float hash2(vec2 value) {
   return fract(sin(dot(value, vec2(127.1, 311.7))) * 43758.5453);
 }
-`;
+${EDGE_COVERAGE_SOURCE}`;
 
+// The Surface's edge fades the Visual out like the Masks cut it; the Mask
+// texture clamps past the edge, so the coverage alone decides there.
 const MAIN = `
 void main() {
   float mask = u_mask_enabled == 1 ? texture(u_mask, v_uv).a : 1.0;
   vec4 color = clamp(render_visual(v_uv), 0.0, 1.0);
   color.rgb *= color.a;
-  o_color = color * u_opacity * mask;
+  o_color = color * u_opacity * mask * edgeCoverage(v_uv);
 }
 `;
 
@@ -86,6 +88,7 @@ export class ShaderVisualPrograms {
   readonly #programs = new Map<string, ProgramEntry | undefined>();
   readonly #failures = new Map<string, string>();
 
+  /** `quad` is the Surface program's current Surface quad, set before each draw. */
   constructor(gl: WebGL2RenderingContext, quad: WebGLBuffer) {
     this.#gl = gl;
     this.#quad = quad;

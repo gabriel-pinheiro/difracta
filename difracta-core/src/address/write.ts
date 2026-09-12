@@ -45,7 +45,7 @@ export function writeAddress(
     };
   const problem = addressValueProblem(resolved, value);
   if (problem !== undefined)
-    return { ok: false, error: `Address “${address}” ${problem}.` };
+    return { ok: false, error: `${resolved.label} ${problem}.` };
   if (sameAddressValue(getAtPath(document, resolved.path), value))
     return { ok: true, patches: [], resolved };
   return {

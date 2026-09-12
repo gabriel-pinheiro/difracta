@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   defaultParameterValues,
+  numberProblem,
   validateParameterValues,
   type ParameterSchema,
 } from "./parameters.ts";
@@ -53,5 +54,46 @@ describe("parameters", () => {
     expect(validateParameterValues(schema, missing)).toBe(
       "Parameter “speed” is missing.",
     );
+  });
+
+  it("holds a stepped number to its grid from the minimum, within float noise", () => {
+    const stepped: ParameterSchema = {
+      rate: {
+        kind: "number",
+        label: "Rate",
+        default: 2.5,
+        min: 0.1,
+        max: 20,
+        step: 0.1,
+      },
+    };
+    expect(validateParameterValues(stepped, { rate: 0.37 })).toBe(
+      "Parameter “rate” must be a multiple of 0.1 from 0.1 (got 0.37).",
+    );
+    expect(validateParameterValues(stepped, { rate: 2.5 })).toBeUndefined();
+    expect(validateParameterValues(stepped, { rate: 20 })).toBeUndefined();
+    // 0.1 + 0.2 is 0.30000000000000004: a grid point with float noise.
+    expect(
+      validateParameterValues(stepped, { rate: 0.1 + 0.2 }),
+    ).toBeUndefined();
+    expect(validateParameterValues(stepped, { rate: 21 })).toBe(
+      "Parameter “rate” must be between 0.1 and 20.",
+    );
+    // Without a step any value in the range goes.
+    expect(
+      validateParameterValues(schema, {
+        ...defaultParameterValues(schema),
+        speed: 0.37,
+      }),
+    ).toBeUndefined();
+
+    expect(
+      numberProblem({ min: 0, max: 2000, step: 10 }, 1000),
+    ).toBeUndefined();
+    expect(numberProblem({ min: 0, max: 2000, step: 10 }, 1005)).toBe(
+      "must be a multiple of 10 from 0 (got 1005)",
+    );
+    expect(numberProblem(undefined, 1005)).toBeUndefined();
+    expect(numberProblem(undefined, Number.NaN)).toBe("must be a number");
   });
 });

@@ -133,6 +133,15 @@ describe("OSC server", () => {
     );
     await wait(50);
     expect(document()?.controllers.energy).toMatchObject({ value: 0.5 });
+    // A fader sends any float; the value lands on the Controller's step grid.
+    await send(
+      encodeMessage({
+        address: "/controller/energy",
+        args: [{ type: "float32", value: 0.3731 }],
+      }),
+    );
+    await wait(50);
+    expect(document()?.controllers.energy).toMatchObject({ value: 0.37 });
     await send(
       encodeMessage({
         address: "/controller/energy",

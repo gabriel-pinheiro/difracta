@@ -47,7 +47,7 @@ export function resolveParameters<S extends ParameterSchema>(
  */
 export function automaticRate(
   overrides: Partial<
-    Pick<NumberParameter, "default" | "max" | "description">
+    Pick<NumberParameter, "default" | "max" | "step" | "description">
   > = {},
 ): NumberParameter {
   return {

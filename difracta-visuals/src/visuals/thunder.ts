@@ -132,7 +132,7 @@ export const thunder = defineShaderVisual({
       step: 10,
       unit: "ms",
     },
-    automaticRate: automaticRate({ default: 0.125, max: 4 }),
+    automaticRate: automaticRate({ default: 0.125, max: 4, step: 0.025 }),
   },
   cues: [{ key: "flash", label: "Flash" }],
   fragment: `

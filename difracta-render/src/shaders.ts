@@ -29,11 +29,32 @@ export const MODE = {
 } as const;
 
 /**
+ * The Surface's edge, for every fragment program drawing a whole Surface:
+ * 1 inside, 0 outside, fading across one pixel centred on the edge, from
+ * the Surface Space distance to the nearest edge divided by that
+ * coordinate's screen-space gradient. The quad reaches one pixel past the
+ * edge (`surface-geometry.ts`) so the outer half of the fade is drawn. This
+ * is the only edge smoothing: the context has no multisampling, which the
+ * Filter chain's textures would not have anyway.
+ */
+export const EDGE_COVERAGE_SOURCE = `
+float edgeCoverage(vec2 uv) {
+  vec2 edge = min(uv, 1.0 - uv);
+  float du = max(length(vec2(dFdx(uv.x), dFdy(uv.x))), 1e-6);
+  float dv = max(length(vec2(dFdx(uv.y), dFdy(uv.y))), 1e-6);
+  return smoothstep(-0.5, 0.5, min(edge.x / du, edge.y / dv));
+}
+`;
+
+/**
  * Modes: flat colour (fills and lines), the calibration pattern, a label
  * texture, a ring marker, and a Layer's canvas sampled across Surface Space
- * with the Layer's opacity in `u_color.a`. Output is premultiplied. The pattern is computed
- * from Surface Space coordinates and their screen-space derivatives, so its
- * lines stay about one pixel wide at any projection and cost no geometry.
+ * with the Layer's opacity in `u_color.a`. Output is premultiplied. The
+ * pattern is computed from Surface Space coordinates and their screen-space
+ * derivatives, so its lines stay about one pixel wide at any projection and
+ * cost no geometry. `u_edge` is 1 for a draw of the whole Surface, whose
+ * fill then fades out across the edge like the Masks cut it; lines, labels
+ * and markers keep every fragment.
  */
 export const FRAGMENT_SOURCE = `#version 300 es
 precision highp float;
@@ -43,11 +64,13 @@ uniform int u_mode;
 uniform vec4 u_color;
 uniform sampler2D u_mask;
 uniform int u_mask_enabled;
+uniform int u_edge;
 uniform sampler2D u_texture;
 uniform float u_divisions;
 uniform int u_corner;
 uniform float u_emphasis;
 out vec4 o_color;
+${EDGE_COVERAGE_SOURCE}
 
 // 1 inside a line of half-width w pixels, fading over one pixel.
 float line(float distancePx, float w) {
@@ -79,7 +102,10 @@ vec3 pattern(vec2 uv) {
 }
 
 void main() {
+  // Past the edge the Mask texture clamps to its border texel and the
+  // coverage alone decides, so no Mask lights anything outside its Surface.
   float mask = u_mask_enabled == 1 ? texture(u_mask, v_uv).a : 1.0;
+  mask *= u_edge == 1 ? edgeCoverage(v_uv) : 1.0;
   if (u_mode == 0) {
     o_color = vec4(u_color.rgb * u_color.a, u_color.a) * mask;
   } else if (u_mode == 1) {

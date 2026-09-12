@@ -31,6 +31,14 @@ export const settings = {
     /** A run of changes never keeps a sidecar waiting longer than this since the previous write. */
     maxWaitMs: 30_000,
   },
+  numbers: {
+    /**
+     * How far a number may sit off its step grid and still count as on it, as
+     * a fraction of the step: float noise from JSON and sliders, not a value
+     * between steps.
+     */
+    stepTolerance: 1e-9,
+  },
   masks: {
     /** A new Mask is the Surface minus this fraction on each side. */
     defaultInset: 0.1,

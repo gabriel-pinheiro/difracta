@@ -18,6 +18,23 @@ const catalog = new Catalog({
         tint: { kind: "color", label: "Tint", default: [1, 1, 1, 1] },
       },
     },
+    {
+      kind: "visual",
+      id: "pulse",
+      name: "Pulse",
+      description: "Beats.",
+      backend: "shader",
+      parameters: {
+        rate: {
+          kind: "number",
+          label: "Rate",
+          default: 1,
+          min: 0,
+          max: 10,
+          step: 0.1,
+        },
+      },
+    },
   ],
 });
 const registry = createBuiltInRegistry(catalog);
@@ -110,13 +127,52 @@ describe("address.edit", () => {
         address: "layer/v/param/speed",
         value: 9,
       }),
-    ).toBe("Address “layer/v/param/speed” expects a number between 0 and 4.");
+    ).toBe("Speed must be between 0 and 4.");
     expect(
       fails(document, "address.set", {
         address: "layer/v/opacity",
         value: "1",
       }),
-    ).toBe("Address “layer/v/opacity” expects a number.");
+    ).toBe("Opacity must be a number.");
+  });
+
+  it("holds a number to its step grid, absorbing float noise", () => {
+    let document = stage();
+    document = run(document, "layer.create", {
+      id: "p",
+      sceneId: "s",
+      kind: "visual",
+    });
+    document = run(document, "layer.visual", { layerId: "p", visual: "pulse" });
+    expect(
+      fails(document, "address.edit", {
+        address: "layer/p/param/rate",
+        value: 0.37,
+      }),
+    ).toBe("Rate must be a multiple of 0.1 from 0 (got 0.37).");
+    expect(
+      fails(document, "address.set", {
+        address: "layer/v/opacity",
+        value: 0.373,
+      }),
+    ).toBe("Opacity must be a multiple of 0.01 from 0 (got 0.373).");
+    const onGrid = run(document, "address.edit", {
+      address: "layer/p/param/rate",
+      value: 0.3,
+    });
+    expect(onGrid.layers.p).toMatchObject({ parameters: { rate: 0.3 } });
+    // 0.1 + 0.2 is 0.30000000000000004: a grid point with float noise.
+    const noisy = run(document, "address.edit", {
+      address: "layer/p/param/rate",
+      value: 0.1 + 0.2,
+    });
+    expect(noisy.layers.p).toMatchObject({ parameters: { rate: 0.1 + 0.2 } });
+    // Without a step any value in the range goes.
+    const free = run(document, "address.edit", {
+      address: "layer/v/param/speed",
+      value: 0.37,
+    });
+    expect(visual(free).parameters.speed).toBe(0.37);
   });
 });
 

@@ -1,4 +1,9 @@
-import { settings, type Color, type Patch } from "@difracta/core";
+import {
+  resolveAddress,
+  settings,
+  type Color,
+  type Patch,
+} from "@difracta/core";
 import type { OscLive } from "@difracta/protocol";
 import { Bonjour } from "bonjour-service";
 import { createSocket, type Socket } from "node:dgram";
@@ -187,9 +192,13 @@ export class OscServer {
       this.#reject("unknown-address", message.address);
       return;
     }
+    const address = `controller/${target.id}/value`;
     const value =
       controller.kind === "number"
-        ? numberFrom(message.args)
+        ? snapped(
+            numberFrom(message.args),
+            resolveAddress(session.document, address)?.range,
+          )
         : colorFrom(message.args);
     if (value === undefined) {
       this.#reject(
@@ -198,11 +207,7 @@ export class OscServer {
       );
       return;
     }
-    const result = session.execute(
-      "address.set",
-      { address: `controller/${target.id}/value`, value },
-      "osc",
-    );
+    const result = session.execute("address.set", { address, value }, "osc");
     if (!result.ok)
       this.#reject("refused", `${message.address}: ${result.error}`);
   }
@@ -426,6 +431,20 @@ function numberFrom(args: readonly OscArgument[]): number | undefined {
     return undefined;
   if (!Number.isFinite(arg.value)) return undefined;
   return tidy(Math.min(1, Math.max(0, arg.value)));
+}
+
+/**
+ * A fader sends any float; the Controller's Address accepts only its step
+ * grid, so the value is snapped to the nearest step before it is written.
+ */
+function snapped(
+  value: number | undefined,
+  range: { min: number; step?: number } | undefined,
+): number | undefined {
+  if (value === undefined || range?.step === undefined) return value;
+  return tidy(
+    range.min + Math.round((value - range.min) / range.step) * range.step,
+  );
 }
 
 /** A color from one RGBA argument, or three or four numbers in 0..1. */

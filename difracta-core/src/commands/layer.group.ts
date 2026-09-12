@@ -3,10 +3,12 @@ import { z } from "zod";
 import { accepted, defineCommand, rejected } from "../command/command.ts";
 import type { Layer } from "../document/document.ts";
 import { childLayers, LAYER_LABELS } from "../document/layers.ts";
+import { dropActionsUnder } from "../document/macros.ts";
 import { uniqueName } from "../document/names.ts";
 import { DEFAULT_ORDER_KEY, orderKeysAfter } from "../document/order.ts";
 import type { Patch } from "../document/patch.ts";
 import { generateId, id } from "../ids.ts";
+import { removeLinksOfLayers } from "./layer.remove.ts";
 
 /** Wraps a Layer in a new Group that takes the Layer's place. */
 export const layerGroup = defineCommand({
@@ -59,7 +61,11 @@ export const layerGroup = defineCommand({
   },
 });
 
-/** Dissolves a Group: its contents take its place, in their order. */
+/**
+ * Dissolves a Group: its contents take its place, in their order. The Group
+ * row goes the way a removed Layer does, taking every Link to it and every
+ * Macro action on it along; the contents keep theirs.
+ */
 export const layerUngroup = defineCommand({
   name: "layer.ungroup",
   kind: "authoring",
@@ -90,7 +96,10 @@ export const layerUngroup = defineCommand({
     const taken = siblings
       .filter((sibling) => sibling.id !== group.id)
       .map((sibling) => sibling.name);
-    const patches: Patch[] = [];
+    const patches: Patch[] = [
+      ...removeLinksOfLayers(document, [group.id]),
+      ...dropActionsUnder(document, [`layer/${group.id}/`]),
+    ];
     children.forEach((child, position) => {
       const name = uniqueName(taken, child.name);
       taken.push(name);

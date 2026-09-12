@@ -21,9 +21,12 @@ describe("address formatting", () => {
     expect(formatNumber(2.5, { min: 0, max: 4, step: 0.1 })).toBe("2.5");
   });
 
-  it("parses typed values in the shown scale and clamps them to the range", () => {
+  it("parses typed values in the shown scale, snapped to the step and clamped to the range", () => {
     expect(parseNumber("500", { min: 0, max: 100, step: 1 })).toBe(100);
     expect(parseNumber("-3", { min: 0, max: 100, step: 1 })).toBe(0);
+    expect(parseNumber("0.37", { min: 0, max: 4, step: 0.1 })).toBeCloseTo(0.4);
+    expect(parseNumber("1005", { min: 0, max: 2000, step: 10 })).toBe(1010);
+    expect(parseNumber("0.37", { min: 0, max: 4 })).toBe(0.37);
     expect(
       parseNumber("40", { min: 0, max: 1, step: 0.01, percent: true }),
     ).toBe(0.4);

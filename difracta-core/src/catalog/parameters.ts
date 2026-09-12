@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { settings } from "../settings.ts";
+
 /**
  * A Parameter is one adjustable value a Visual or Filter declares. The
  * declaration (kind, default, bounds, label) lives in the definition; the
@@ -36,12 +38,17 @@ interface ParameterBase {
   readonly description?: string;
 }
 
-export interface NumberParameter extends ParameterBase {
-  readonly kind: "number";
-  readonly default: number;
+/** What a number is checked against: a Parameter's bounds or an Address's range. */
+export interface NumberBounds {
   readonly min: number;
   readonly max: number;
+  /** Values sit on `min + k·step`; absent, any value within the bounds goes. */
   readonly step?: number;
+}
+
+export interface NumberParameter extends ParameterBase, NumberBounds {
+  readonly kind: "number";
+  readonly default: number;
   /** Shown after the value, such as "px" or "Hz". */
   readonly unit?: string;
   /** Shown as 0 to 100 with a percent sign; the value itself stays 0 to 1. */
@@ -86,6 +93,31 @@ export function defaultParameterValues(
   );
 }
 
+/**
+ * Why `value` is not a number acceptable within `bounds`, or undefined when
+ * it is: finite, between min and max, and on the step grid anchored at min.
+ * The one rule behind every direct write of a number, whether it arrives as
+ * a Parameter value or through an Address; a Link's mapping snaps at read
+ * time instead. Float noise within `settings.numbers.stepTolerance` of a
+ * grid point counts as on it.
+ */
+export function numberProblem(
+  bounds: NumberBounds | undefined,
+  value: unknown,
+): string | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value))
+    return "must be a number";
+  if (bounds === undefined) return undefined;
+  if (value < bounds.min || value > bounds.max)
+    return `must be between ${bounds.min} and ${bounds.max}`;
+  const step = bounds.step;
+  if (step === undefined || step <= 0) return undefined;
+  const steps = (value - bounds.min) / step;
+  return Math.abs(steps - Math.round(steps)) <= settings.numbers.stepTolerance
+    ? undefined
+    : `must be a multiple of ${step} from ${bounds.min} (got ${value})`;
+}
+
 /** Why `value` is not acceptable for `definition`, or undefined when it is. */
 export function validateParameterValue(
   definition: ParameterDefinition,
@@ -93,11 +125,7 @@ export function validateParameterValue(
 ): string | undefined {
   switch (definition.kind) {
     case "number":
-      if (typeof value !== "number" || !Number.isFinite(value))
-        return "must be a number";
-      if (value < definition.min || value > definition.max)
-        return `must be between ${definition.min} and ${definition.max}`;
-      return undefined;
+      return numberProblem(definition, value);
     case "color":
       return ColorSchema.safeParse(value).success
         ? undefined

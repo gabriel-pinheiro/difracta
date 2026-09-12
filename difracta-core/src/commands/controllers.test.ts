@@ -230,12 +230,12 @@ describe("Parameter Links", () => {
     // Anchors map and snap to the step; reversed anchors are fine.
     document = run(document, "link.update", {
       linkId: hold!.id,
-      anchors: { from: 500, to: 5 },
+      anchors: { from: 500, to: 0 },
     }).document;
     expect(effectiveValue(document, resolved)).toBe(250);
     document = run(document, "address.set", {
       address: "controller/energy/value",
-      value: 0.333,
+      value: 0.33,
     }).document;
     expect(effectiveValue(document, resolved)).toBe(340);
   });

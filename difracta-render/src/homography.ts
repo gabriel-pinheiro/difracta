@@ -50,3 +50,27 @@ export function project(
   const w = g * u + h * v + i;
   return { x: (a * u + b * v + c) / w, y: (d * u + e * v + f) / w };
 }
+
+/**
+ * The inverse map, Projection Frame back to Surface Space, in the same
+ * layout, so `project` with it unprojects. `homography` only returns
+ * invertible matrices.
+ */
+export function invertHomography(matrix: Float32Array): Float32Array {
+  const [a = 0, d = 0, g = 0, b = 0, e = 0, h = 0, c = 0, f = 0, i = 1] =
+    matrix;
+  const det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+  return new Float32Array(
+    [
+      e * i - f * h,
+      f * g - d * i,
+      d * h - e * g,
+      c * h - b * i,
+      a * i - c * g,
+      b * g - a * h,
+      b * f - c * e,
+      c * d - a * f,
+      a * e - b * d,
+    ].map((cofactor) => cofactor / det),
+  );
+}

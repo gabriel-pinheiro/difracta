@@ -26,7 +26,11 @@ export function formatNumber(value: number, range: NumberRange): string {
   return (value * displayScale(range)).toFixed(decimalsFor(range));
 }
 
-/** A typed display value back into the Address's scale, clamped to the range. */
+/**
+ * A typed display value back into the Address's scale, snapped to the step
+ * grid from the minimum and clamped to the range: what the runtime accepts
+ * for a direct write, so a typed 0.37 lands on 0.4 instead of a rejection.
+ */
 export function parseNumber(
   text: string,
   range: NumberRange,
@@ -34,7 +38,12 @@ export function parseNumber(
   const typed = Number(text.trim());
   if (text.trim() === "" || !Number.isFinite(typed)) return undefined;
   const value = typed / displayScale(range);
-  return Math.min(range.max, Math.max(range.min, value));
+  const step = range.step;
+  const snapped =
+    step === undefined || step <= 0
+      ? value
+      : range.min + Math.round((value - range.min) / step) * step;
+  return Math.min(range.max, Math.max(range.min, snapped));
 }
 
 const channel = (value: number): string =>
