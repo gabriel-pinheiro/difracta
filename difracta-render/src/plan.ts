@@ -46,6 +46,11 @@ export interface LayerDraw {
   readonly masks: readonly Mask[];
   /** The Paths the Visual declares, bound and on this Surface, by key. */
   readonly paths: Readonly<Record<string, Path>>;
+  /**
+   * Opacity at zero: the Layer keeps its place and its instance, which
+   * idles, but it is not stepped, not drawn and gives no Filter its input.
+   */
+  readonly hidden: boolean;
 }
 
 /** One Filter Layer of the active Scene with something under it on this Output. */
@@ -53,7 +58,10 @@ export interface FilterDraw {
   readonly layer: FilterLayer;
   /** The Filter's definition id; a Layer without one is not planned. */
   readonly filter: string;
-  /** How many planned Layers are below it: the pass runs once that many are drawn. */
+  /**
+   * How many planned Layers, hidden ones included, are below it: the pass
+   * runs once that many are drawn.
+   */
   readonly below: number;
 }
 
@@ -142,12 +150,12 @@ export function planFrame(
 /**
  * The active Scene's stack as it lands on this Output: Visual Layers that
  * are enabled with every Group above them enabled, have a Visual with every
- * Path it declares bound, and target a Surface here with a mapping; and
- * Filter Layers enabled the same
+ * Path it declares bound, and target a Surface here with a mapping, the
+ * ones at opacity zero marked hidden; and Filter Layers enabled the same
  * way, with a Filter and a mix above zero, that have at least one such
- * Layer below them, since a Filter transforms what is already drawn and a
- * Group only gates. Bottom first, so drawing in order stacks them as the
- * navigator shows.
+ * Layer, not hidden, below them, since a Filter transforms what is already
+ * drawn and a Group only gates. Bottom first, so drawing in order stacks
+ * them as the navigator shows.
  */
 function planStack(
   document: Document,
@@ -181,9 +189,12 @@ function planStack(
   items.reverse();
   const layers: LayerDraw[] = [];
   const filters: FilterDraw[] = [];
+  let visible = 0;
   for (const item of items) {
-    if (item.kind === "layer") layers.push(item.draw);
-    else if (layers.length > 0)
+    if (item.kind === "layer") {
+      layers.push(item.draw);
+      if (!item.draw.hidden) visible += 1;
+    } else if (visible > 0)
       filters.push({
         layer: item.layer,
         filter: item.filter,
@@ -214,7 +225,23 @@ function layerDraw(
     corners,
     masks: masksOf(surface),
     paths,
+    hidden: layer.opacity <= 0,
   };
+}
+
+/**
+ * The Surfaces the frame keeps GPU resources for: every one with a planned
+ * Layer, hidden or blank ones included, or a calibration drawing, so a
+ * Layer that draws nothing this frame does not cost its Surface's Masks a
+ * rebuild when it draws again.
+ */
+export function plannedSurfaces(
+  plan: Pick<FramePlan, "layers" | "draws">,
+): ReadonlySet<string> {
+  return new Set([
+    ...plan.layers.map((draw) => draw.surface.id),
+    ...plan.draws.map((draw) => draw.surface.id),
+  ]);
 }
 
 export const CORNER_INDEX: Readonly<Record<CornerName, number>> =

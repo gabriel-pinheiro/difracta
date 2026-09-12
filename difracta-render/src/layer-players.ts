@@ -75,11 +75,7 @@ interface ShaderEntry {
 
 type Entry = CanvasEntry | ShaderEntry;
 
-interface Counter {
-  planned: number;
-  running: number;
-  rendered: number;
-}
+type Counter = { -readonly [K in keyof Workload]: number };
 
 /**
  * The Visual instances of one Output, one per planned Layer. A canvas
@@ -87,10 +83,11 @@ interface Counter {
  * a shader Visual gets a player whose uniforms the compositor draws with.
  * An instance exists exactly while its Layer is in the plan: playing
  * another Scene, disabling the Layer, or losing its Target disposes it,
- * and a Visual or canvas-size change replaces it. Cues reach the instance
- * of the Layer they were fired on. An instance that throws is stopped by
- * its player; the Layer is logged once, draws nothing and is reported as
- * an issue on every frame until its entry is replaced.
+ * and a Visual or canvas-size change replaces it; while the Layer is
+ * hidden (opacity zero) the instance is kept but left alone. Cues reach
+ * the instance of the Layer they were fired on. An instance that throws
+ * is stopped by its player; the Layer is logged once, draws nothing and
+ * is reported as an issue on every frame until its entry is replaced.
  */
 export class LayerPlayers {
   readonly #gl: WebGL2RenderingContext;
@@ -121,6 +118,12 @@ export class LayerPlayers {
       if (definition === undefined) return;
       const counter = definition.backend === "canvas" ? canvas : shaders;
       counter.planned += 1;
+      // A hidden Layer's instance idles: kept as it is, neither stepped nor
+      // drawn, so it resumes where it stopped once the Layer shows again.
+      if (draw.hidden) {
+        seen.add(draw.layer.id);
+        return;
+      }
       const size = (renderScale: number) =>
         surfaceCanvasSize({
           corners: draw.corners,

@@ -9,7 +9,7 @@ import {
 } from "@difracta/core";
 import { describe, expect, it } from "vitest";
 
-import { planFrame } from "./plan.ts";
+import { planFrame, plannedSurfaces } from "./plan.ts";
 
 const solid: VisualDefinition = {
   kind: "visual",
@@ -208,6 +208,59 @@ describe("planFrame", () => {
     expect(filtersOf(planFrame(noFilter, "out_a", catalog))).toEqual([
       ["J", 1],
     ]);
+  });
+
+  it("plans a Layer at opacity zero as hidden, which gives no Filter its input", () => {
+    const topmost = run(
+      run(staged(), "layer.create", { id: "H", kind: "filter", sceneId: "s1" }),
+      "layer.filter",
+      { layerId: "H", filter: "glitch" },
+    );
+    const fade = (document: Document, layerId: string): Document =>
+      run(document, "address.set", {
+        address: `layer/${layerId}/opacity`,
+        value: 0,
+      });
+    const hiddenOf = (plan: ReturnType<typeof planFrame>) =>
+      plan.layers.map((draw) => [draw.layer.id, draw.hidden]);
+    expect(hiddenOf(planFrame(topmost, "out_a", catalog))).toEqual([
+      ["B", false],
+      ["A", false],
+    ]);
+    // A hidden Layer keeps its place: H still sits over both, by position.
+    const aFaded = fade(topmost, "A");
+    expect(hiddenOf(planFrame(aFaded, "out_a", catalog))).toEqual([
+      ["B", false],
+      ["A", true],
+    ]);
+    expect(filtersOf(planFrame(aFaded, "out_a", catalog))).toEqual([
+      ["J", 1],
+      ["H", 2],
+    ]);
+    // With only hidden Layers under them, the Filters are not planned.
+    const bothFaded = fade(aFaded, "B");
+    expect(hiddenOf(planFrame(bothFaded, "out_a", catalog))).toEqual([
+      ["B", true],
+      ["A", true],
+    ]);
+    expect(filtersOf(planFrame(bothFaded, "out_a", catalog))).toEqual([]);
+    // Hidden or not, a planned Layer keeps its Surface's resources.
+    expect([
+      ...plannedSurfaces(planFrame(bothFaded, "out_a", catalog)),
+    ]).toEqual(["sur_floor", "sur_wall"]);
+  });
+
+  it("lists the Surfaces of planned Layers and calibration drawings", () => {
+    expect([
+      ...plannedSurfaces(planFrame(installation(), "out_a", catalog)),
+    ]).toEqual([]);
+    const selected = run(staged(), "calibration.set", {
+      ...calibration,
+      view: "patterns",
+    });
+    expect([...plannedSurfaces(planFrame(selected, "out_a", catalog))]).toEqual(
+      ["sur_wall", "sur_floor"],
+    );
   });
 
   it("draws nothing under Blackout", () => {

@@ -564,7 +564,10 @@ carrying their own literals.
 `difracta-render` draws one Output's frame into a canvas behind a two-method
 interface: `render(document, outputId, width, height, now)` and `dispose()`. The
 Output page owns the animation loop, the canvas size and telemetry; the
-compositor advances the Visual instances, draws, and reports what it did.
+compositor advances the Visual instances, draws, and reports what it did. Under
+Blackout, or before a document arrives, the loop ticks once per
+`settings.output.idleFrameMs` and a document change wakes it, so the frame after
+a Blackout lands within one display frame.
 
 `planFrame` is the pure part: given a document and an Output it lists what to
 draw this frame. Outside Calibration Mode that is the active Scene's Visual
@@ -589,23 +592,27 @@ kept once compiled) runs over the Surface's quad straight into the frame at
 frame resolution, so Render Scale does not apply to it. An instance exists
 exactly while its Layer is planned: playing another Scene, disabling the Layer
 or a Group above it, or clearing its Target disposes it, and a change of Visual
-or canvas size replaces it, so a Scene starts fresh every time it plays. The
-frame is then composited in plan order: every Layer's texture is drawn through
-its Surface's homography with the Surface's Masks, the Layer's opacity, and its
-blend mode (normal is premultiplied over, additive adds), so Layers stack as the
-navigator shows and overlapping Surfaces combine as their light would in the
-room. The frame is recomposited only when the document, the Output, the size, or
-any Layer's canvas changed, or any Filter reports that its picture would; a
-Scene of Layers and Filters that report no change costs the Output only the
-instances' updates.
+or canvas size replaces it, so a Scene starts fresh every time it plays. A Layer
+at opacity zero is planned hidden: its instance is kept but not stepped, nothing
+is drawn or uploaded for it, and it resumes where it stopped when the fader
+comes back up. The frame is then composited in plan order: every Layer's texture
+is drawn through its Surface's homography with the Surface's Masks, the Layer's
+opacity, and its blend mode (normal is premultiplied over, additive adds), so
+Layers stack as the navigator shows and overlapping Surfaces combine as their
+light would in the room. The frame is recomposited only when the document, the
+Output, the size, or any Layer's picture changed, or any Filter reports that its
+picture would; a Scene of Layers and Filters that report no change costs the
+Output only the instances' updates, and a hidden Layer not even that.
 
 The plan also places the Scene's Filter Layers: each one enabled with its
 Groups, holding a Filter, with a mix above zero and at least one planned Layer
-below it on this Output, is listed with that count (`below`), and a Group only
-gates, so a Filter inside a Group still transforms what lies under the Group.
-Each planned Filter has an instance (`filter-players.ts`) that lives as long as
-the Visual instances do, and whose update yields the pass's uniforms or says the
-pass would be an identity (an Amount at zero), in which case it is left out.
+that is not hidden below it on this Output, is listed with its position in the
+stack (`below`), and a Group only gates, so a Filter inside a Group still
+transforms what lies under the Group. Each planned Filter has an instance
+(`filter-players.ts`) that lives as long as the Visual instances do, and whose
+update yields the pass's uniforms or says the pass would be an identity (an
+Amount at zero), in which case it is left out; a pass is also left out on a
+frame where every Layer below it is blank, since it would transform nothing.
 When any pass remains, the frame goes through the chain (`filter-chain.ts`): the
 Layers accumulate into one of two frame-sized textures instead of the screen,
 each pass in plan order reads the current one and writes the other with the
@@ -618,9 +625,9 @@ per Filter and kept.
 one draw per Layer is the whole pipeline, blend modes read naturally as what is
 already on the wall, and Filters, which transform the accumulated frame below
 them, get to bleed across Surfaces, which is wanted. **Why a Filter with nothing
-under it is not planned, and an identity pass is dropped:** each pass is a
-full-frame draw, the most expensive thing an Output does, and both would produce
-exactly their input.
+under it is not planned, and an identity pass or one over blank Layers is
+dropped:** each pass is a full-frame draw, the most expensive thing an Output
+does, and all would produce exactly their input.
 
 Geometry: every vertex is a Surface Space position pushed through the Surface's
 homography in the vertex shader, with clip-space `w` carrying the projective
@@ -634,8 +641,11 @@ per string into a small texture.
 
 Masks: one alpha texture per Surface at a fixed 512×512, rebuilt only when that
 Surface's Masks change (identity comparison, since the document is immutable per
-revision), sampled once per fragment. Feather is drawn inward from the polygon
-edge and clipped to it, so no Mask changes coverage outside its own boundary.
+revision), sampled once per fragment. The texture is kept for as long as the
+Surface has a planned Layer or a calibration drawing on the Output, whether or
+not that Layer drew this frame, so a Visual that blinks does not rebuild its
+Surface's Masks on every flash. Feather is drawn inward from the polygon edge
+and clipped to it, so no Mask changes coverage outside its own boundary.
 
 **Why WebGL2 only:** the projector machines and smart TVs this runs on all have
 it, WebGPU still does not reach every such browser, and one engine is half the

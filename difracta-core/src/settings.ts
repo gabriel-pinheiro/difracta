@@ -39,6 +39,13 @@ export const settings = {
     /** A new Path runs around the Surface this fraction in from each side. */
     defaultInset: 0.15,
   },
+  output: {
+    /**
+     * How often the Projection Frame ticks while it has nothing to draw:
+     * under Blackout or without a document. A document change wakes it.
+     */
+    idleFrameMs: 1_000,
+  },
   live: {
     /** How often an Output page reports telemetry. */
     telemetryIntervalMs: 1_000,

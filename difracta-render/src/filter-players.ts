@@ -1,6 +1,7 @@
 import type { Catalog, ParameterValues } from "@difracta/core";
 
 import { reportIssue, type RenderIssue } from "./issues.ts";
+import type { LayerFrame } from "./layer-players.ts";
 import type { FilterDraw } from "./plan.ts";
 import { isShaderFilter, type ShaderFilter } from "./sdk/filter.ts";
 import { createFilterPlayer, type FilterPlayer } from "./sdk/filter-player.ts";
@@ -17,16 +18,30 @@ export interface FilterPass {
 }
 
 export interface FilterStepReport {
-  /** Passes to run, in plan order; identity passes are left out. */
+  /** Passes that would change the frame, in plan order; identity passes are left out. */
   readonly passes: readonly FilterPass[];
   /** True when any Filter would change the picture, so the frame must be recomposited. */
   readonly changed: boolean;
-  /** Filters in the plan, Filters with a runnable instance, passes to run. */
+  /** Filters in the plan and Filters with a runnable instance. */
   readonly planned: number;
   readonly running: number;
-  readonly executed: number;
   /** The Filters whose instance failed, one issue each, on every frame they stay planned. */
   readonly issues: readonly RenderIssue[];
+}
+
+/**
+ * The passes that have something to transform: a pass is a full-frame
+ * draw, so it runs only when a Layer below it contributed this frame.
+ * `frames` are the Layers that drew, in plan order, so the lowest one
+ * decides for every pass.
+ */
+export function passesWithInput(
+  passes: readonly FilterPass[],
+  frames: readonly Pick<LayerFrame, "index">[],
+): readonly FilterPass[] {
+  const lowest = frames[0]?.index;
+  if (lowest === undefined) return [];
+  return passes.filter((pass) => pass.draw.below > lowest);
 }
 
 /**
@@ -108,14 +123,7 @@ export class FilterPlayers {
       this.#entries.delete(id);
       changed = true;
     }
-    return {
-      passes,
-      changed,
-      planned: draws.length,
-      running,
-      executed: passes.length,
-      issues,
-    };
+    return { passes, changed, planned: draws.length, running, issues };
   }
 
   dispose(): void {

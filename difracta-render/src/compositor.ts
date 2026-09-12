@@ -7,12 +7,16 @@ import {
 
 import { CalibrationDrawing } from "./calibration-drawing.ts";
 import { FilterChain } from "./filter-chain.ts";
-import { FilterPlayers, type FilterPass } from "./filter-players.ts";
+import {
+  FilterPlayers,
+  passesWithInput,
+  type FilterPass,
+} from "./filter-players.ts";
 import { homography } from "./homography.ts";
 import { frameIssues, type RenderIssue } from "./issues.ts";
 import { LayerPlayers, type LayerFrame } from "./layer-players.ts";
 import { MaskTextures } from "./masks.ts";
-import { planFrame, type SurfaceDraw } from "./plan.ts";
+import { planFrame, plannedSurfaces, type SurfaceDraw } from "./plan.ts";
 import { MAX_FRAME_SECONDS } from "./sdk/visual.ts";
 import { ShaderVisualPrograms } from "./shader-visuals.ts";
 import { MODE, SurfaceProgram, WHOLE } from "./surface-program.ts";
@@ -39,7 +43,7 @@ export interface Compositor {
 export interface FrameReport {
   /** The canvas holds a new frame. */
   readonly drew: boolean;
-  /** Canvas Layers in the plan, with a running instance, and that drew this frame. */
+  /** Canvas Layers in the plan (hidden ones included), with a running instance, and that drew this frame. */
   readonly layers: {
     readonly planned: number;
     readonly running: number;
@@ -157,12 +161,15 @@ class WebGLCompositor implements Compositor {
     );
     const step = resources.players.step(plan.layers, dt, width, height);
     const chain = resources.filters.step(plan.filters, dt, width, height);
+    // A pass over Layers that all drew nothing this frame would transform
+    // a blank frame at full-frame cost, so only passes with input run.
+    const passes = passesWithInput(chain.passes, step.frames);
     const layers = step.canvas;
     const shaders = step.shaders;
     const filters = {
       planned: chain.planned,
       running: chain.running,
-      executed: chain.executed,
+      executed: passes.length,
     };
     const issues = frameIssues(
       step,
@@ -196,14 +203,13 @@ class WebGLCompositor implements Compositor {
     // With a Filter to run, the Layers accumulate in the chain's target
     // instead of the screen, each pass transforms what is there so far,
     // and the last target is presented.
-    const filtered = chain.passes.length > 0;
+    const filtered = passes.length > 0;
     if (filtered) resources.chain.begin(width, height);
     program.use();
-    const masked = new Set<string>();
     let next = 0;
     const passesBelow = (count: number): void => {
       for (;;) {
-        const pass: FilterPass | undefined = chain.passes[next];
+        const pass: FilterPass | undefined = passes[next];
         if (pass === undefined || pass.draw.below > count) return;
         resources.chain.apply(pass);
         program.use();
@@ -219,7 +225,6 @@ class WebGLCompositor implements Compositor {
         frame.draw.surface.id,
         frame.draw.masks,
       );
-      if (maskTexture !== undefined) masked.add(frame.draw.surface.id);
       if (frame.kind === "canvas")
         this.#drawLayer(resources, frame, maskTexture);
       else this.#drawShader(resources, frame, matrix, maskTexture);
@@ -234,10 +239,11 @@ class WebGLCompositor implements Compositor {
       if (matrix === undefined) continue;
       program.setHomography(matrix);
       const maskTexture = resources.masks.get(draw.surface.id, draw.masks);
-      if (maskTexture !== undefined) masked.add(draw.surface.id);
       resources.calibration.draw(draw, maskTexture, matrix, width, height);
     }
-    resources.masks.retain(masked);
+    // Mask textures follow the plan, not the draw: a Surface whose Layer is
+    // hidden or blank this frame keeps its Masks rasterized.
+    resources.masks.retain(plannedSurfaces(plan));
     return { drew: true, layers, shaders, filters, issues };
   }
 

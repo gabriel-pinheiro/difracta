@@ -50,7 +50,7 @@ export class MaskTextures {
     return entry.texture;
   }
 
-  /** Frees textures of Surfaces that no longer exist or have no Masks. */
+  /** Frees the textures of every Surface not listed: the ones that left the plan. */
   retain(surfaceIds: ReadonlySet<string>): void {
     for (const [surfaceId, entry] of this.#entries) {
       if (surfaceIds.has(surfaceId)) continue;

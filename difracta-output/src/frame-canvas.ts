@@ -1,4 +1,4 @@
-import type { Document } from "@difracta/core";
+import { settings, type Document } from "@difracta/core";
 import {
   createCompositor,
   type Compositor,
@@ -15,6 +15,9 @@ import { builtInCatalog } from "@difracta/visuals";
  * compositor skips (nothing changed) count as zero work, which is the truth.
  * A frame that throws is logged (once per distinct error, not per frame)
  * and the loop goes on: the next frame is requested whatever happened.
+ * With nothing to draw (Blackout, or no document yet) the loop idles at
+ * `settings.output.idleFrameMs` and a document update wakes it, so the
+ * frame after a Blackout lands within one display frame.
  */
 export interface FrameMetrics {
   readonly width: number;
@@ -54,6 +57,8 @@ export class FrameCanvas {
   #outputId = "";
   #limitPixelRatio = false;
   #animationFrame: number | undefined;
+  /** The pause before the next tick while idling; cleared by `update` and `stop`. */
+  #idleTimer: number | undefined;
   #lastFrameAt: number | undefined;
   #frameIntervalMs: number | null = null;
   #renderWorkMs: number | null = null;
@@ -83,6 +88,10 @@ export class FrameCanvas {
     this.#outputId = state.outputId;
     this.#limitPixelRatio =
       state.document.outputs[state.outputId]?.limitPixelRatio ?? false;
+    if (this.#idleTimer === undefined) return;
+    window.clearTimeout(this.#idleTimer);
+    this.#idleTimer = undefined;
+    this.#animationFrame = requestAnimationFrame(this.#tick);
   }
 
   metrics(): FrameMetrics {
@@ -117,41 +126,53 @@ export class FrameCanvas {
   }
 
   start(): void {
-    if (this.#animationFrame !== undefined) return;
-    const tick = (now: number): void => {
-      if (this.#lastFrameAt !== undefined)
-        this.#frameIntervalMs = smooth(
-          this.#frameIntervalMs,
-          now - this.#lastFrameAt,
-        );
-      this.#lastFrameAt = now;
-      const started = performance.now();
-      try {
-        this.#draw(now);
-        this.#frameError = undefined;
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (message !== this.#frameError) console.error("Frame failed:", error);
-        this.#frameError = message;
-      } finally {
-        this.#renderWorkMs = smooth(
-          this.#renderWorkMs,
-          performance.now() - started,
-        );
-        this.#animationFrame = requestAnimationFrame(tick);
-      }
-    };
-    this.#animationFrame = requestAnimationFrame(tick);
+    if (this.#animationFrame !== undefined || this.#idleTimer !== undefined)
+      return;
+    this.#animationFrame = requestAnimationFrame(this.#tick);
   }
 
   stop(): void {
     if (this.#animationFrame !== undefined)
       cancelAnimationFrame(this.#animationFrame);
     this.#animationFrame = undefined;
+    if (this.#idleTimer !== undefined) window.clearTimeout(this.#idleTimer);
+    this.#idleTimer = undefined;
     this.#lastFrameAt = undefined;
     this.#frameIntervalMs = null;
     this.#renderWorkMs = null;
   }
+
+  readonly #tick = (now: number): void => {
+    this.#animationFrame = undefined;
+    if (this.#lastFrameAt !== undefined)
+      this.#frameIntervalMs = smooth(
+        this.#frameIntervalMs,
+        now - this.#lastFrameAt,
+      );
+    this.#lastFrameAt = now;
+    const started = performance.now();
+    const idle =
+      this.#document === undefined || this.#document.operational.blackout;
+    try {
+      this.#draw(now);
+      this.#frameError = undefined;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message !== this.#frameError) console.error("Frame failed:", error);
+      this.#frameError = message;
+    } finally {
+      this.#renderWorkMs = smooth(
+        this.#renderWorkMs,
+        performance.now() - started,
+      );
+      if (idle)
+        this.#idleTimer = window.setTimeout(() => {
+          this.#idleTimer = undefined;
+          this.#animationFrame = requestAnimationFrame(this.#tick);
+        }, settings.output.idleFrameMs);
+      else this.#animationFrame = requestAnimationFrame(this.#tick);
+    }
+  };
 
   #draw(now: number): void {
     const ratio = this.#limitPixelRatio ? 1 : window.devicePixelRatio || 1;
