@@ -8,7 +8,7 @@ import {
 import type { DocumentSummary } from "@difracta/protocol";
 import { hostname, userInfo } from "node:os";
 
-export const DEFAULT_URL = `ws://127.0.0.1:${settings.runtime.port}${settings.runtime.livePath}`;
+export const DEFAULT_URL = `ws://127.0.0.1:${String(settings.runtime.port)}${settings.runtime.livePath}`;
 
 /** One undo owner per shell user, so `difracta undo` spans invocations. */
 function cliActor(): string {
@@ -17,6 +17,13 @@ function cliActor(): string {
   );
 }
 
+function unreachable(url: string): Error {
+  return new Error(
+    `Could not connect to ${url}. The runtime speaks WebSocket at ${settings.runtime.livePath} on its HTTP port (${String(settings.runtime.port)} unless changed); is it running there?`,
+  );
+}
+
+/** Connects to a normalized live URL (see `url.ts`) or fails naming what it tried. */
 export async function connect(url: string): Promise<DifractaClient> {
   const client = new DifractaClient({
     url,
@@ -27,10 +34,7 @@ export async function connect(url: string): Promise<DifractaClient> {
   });
   await new Promise<void>((resolve, reject) => {
     const timer = setTimeout(
-      () =>
-        reject(
-          new Error(`Could not connect to ${url}. Is the runtime running?`),
-        ),
+      () => reject(unreachable(url)),
       settings.cli.connectTimeoutMs,
     );
     client.phase.subscribe((phase) => {
@@ -39,9 +43,7 @@ export async function connect(url: string): Promise<DifractaClient> {
         resolve();
       } else if (phase === "closed") {
         clearTimeout(timer);
-        reject(
-          new Error(`Could not connect to ${url}. Is the runtime running?`),
-        );
+        reject(unreachable(url));
       }
     });
   });
@@ -55,7 +57,7 @@ export function currentDocument(client: DifractaClient): DocumentSummary {
   const summary = client.document.get();
   if (summary === null)
     throw new Error(
-      "No Installation is open. Use `difracta documents open <file>`.",
+      "No Installation is open. Use `difracta documents open <file>` or `difracta documents new <name>`.",
     );
   return summary;
 }

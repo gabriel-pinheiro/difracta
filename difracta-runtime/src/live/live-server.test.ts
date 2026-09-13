@@ -422,11 +422,71 @@ describe("live protocol", () => {
       name: "output.create",
       payload: { id: "out_a", name: "TV" },
     });
-    expect(socket.reply("r2").outcome).toMatchObject({
+    expect(socket.reply("r2").outcome).toEqual({
       ok: true,
-      result: { revision: 1, changed: true },
+      result: {
+        revision: 1,
+        changed: true,
+        label: "Create Output “TV”",
+        created: [{ table: "outputs", id: "out_a" }],
+      },
     });
     expect(socket.readyState).toBe(socket.OPEN);
+    live.close();
+  });
+
+  it("replies with every payload issue, for commands and requests alike", async () => {
+    const store = new DocumentStore({
+      projectsDir: dir,
+      registry: createBuiltInRegistry(),
+    });
+    const live = new LiveServer({
+      store,
+      catalog: emptyCatalog,
+      runtimeName: "test",
+      runtimeVersion: "0",
+      log: () => undefined,
+    });
+    const created = await store.create("Living");
+    const documentId = created.ok ? created.result.id : "";
+    const socket = new FakeSocket();
+    live.accept(socket as unknown as WebSocket);
+    socket.receive({
+      type: "hello",
+      protocolVersion: PROTOCOL_VERSION,
+      client: { kind: "cli" },
+    });
+    socket.receive({
+      type: "command",
+      requestId: "r1",
+      documentId,
+      name: "output.create",
+      payload: { name: 3, limitPixelRatio: "yes" },
+    });
+    expect(socket.reply("r1").outcome).toEqual({
+      ok: false,
+      error:
+        'Invalid payload for “output.create”: payload.name: Invalid input: expected string, received number; payload: Unrecognized key: "limitPixelRatio"',
+      issues: [
+        "payload.name: Invalid input: expected string, received number",
+        'payload: Unrecognized key: "limitPixelRatio"',
+      ],
+    });
+    socket.receive({
+      type: "request",
+      requestId: "r2",
+      name: "documents.save",
+      payload: { path: 1 },
+    });
+    expect(socket.reply("r2").outcome).toEqual({
+      ok: false,
+      error:
+        "Invalid payload for “documents.save”: payload.documentId: Invalid input: expected string, received undefined; payload.path: Invalid input: expected string, received number",
+      issues: [
+        "payload.documentId: Invalid input: expected string, received undefined",
+        "payload.path: Invalid input: expected string, received number",
+      ],
+    });
     live.close();
   });
 

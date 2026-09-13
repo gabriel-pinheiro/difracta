@@ -79,7 +79,7 @@ export function addressSource(partial: Partial<AddressSource>): AddressSource {
 }
 
 interface AddressPattern {
-  /** Segments; `*` captures one id or name. */
+  /** Segments; `*` captures one entity id (never a name: names resolve to ids in the CLI). */
   readonly pattern: readonly string[];
   resolve(
     source: AddressSource,

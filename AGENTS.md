@@ -69,5 +69,7 @@ near-synonyms.
 
 Node 24. `npm run dev` starts the runtime (4800), Output dev server (4801) and
 Studio dev server (4802). `npm test`, `npm run typecheck`, `npm run lint`,
-`npm run format:check`, `npm run build`. The CLI is
+`npm run format:check`, `npm run build`. `npm run test:gpu` renders the
+compositor's pixel tests (`difracta-render/gpu/`) in headless Chromium, which
+`npx playwright install chromium` provides once. The CLI is
 `node difracta-cli/bin/difracta.mjs` (or `npx difracta` inside the repo).

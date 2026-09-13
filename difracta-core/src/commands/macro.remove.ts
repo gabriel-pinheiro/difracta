@@ -3,6 +3,7 @@ import { z } from "zod";
 import { accepted, defineCommand, rejected } from "../command/command.ts";
 import { descendantMacros, dropActionsUnder } from "../document/macros.ts";
 import type { Patch } from "../document/patch.ts";
+import { removalWarnings } from "./layer.remove.ts";
 
 /** Removing a Macro drops the actions of other Macros that ran it; a Group goes with its contents. */
 export const macroRemove = defineCommand({
@@ -23,8 +24,9 @@ export const macroRemove = defineCommand({
       document,
       removed.map((id) => `macro/${id}/`),
     ).filter((patch) => !removed.includes(String(patch.path[1])));
+    const warnings = removalWarnings(document, patches, macro.name);
     for (const id of removed)
       patches.push({ op: "remove", path: ["macros", id] });
-    return accepted(patches);
+    return accepted(patches, undefined, warnings);
   },
 });

@@ -2,6 +2,7 @@ import {
   applyPatches,
   executeCommand,
   History,
+  TABLE_SCHEMAS,
   tableEntries,
   type CommandRegistry,
   type Document,
@@ -10,6 +11,7 @@ import {
 import {
   HISTORY_COMMANDS,
   HistoryCommandPayloadSchema,
+  type CreatedEntity,
   type DocumentSummary,
 } from "@difracta/protocol";
 
@@ -34,10 +36,41 @@ export type SessionCommandResult =
       readonly revision: number;
       readonly changed: boolean;
       readonly label?: string;
-      /** What a best-effort command (a Macro run) skipped. */
+      /** What a best-effort command (a Macro run) skipped, or a removal took with it. */
       readonly warnings?: readonly string[];
+      /** Entities the command added, so a caller learns the ids it generated. */
+      readonly created?: readonly CreatedEntity[];
     }
-  | { readonly ok: false; readonly error: string };
+  | {
+      readonly ok: false;
+      readonly error: string;
+      /** One line per payload problem, when the payload failed its schema. */
+      readonly issues?: readonly string[];
+    };
+
+/**
+ * The entities a command's patches add: a `set` of a whole entity
+ * (`[table, id]`) whose id the table did not hold before. Derived from the
+ * patches alone, so every command reports what it created without saying so.
+ */
+export function createdEntities(
+  before: Document,
+  patches: readonly Patch[],
+): CreatedEntity[] {
+  const created: CreatedEntity[] = [];
+  for (const patch of patches) {
+    if (patch.op !== "set" || patch.path.length !== 2) continue;
+    const [table, id] = patch.path;
+    if (table === undefined || id === undefined) continue;
+    if (!(table in TABLE_SCHEMAS)) continue;
+    const held = before[table as keyof typeof TABLE_SCHEMAS];
+    if (id in held) continue;
+    if (created.some((entry) => entry.table === table && entry.id === id))
+      continue;
+    created.push({ table, id });
+  }
+  return created;
+}
 
 /**
  * One open Document in the runtime: the authoritative state, its revision,
@@ -200,6 +233,7 @@ export class DocumentSession {
       };
     }
 
+    const created = createdEntities(this.#document, result.patches);
     // The change lands before its events are announced, so a Macro that
     // enables a Layer and fires its Cue reaches an Output in that order.
     this.#commit(result.document, result.patches, sessionId);
@@ -223,6 +257,7 @@ export class DocumentSession {
       changed: true,
       label: result.label,
       ...warnings,
+      ...(created.length === 0 ? {} : { created }),
     };
   }
 

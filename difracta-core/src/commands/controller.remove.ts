@@ -5,6 +5,7 @@ import { descendantControllers } from "../document/controllers.ts";
 import { tableEntries } from "../document/document.ts";
 import { dropActionsUnder } from "../document/macros.ts";
 import type { Patch } from "../document/patch.ts";
+import { removalWarnings } from "./layer.remove.ts";
 import { releaseLink } from "./link.remove.ts";
 
 /** Removing a Controller releases its Links, each target keeping its current value, and drops Macro actions on it; a Group goes with its contents. */
@@ -36,8 +37,9 @@ export const controllerRemove = defineCommand({
         [...removed].map((id) => `controller/${id}/`),
       ),
     );
+    const warnings = removalWarnings(document, patches, controller.name);
     for (const id of removed)
       patches.push({ op: "remove", path: ["controllers", id] });
-    return accepted(patches);
+    return accepted(patches, undefined, warnings);
   },
 });

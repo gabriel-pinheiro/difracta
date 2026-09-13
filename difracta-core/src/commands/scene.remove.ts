@@ -4,7 +4,7 @@ import { accepted, defineCommand, rejected } from "../command/command.ts";
 import { tableEntries } from "../document/document.ts";
 import { dropActionsUnder } from "../document/macros.ts";
 import type { Patch } from "../document/patch.ts";
-import { removeLinksOfLayers } from "./layer.remove.ts";
+import { removalWarnings, removeLinksOfLayers } from "./layer.remove.ts";
 
 /** The active Scene cannot go: the Outputs are showing it. Play another first. */
 export const sceneRemove = defineCommand({
@@ -34,9 +34,10 @@ export const sceneRemove = defineCommand({
         ...layers.map((layer) => `layer/${layer.id}/`),
       ]),
     );
+    const warnings = removalWarnings(document, patches, scene.name);
     for (const layer of layers)
       patches.push({ op: "remove", path: ["layers", layer.id] });
     patches.push({ op: "remove", path: ["scenes", scene.id] });
-    return accepted(patches);
+    return accepted(patches, undefined, warnings);
   },
 });

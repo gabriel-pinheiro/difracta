@@ -125,6 +125,26 @@ export const DocumentSummarySchema = z
   .strict();
 export type DocumentSummary = z.infer<typeof DocumentSummarySchema>;
 
+/** An entity a command added: the table it went into and its id. */
+export const CreatedEntitySchema = z
+  .object({ table: z.string(), id: z.string() })
+  .strict();
+export type CreatedEntity = z.infer<typeof CreatedEntitySchema>;
+
+/** What an accepted `command` replies with (undo and redo included). */
+export const CommandResultSchema = z
+  .object({
+    revision: z.number().int().nonnegative(),
+    changed: z.boolean(),
+    label: z.string().optional(),
+    /** What a best-effort command could not do, or what a removal took with it. */
+    warnings: z.array(z.string()).optional(),
+    /** Entities the command created, derived from its patches; empty is omitted. */
+    created: z.array(CreatedEntitySchema).optional(),
+  })
+  .strict();
+export type CommandResult = z.infer<typeof CommandResultSchema>;
+
 export const ServerMessageSchema = z.discriminatedUnion("type", [
   z
     .object({
@@ -184,7 +204,14 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
       requestId: RequestId,
       outcome: z.discriminatedUnion("ok", [
         z.object({ ok: z.literal(true), result: z.unknown() }).strict(),
-        z.object({ ok: z.literal(false), error: z.string() }).strict(),
+        z
+          .object({
+            ok: z.literal(false),
+            error: z.string(),
+            /** One line per payload problem when the payload failed its schema. */
+            issues: z.array(z.string()).optional(),
+          })
+          .strict(),
       ]),
     })
     .strict(),

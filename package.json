@@ -25,6 +25,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
+    "test:gpu": "npm run test:gpu -w @difracta/render",
     "test:watch": "vitest"
   },
   "devDependencies": {

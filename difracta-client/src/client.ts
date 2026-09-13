@@ -36,7 +36,15 @@ interface PendingRequest {
   reject(error: Error): void;
 }
 
-export class CommandError extends Error {}
+/** A refused command or request; `issues` lists payload problems one per line. */
+export class CommandError extends Error {
+  readonly issues: readonly string[];
+
+  constructor(message: string, issues: readonly string[] = []) {
+    super(message);
+    this.issues = issues;
+  }
+}
 
 /**
  * One connection to a runtime. Holds the open document's summary, one
@@ -301,7 +309,10 @@ export class DifractaClient {
         this.#pending.delete(parsed.requestId);
         if (pending === undefined) break;
         if (parsed.outcome.ok) pending.resolve(parsed.outcome.result);
-        else pending.reject(new CommandError(parsed.outcome.error));
+        else
+          pending.reject(
+            new CommandError(parsed.outcome.error, parsed.outcome.issues),
+          );
         break;
       }
       case "error":

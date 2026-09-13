@@ -1,25 +1,16 @@
-import {
-  createBuiltInRegistry,
-  effectiveValue,
-  getAtPath,
-  linkAt,
-  listAddresses,
-  type Definition,
-  type Document,
-  type ParameterDefinition,
-} from "@difracta/core";
-import type { DocumentSummary, FileEntry } from "@difracta/protocol";
 import { Command } from "commander";
-import { z } from "zod";
 
-import {
-  connect,
-  currentDocument,
-  DEFAULT_URL,
-  fetchCatalog,
-  parseJsonArgument,
-  parseValue,
-} from "./connection.ts";
+import { Cli, type GlobalOptions } from "./cli.ts";
+import { registerAddress } from "./commands/address.ts";
+import { registerCatalog } from "./commands/catalog.ts";
+import { registerDocuments } from "./commands/documents.ts";
+import { registerRead } from "./commands/read.ts";
+import { registerRun } from "./commands/run.ts";
+import { registerStatus } from "./commands/status.ts";
+import { registerTree } from "./commands/tree.ts";
+import { DEFAULT_URL } from "./connection.ts";
+import { SHELL_GUIDE } from "./help.ts";
+import { errorReport } from "./result.ts";
 
 /**
  * The `difracta` command. Everything an agent or a shell needs: list and
@@ -27,508 +18,39 @@ import {
  * document, browse the Catalog, write Addresses, undo. `--json` makes every
  * output machine readable. Anything a person can do in Studio is reachable
  * here: Studio's gestures are commands and requests, and this runs any of
- * them.
+ * them. Each group of subcommands lives in `commands/`.
  */
 const program = new Command("difracta")
-  .description("Control a Difracta runtime from the shell.")
+  .description(
+    "Control a Difracta runtime from the shell. Everything Studio does is a command or a request, so all of it is reachable here.",
+  )
   .option(
     "--url <url>",
-    "runtime live URL",
+    "runtime URL: ws://host:port/live, http://host:port or host:port",
     process.env.DIFRACTA_URL ?? DEFAULT_URL,
   )
-  .option("--json", "machine-readable output", false);
-
-interface GlobalOptions {
-  readonly url: string;
-  readonly json: boolean;
-}
-
-function options(): GlobalOptions {
-  return program.opts<GlobalOptions>();
-}
-
-function print(value: unknown, human: () => string): void {
-  console.log(options().json ? JSON.stringify(value, null, 2) : human());
-}
-
-async function withClient<TResult>(
-  action: (client: Awaited<ReturnType<typeof connect>>) => Promise<TResult>,
-): Promise<TResult> {
-  const client = await connect(options().url);
-  try {
-    return await action(client);
-  } finally {
-    client.close();
-  }
-}
-
-async function withDocument<TResult>(
-  action: (
-    client: Awaited<ReturnType<typeof connect>>,
-    summary: DocumentSummary,
-  ) => Promise<TResult>,
-): Promise<TResult> {
-  return withClient((client) => action(client, currentDocument(client)));
-}
-
-async function readDocument(
-  client: Awaited<ReturnType<typeof connect>>,
-  documentId: string,
-): Promise<Document> {
-  const view = client.openDocument(documentId);
-  return new Promise((resolve) => {
-    const current = view.get();
-    if (current !== undefined) resolve(current);
-    else
-      view.document.subscribe(
-        (document) => document !== undefined && resolve(document),
-      );
-  });
-}
-
-const registry = createBuiltInRegistry();
-
-program
-  .command("health")
-  .description("Show the runtime and its open Installation.")
-  .action(() =>
-    withClient(async (client) => {
-      const document = client.document.get();
-      print({ sessionId: client.sessionId.get(), document }, () =>
-        [
-          `Connected as ${client.sessionId.get() ?? "?"}`,
-          document === null
-            ? "  No Installation is open."
-            : `  ${document.name}  ${document.id}  ${document.path ?? "(unsaved)"}${document.dirty ? " *" : ""}`,
-        ].join("\n"),
-      );
-    }),
-  );
-
-program
-  .command("commands")
-  .description("List every command with its kind.")
-  .action(() => {
-    const items = registry.list().map((definition) => ({
-      name: definition.name,
-      kind: definition.kind,
-      description: definition.description,
-    }));
-    print(items, () =>
-      items
-        .map(
-          (item) =>
-            `${item.name.padEnd(24)} ${item.kind.padEnd(12)} ${item.description}`,
-        )
-        .join("\n"),
-    );
-  });
-
-program
-  .command("describe <command>")
-  .description("Print a command's payload schema as JSON Schema.")
-  .action((name: string) => {
-    const definition = registry.get(name);
-    if (definition === undefined)
-      throw new Error(`Unknown command “${name}”. Try \`difracta commands\`.`);
-    const schema = z.toJSONSchema(definition.payload as z.ZodType);
-    print(
-      {
-        name,
-        kind: definition.kind,
-        description: definition.description,
-        payload: schema,
-      },
-      () =>
-        `${definition.name} (${definition.kind})\n${definition.description}\n\nPayload:\n${JSON.stringify(schema, null, 2)}`,
-    );
-  });
-
-program
-  .command("run <command> [payload]")
-  .description(
-    'Run a command with a JSON payload, e.g. run output.create \'{"name":"TV"}\'.',
+  .option(
+    "--json",
+    "machine-readable output; errors become one JSON object on stderr",
+    false,
   )
-  .action((name: string, payload: string | undefined) =>
-    withDocument(async (client, summary) => {
-      const result = await client.command<{
-        revision: number;
-        changed: boolean;
-        label?: string;
-      }>(summary.id, name, parseJsonArgument(payload));
-      print(result, () =>
-        result.changed
-          ? `${result.label ?? name} → revision ${result.revision}`
-          : "No change.",
-      );
-    }),
-  );
+  .addHelpText("after", SHELL_GUIDE);
 
-program
-  .command("get [path]")
-  .description(
-    "Read the Installation, or one value by slash path such as outputs or installation/name.",
-  )
-  .action((path: string | undefined) =>
-    withDocument(async (client, summary) => {
-      const document = await readDocument(client, summary.id);
-      const value =
-        path === undefined ? document : getAtPath(document, path.split("/"));
-      print(value, () => JSON.stringify(value, null, 2));
-    }),
-  );
-
-program
-  .command("addresses")
-  .description(
-    "List every controllable Address in the Installation, Parameters included.",
-  )
-  .action(() =>
-    withDocument(async (client, summary) => {
-      const [document, catalog] = await Promise.all([
-        readDocument(client, summary.id),
-        fetchCatalog(client),
-      ]);
-      const items = listAddresses(document, catalog).map((entry) => {
-        const link = linkAt(document, entry.address);
-        const controller =
-          link === undefined
-            ? undefined
-            : document.controllers[link.controllerId];
-        return {
-          ...entry,
-          value: getAtPath(document, entry.path),
-          ...(link === undefined
-            ? {}
-            : {
-                link: {
-                  id: link.id,
-                  controllerId: link.controllerId,
-                  anchors: link.anchors,
-                  effective: effectiveValue(document, entry),
-                },
-              }),
-          controlledBy: controller?.name,
-        };
-      });
-      print(items, () =>
-        items
-          .map(
-            (item) =>
-              `${item.address.padEnd(32)} ${item.type.padEnd(8)} ${item.type === "trigger" ? "-" : JSON.stringify(item.link?.effective ?? item.value)}  ${item.label}${item.controlledBy === undefined ? "" : `  ← ${item.controlledBy}`}`,
-          )
-          .join("\n"),
-      );
-    }),
-  );
-
-for (const [name, command, purpose] of [
-  [
-    "set",
-    "address.set",
-    "Write a performance value to an Address, e.g. set installation/blackout true. Not undoable.",
-  ],
-  [
-    "edit",
-    "address.edit",
-    "Change an Address while authoring, e.g. edit layer/lay_1/param/speed 2. Undoable, like the inspector.",
-  ],
-] as const) {
-  program
-    .command(`${name} <address> <value>`)
-    .description(purpose)
-    .action((address: string, value: string) =>
-      withDocument(async (client, summary) => {
-        const result = await client.command<{
-          revision: number;
-          changed: boolean;
-        }>(summary.id, command, { address, value: parseValue(value) });
-        print(result, () =>
-          result.changed ? `${address} = ${value}` : "No change.",
-        );
-      }),
-    );
-}
-
-program
-  .command("link <controllerId> <address...>")
-  .description(
-    "Link a Controller to Addresses, e.g. link ctl_1 layer/lay_1/param/color; one undoable step.",
-  )
-  .option("--from <number>", "target value at Controller 0 (number targets)")
-  .option("--to <number>", "target value at Controller 1 (number targets)")
-  .action(
-    (
-      controllerId: string,
-      addresses: string[],
-      local: { from?: string; to?: string },
-    ) =>
-      withDocument(async (client, summary) => {
-        const anchors =
-          local.from === undefined || local.to === undefined
-            ? undefined
-            : { from: Number(local.from), to: Number(local.to) };
-        const result = await client.command<{ changed: boolean }>(
-          summary.id,
-          "link.create",
-          { controllerId, addresses, ...(anchors ? { anchors } : {}) },
-        );
-        print(result, () =>
-          result.changed
-            ? addresses.map((a) => `${a} → ${controllerId}`).join("\n")
-            : "No change.",
-        );
-      }),
-  );
-
-program
-  .command("unlink <address...>")
-  .description(
-    "Release Addresses from their Controllers; each keeps its current value.",
-  )
-  .action((addresses: string[]) =>
-    withDocument(async (client, summary) => {
-      const document = await readDocument(client, summary.id);
-      const lines: string[] = [];
-      for (const address of addresses) {
-        const link = linkAt(document, address);
-        if (link === undefined) {
-          lines.push(`${address} is not linked`);
-          continue;
-        }
-        await client.command(summary.id, "link.remove", { linkId: link.id });
-        lines.push(`${address} released`);
-      }
-      print(lines, () => lines.join("\n"));
-    }),
-  );
-
-program
-  .command("trigger <address...>")
-  .description(
-    "Fire trigger Addresses: layer/<id>/cue/<key>, scene/<id>/play or macro/<id>/run; several at once fire together, and a Macro run lists what it skipped.",
-  )
-  .action((addresses: string[]) =>
-    withDocument(async (client, summary) => {
-      const lines: string[] = [];
-      for (const address of addresses) {
-        const result = await client.command<{
-          warnings?: readonly string[];
-        }>(summary.id, "address.trigger", { address });
-        lines.push(`${address} fired`);
-        for (const warning of result.warnings ?? [])
-          lines.push(`  skipped: ${warning}`);
-      }
-      print(lines, () => lines.join("\n"));
-    }),
-  );
-
-program
-  .command("catalog [id]")
-  .description(
-    "List the Visuals and Filters the runtime renders, or describe one: notes, Parameters, Cues.",
-  )
-  .action((id: string | undefined) =>
-    withClient(async (client) => {
-      const catalog = await fetchCatalog(client);
-      if (id === undefined) {
-        const items = [...catalog.visuals(), ...catalog.filters()];
-        print(items, () =>
-          items
-            .map(
-              (item) =>
-                `${item.id.padEnd(20)} ${item.kind.padEnd(8)} ${item.backend.padEnd(8)} ${item.recommended === true ? "★ " : "  "}${item.description}`,
-            )
-            .join("\n"),
-        );
-        return;
-      }
-      const definition = catalog.visual(id) ?? catalog.filter(id);
-      if (definition === undefined)
-        throw new Error(
-          `Unknown definition “${id}”. Try \`difracta catalog\`.`,
-        );
-      print(definition, () => describeDefinition(definition));
-    }),
-  );
-
-function describeDefinition(definition: Definition): string {
-  const lines = [
-    `${definition.name}  (${definition.kind}, ${definition.backend}${definition.recommended === true ? ", recommended" : ""})  id: ${definition.id}`,
-    definition.description,
-  ];
-  if (definition.notes !== undefined) lines.push("", definition.notes);
-  lines.push("", "Parameters");
-  for (const [name, parameter] of Object.entries(definition.parameters))
-    lines.push(`  ${name.padEnd(12)} ${describeParameter(parameter)}`);
-  if (definition.cues !== undefined && definition.cues.length > 0) {
-    lines.push("", "Cues");
-    for (const cue of definition.cues)
-      lines.push(
-        `  ${cue.key.padEnd(12)} ${cue.label}${cue.description === undefined ? "" : `  ${cue.description}`}`,
-      );
-  }
-  if (definition.kind === "visual" && definition.paths !== undefined) {
-    lines.push("", "Paths (bind with layer.path)");
-    for (const path of definition.paths)
-      lines.push(
-        `  ${path.key.padEnd(12)} ${path.label}${path.description === undefined ? "" : `  ${path.description}`}`,
-      );
-  }
-  return lines.join("\n");
-}
-
-function describeParameter(parameter: ParameterDefinition): string {
-  const tail =
-    parameter.description === undefined ? "" : `  ${parameter.description}`;
-  switch (parameter.kind) {
-    case "number":
-      return `${parameter.label.padEnd(16)} number   default ${parameter.default}  ${parameter.min} to ${parameter.max}${parameter.step === undefined ? "" : ` step ${parameter.step}`}${parameter.unit === undefined ? "" : ` ${parameter.unit}`}${parameter.percent === true ? " (shown as %)" : ""}${tail}`;
-    case "color":
-      return `${parameter.label.padEnd(16)} color    default [${parameter.default.join(", ")}] (r, g, b, a from 0 to 1)${tail}`;
-    case "choice":
-      return `${parameter.label.padEnd(16)} choice   default ${parameter.default}  one of ${parameter.options.map((option) => option.value).join(", ")}${tail}`;
-    case "boolean":
-      return `${parameter.label.padEnd(16)} boolean  default ${parameter.default}${tail}`;
-  }
-}
-
-for (const direction of ["undo", "redo"] as const) {
-  program
-    .command(direction)
-    .description(
-      `${direction === "undo" ? "Undo" : "Redo"} this CLI's last authoring step (or anyone's with --global).`,
-    )
-    .option("--global", "act on the last step by any session", false)
-    .action((local: { global: boolean }) =>
-      withDocument(async (client, summary) => {
-        const result = await client.command<{ label?: string }>(
-          summary.id,
-          `history.${direction}`,
-          { global: local.global },
-        );
-        print(
-          result,
-          () =>
-            `${direction === "undo" ? "Undid" : "Redid"} ${result.label ?? "step"}.`,
-        );
-      }),
-    );
-}
-
-const documents = program
-  .command("documents")
-  .description(
-    "Open, create, save and close the Installation on the runtime (one at a time).",
-  );
-
-documents
-  .command("files")
-  .description("List .difracta files in the runtime's projects folder.")
-  .action(() =>
-    withClient(async (client) => {
-      const result = await client.request<{
-        items: FileEntry[];
-        projectsDir: string;
-      }>("files.list", {});
-      print(result, () =>
-        [
-          result.projectsDir,
-          ...result.items.map(
-            (f) =>
-              `  ${f.name}${f.recoveryAvailable ? "  (unsaved autosave)" : ""}`,
-          ),
-        ].join("\n"),
-      );
-    }),
-  );
-
-documents
-  .command("new <name>")
-  .description("Replace the open Installation with a new, unsaved one.")
-  .option("--discard", "drop unsaved changes of the current one", false)
-  .action((name: string, local: { discard: boolean }) =>
-    withClient(async (client) => {
-      const summary = await client.request<DocumentSummary>("documents.new", {
-        name,
-        discard: local.discard,
-      });
-      print(summary, () => `Created ${summary.name} (${summary.id}).`);
-    }),
-  );
-
-documents
-  .command("open <path>")
-  .description(
-    "Open a .difracta file (relative to the projects folder or absolute), replacing the current Installation.",
-  )
-  .option("--discard", "drop unsaved changes of the current one", false)
-  .action((path: string, local: { discard: boolean }) =>
-    withClient(async (client) => {
-      const summary = await client.request<DocumentSummary>("documents.open", {
-        path,
-        discard: local.discard,
-      });
-      print(
-        summary,
-        () =>
-          `Opened ${summary.name} (${summary.id}) from ${summary.path ?? "?"}.${
-            summary.recovered
-              ? " Recovered unsaved changes from an autosave."
-              : ""
-          }`,
-      );
-    }),
-  );
-
-documents
-  .command("revert")
-  .description("Reload the Installation as last saved, dropping autosaves.")
-  .action(() =>
-    withDocument(async (client, summary) => {
-      const reverted = await client.request<DocumentSummary>(
-        "documents.revert",
-        { documentId: summary.id },
-      );
-      print(
-        reverted,
-        () => `Reverted ${reverted.name} to ${reverted.path ?? "?"}.`,
-      );
-    }),
-  );
-
-documents
-  .command("save [path]")
-  .description("Save the Installation, optionally to a new path.")
-  .action((path: string | undefined) =>
-    withDocument(async (client, summary) => {
-      const saved = await client.request<DocumentSummary>(
-        "documents.save",
-        path === undefined
-          ? { documentId: summary.id }
-          : { documentId: summary.id, path },
-      );
-      print(saved, () => `Saved ${saved.name} to ${saved.path ?? "?"}.`);
-    }),
-  );
-
-documents
-  .command("close")
-  .description("Close the Installation.")
-  .option("--discard", "close even with unsaved changes", false)
-  .action((local: { discard: boolean }) =>
-    withDocument(async (client, summary) => {
-      await client.request("documents.close", {
-        documentId: summary.id,
-        discard: local.discard,
-      });
-      print({ closed: summary.id }, () => `Closed ${summary.name}.`);
-    }),
-  );
+const cli = new Cli(program);
+registerStatus(program, cli);
+registerTree(program, cli);
+registerRead(program, cli);
+registerRun(program, cli);
+registerAddress(program, cli);
+registerCatalog(program, cli);
+registerDocuments(program, cli);
 
 try {
   await program.parseAsync();
 } catch (error) {
-  console.error((error as Error).message);
+  const report = errorReport(error);
+  console.error(
+    program.opts<GlobalOptions>().json ? JSON.stringify(report) : report.error,
+  );
   process.exitCode = 1;
 }

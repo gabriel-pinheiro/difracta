@@ -304,11 +304,13 @@ describe("Parameter Links", () => {
     expect(unlinked.document.links).toEqual({});
     expect(applyPatches(unlinked.document, unlinked.inverse)).toEqual(document);
 
-    const removed = run(document, "controller.remove", {
+    const removal = run(document, "controller.remove", {
       controllerId: "tint2",
-    }).document;
+    });
+    const removed = removal.document;
     expect(layer(removed, "a").parameters.color).toEqual([0, 0, 1, 1]);
     expect(removed.links).toEqual({});
+    expect(removal.warnings).toEqual(["Removed 1 Link"]);
   });
 
   it("follows Layers through duplicate, remove and Visual changes", () => {
@@ -345,8 +347,10 @@ describe("Parameter Links", () => {
     }).document;
     expect(tableEntries(scene.links)).toHaveLength(6);
 
-    const removed = run(document, "layer.remove", { layerId: "a" }).document;
+    const removal = run(document, "layer.remove", { layerId: "a" });
+    const removed = removal.document;
     expect(removed.links).toEqual({});
+    expect(removal.warnings).toEqual(["Removed 3 Links"]);
 
     // Solid keeps a color Parameter, so that Link stays; hold and opacity: opacity stays, hold goes.
     const swapped = run(document, "layer.visual", {

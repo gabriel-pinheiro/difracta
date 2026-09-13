@@ -1,5 +1,6 @@
 import {
   generateId,
+  payloadIssues,
   type Catalog,
   type FilterDefinition,
   type Patch,
@@ -10,11 +11,13 @@ import {
   PROTOCOL_VERSION,
   RuntimeRequestSchemas,
   type ClientMessage,
+  type CommandResult,
   type LiveState,
   type OscLive,
   type ServerMessage,
 } from "@difracta/protocol";
 import type { RawData, WebSocket } from "ws";
+import type { ZodType } from "zod";
 
 import type {
   DocumentDelta,
@@ -45,9 +48,7 @@ interface ClientSession {
   flushScheduled: boolean;
 }
 
-type ReplyOutcome =
-  | { readonly ok: true; readonly result: unknown }
-  | { readonly ok: false; readonly error: string };
+type ReplyOutcome = Extract<ServerMessage, { type: "reply" }>["outcome"];
 
 export interface LiveServerOptions {
   readonly store: DocumentStore;
@@ -408,21 +409,25 @@ export class LiveServer {
     // The caller sees its own change before the reply, so code that runs on
     // the reply (select the created entity) finds it in the view.
     if (session.flushScheduled) this.#flush(session);
-    this.#reply(
-      session,
-      message.requestId,
-      result.ok
-        ? {
-            ok: true,
-            result: {
-              revision: result.revision,
-              changed: result.changed,
-              label: result.label,
-              warnings: result.warnings,
-            },
-          }
-        : { ok: false, error: result.error },
-    );
+    this.#reply(session, message.requestId, this.#outcome(result));
+  }
+
+  /** The reply for a session result; the result keeps only the fields it has. */
+  #outcome(result: SessionCommandResult): ReplyOutcome {
+    if (!result.ok)
+      return {
+        ok: false,
+        error: result.error,
+        ...(result.issues === undefined ? {} : { issues: [...result.issues] }),
+      };
+    const reply: CommandResult = {
+      revision: result.revision,
+      changed: result.changed,
+    };
+    if (result.label !== undefined) reply.label = result.label;
+    if (result.warnings !== undefined) reply.warnings = [...result.warnings];
+    if (result.created !== undefined) reply.created = [...result.created];
+    return { ok: true, result: reply };
   }
 
   async #request(
@@ -432,27 +437,20 @@ export class LiveServer {
     const reply = (outcome: ReplyOutcome): void => {
       this.#reply(session, message.requestId, outcome);
     };
-    const schema = (
-      RuntimeRequestSchemas as Record<
-        string,
-        {
-          safeParse(value: unknown): {
-            success: boolean;
-            data?: unknown;
-            error?: { issues: { message: string }[] };
-          };
-        }
-      >
-    )[message.name];
+    const schema = (RuntimeRequestSchemas as Record<string, ZodType>)[
+      message.name
+    ];
     if (schema === undefined) {
       reply({ ok: false, error: `Unknown request “${message.name}”.` });
       return;
     }
     const parsed = schema.safeParse(message.payload ?? {});
     if (!parsed.success) {
+      const issues = payloadIssues(parsed.error);
       reply({
         ok: false,
-        error: `Invalid payload for “${message.name}”: ${parsed.error?.issues[0]?.message ?? "invalid"}`,
+        error: `Invalid payload for “${message.name}”: ${issues.join("; ")}`,
+        issues,
       });
       return;
     }

@@ -141,9 +141,13 @@ describe("Macros", () => {
         { kind: "set", address: "installation/blackout", value: false },
       ],
     }).document;
-    document = run(document, "macro.remove", { macroId: "g" }).document;
+    const removal = run(document, "macro.remove", { macroId: "g" });
+    document = removal.document;
     expect(document.macros.hit).toBeUndefined();
     expect(actionsOf(document, "look")).toEqual(["set installation/blackout"]);
+    expect(removal.warnings).toEqual([
+      "Removed 1 Macro action targeting “Hits”",
+    ]);
   });
 
   it("adds, edits, reorders and removes actions", () => {
@@ -330,9 +334,23 @@ describe("Macros", () => {
       "set controller/energy/value",
       "set installation/blackout",
     ]);
-    next = run(next, "layer.remove", { layerId: "a" }).document;
-    next = run(next, "scene.remove", { sceneId: "t" }).document;
-    next = run(next, "controller.remove", { controllerId: "energy" }).document;
+    const layerGone = run(next, "layer.remove", { layerId: "a" });
+    expect(layerGone.warnings).toEqual([
+      "Removed 1 Macro action targeting “Solid”",
+    ]);
+    next = layerGone.document;
+    const sceneGone = run(next, "scene.remove", { sceneId: "t" });
+    expect(sceneGone.warnings).toEqual([
+      "Removed 1 Macro action targeting “Calm”",
+    ]);
+    next = sceneGone.document;
+    const controllerGone = run(next, "controller.remove", {
+      controllerId: "energy",
+    });
+    expect(controllerGone.warnings).toEqual([
+      "Removed 1 Macro action targeting “Energy”",
+    ]);
+    next = controllerGone.document;
     expect(actionsOf(next, "look")).toEqual([
       "set layer/b/opacity",
       "set installation/blackout",
@@ -342,5 +360,8 @@ describe("Macros", () => {
     next = run(next, "scene.play", { sceneId: "u" }).document;
     next = run(next, "scene.remove", { sceneId: "s" }).document;
     expect(actionsOf(next, "look")).toEqual(["set installation/blackout"]);
+    // A removal that drops nothing warns about nothing.
+    next = run(next, "scene.create", { id: "v", name: "Empty" }).document;
+    expect(run(next, "scene.remove", { sceneId: "v" }).warnings).toEqual([]);
   });
 });

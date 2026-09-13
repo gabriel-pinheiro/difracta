@@ -30,6 +30,7 @@ describe("DocumentSession", () => {
       revision: 1,
       changed: true,
       label: "Create Output “TV”",
+      created: [{ table: "outputs", id: "out_a" }],
     });
     expect(deltas).toHaveLength(1);
     expect(deltas[0]).toMatchObject({
@@ -130,6 +131,45 @@ describe("DocumentSession", () => {
     expect(caughtUp.operational.blackout).toBe(true);
     expect(doc.document).toEqual(caughtUp);
     expect(doc.dirty).toBe(false);
+  });
+
+  it("reports every entity a command adds, whatever the command", () => {
+    const { doc } = session();
+    doc.execute("scene.create", { id: "s1", name: "One" }, "studio");
+    doc.execute(
+      "layer.create",
+      { id: "v", sceneId: "s1", kind: "visual", name: "Wash" },
+      "studio",
+    );
+    const duplicated = doc.execute(
+      "scene.duplicate",
+      { sceneId: "s1", id: "s2" },
+      "studio",
+    );
+    expect(duplicated.ok && duplicated.created).toEqual([
+      { table: "scenes", id: "s2" },
+      { table: "layers", id: expect.stringMatching(/^layer_/) as string },
+    ]);
+    // A change to an existing entity creates nothing, and says so by omission.
+    const renamed = doc.execute(
+      "scene.rename",
+      { sceneId: "s1", name: "First" },
+      "studio",
+    );
+    expect(renamed.ok && "created" in renamed).toBe(false);
+  });
+
+  it("lists every payload problem, not only the first", () => {
+    const { doc } = session();
+    expect(doc.execute("layer.create", {}, "x")).toEqual({
+      ok: false,
+      error:
+        'Invalid payload for “layer.create”: payload.kind: Invalid option: expected one of "visual"|"filter"|"group"; payload.sceneId: Invalid input: expected string, received undefined',
+      issues: [
+        'payload.kind: Invalid option: expected one of "visual"|"filter"|"group"',
+        "payload.sceneId: Invalid input: expected string, received undefined",
+      ],
+    });
   });
 
   it("reports unknown commands", () => {

@@ -17,7 +17,25 @@ export type ExecutionResult =
       readonly label: string;
       readonly coalesceKey: string | undefined;
     }
-  | { readonly ok: false; readonly error: string };
+  | {
+      readonly ok: false;
+      readonly error: string;
+      /** One line per payload problem, `payload.<path>: <message>`; only for schema failures. */
+      readonly issues?: readonly string[];
+    };
+
+/** Every problem the schema found, one line each, so a caller fixes them in one go. */
+export function payloadIssues(error: {
+  readonly issues: readonly {
+    readonly path: readonly PropertyKey[];
+    readonly message: string;
+  }[];
+}): string[] {
+  return error.issues.map((issue) => {
+    const where = ["payload", ...issue.path.map(String)].join(".");
+    return `${where}: ${issue.message}`;
+  });
+}
 
 /**
  * Validates a raw payload against the command's schema, runs the pure apply,
@@ -37,11 +55,11 @@ export function executeCommand(
 
   const parsed = definition.payload.safeParse(rawPayload);
   if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    const where = issue?.path.length ? ` at ${issue.path.join(".")}` : "";
+    const issues = payloadIssues(parsed.error);
     return {
       ok: false,
-      error: `Invalid payload for “${name}”${where}: ${issue?.message ?? "invalid"}`,
+      error: `Invalid payload for “${name}”: ${issues.join("; ")}`,
+      issues,
     };
   }
   const payload = parsed.data;

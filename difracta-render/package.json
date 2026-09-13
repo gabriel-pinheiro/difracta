@@ -8,7 +8,8 @@
     "./sdk": "./src/sdk/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json && tsc -p gpu/tsconfig.json",
+    "test:gpu": "vitest run --config gpu/vitest.config.ts"
   },
   "dependencies": {
     "@difracta/core": "0.0.0"
