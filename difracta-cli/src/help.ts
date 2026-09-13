@@ -13,13 +13,22 @@ Working from a shell
              this shell's undo history (default: user@host).
 
   Read       health, outputs, scenes, scene <Scene>, controllers, macros,
-             get [path], addresses, catalog [id], commands, describe <command>.
+             osc, get [path|Address], addresses, catalog [id], commands,
+             describe <command> (its payload fields; --json for the schema).
 
   Write      run <command> [json]  any command; ids come back in "created".
              edit <Address> <value>  authoring change, undoable.
              set <Address> <value>   show control, never undone.
              trigger <Address...>    Cues, a Scene's play, a Macro's run.
              link, unlink, undo, redo.
+
+  Save       Authoring (run, edit, link, undo) changes the open Installation
+             in memory; "documents save" writes it, and "health" says
+             "unsaved changes" until then. set and trigger are never saved.
+
+  Order      A create lands first in its Group (a Layer: on top). Pass
+             "after": <sibling id|name> to place it below that sibling, or
+             null for first; entity.move, layer.move and the others rearrange.
 
   Names      Wherever an Address or a payload field takes an entity id, its
              name works too: layer/Wash/opacity, '{"sceneId":"Live"}'. Names
@@ -37,10 +46,12 @@ Working from a shell
              [r,g,b,a] with each component from 0 to 1.
 
   Layer      run layer.create '{"kind":"visual","sceneId":"Live","name":"Wash"}'
-  recipe     run layer.visual '{"layerId":"Wash","visual":"solid-color"}'
+  recipe     run layer.visual '{"layerId":"Wash","visual":"solid-color",
+                 "parameters":{"color":[1,0.5,0,1]}}'  (the rest: defaults)
              run layer.update '{"layerId":"Wash","target":"Wall"}'
              edit layer/Wash/param/color '[1,0.5,0,1]'
-             (catalog <id> lists a Visual's Parameters and Cues.)
+             (catalog <id> lists a Visual's Parameters, their ranges and
+             steps, which a value must sit on, and its Cues.)
 
   --json     Every command prints one JSON value; a create's reply has
              created: [{table, id}]. Errors are one JSON object on stderr,

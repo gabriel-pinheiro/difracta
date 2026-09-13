@@ -198,9 +198,9 @@ describe("layer.visual and layer.filter", () => {
       fails(document, "layer.visual", {
         layerId: "a",
         visual: "stars",
-        parameters: { count: 7 },
+        parameters: { count: 7, glow: 1 },
       }),
-    ).toBe("Parameter “tint” is missing.");
+    ).toBe("Parameter “glow” is not declared.");
     expect(
       fails(document, "layer.visual", {
         layerId: "a",
@@ -208,6 +208,18 @@ describe("layer.visual and layer.filter", () => {
         parameters: { count: 7 },
       }),
     ).toBe("A Layer without a Visual has no Parameters.");
+  });
+
+  it("fills the Parameters not given from the definition's defaults", () => {
+    const document = run(scene(), "layer.visual", {
+      layerId: "a",
+      visual: "stars",
+      parameters: { count: 7 },
+    });
+    expect(visual(document, "a").parameters).toEqual({
+      count: 7,
+      tint: [1, 1, 1, 1],
+    });
   });
 
   it("duplicates carry their Parameters", () => {

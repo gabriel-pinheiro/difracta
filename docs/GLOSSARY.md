@@ -10,8 +10,8 @@ terms in code, UI text, docs, and conversation.
 
 One complete projection setup and its configuration.
 
-An Installation owns Outputs, Surfaces, Surface Mappings, Regions, Masks, Paths,
-Scenes, Controllers, Parameter Links, and Macros.
+An Installation owns Outputs, Surfaces, Surface Mappings, Masks, Paths, Scenes,
+Controllers, Parameter Links, and Macros.
 
 ### Projector
 
@@ -46,9 +46,9 @@ overlap when mapped into the same Projection Frame.
 
 ### Surface Space
 
-The local coordinate system in which a Surface's Regions, Masks, Paths, and
-Visual content are described. Rendering is transformed from Surface Space
-through a Surface Mapping into an Output's Projection Frame.
+The local coordinate system in which a Surface's Masks, Paths, and Visual
+content are described. Rendering is transformed from Surface Space through a
+Surface Mapping into an Output's Projection Frame.
 
 Surface Space is the normalized unit rectangle from `(0, 0)` at its top-left to
 `(1, 1)` at its bottom-right.
@@ -114,11 +114,10 @@ physical alignment.
 
 ### Calibration Mode
 
-A temporary Output presentation used while editing Surface Mappings, Masks,
-Paths, or Regions. It replaces Scene playback on one selected Output with
-Surface patterns and bounds, the Surface's pattern already masked with the Mask
-or Path being aligned drawn over it with its points marked, or a filled Region
-over its dimmed Surface.
+A temporary Output presentation used while editing Surface Mappings, Masks, or
+Paths. It replaces Scene playback on one selected Output with Surface patterns
+and bounds, or the Surface's pattern already masked with the Mask or Path being
+aligned drawn over it with its points marked.
 
 Blackout takes precedence: while it is on, the calibrated Output shows black and
 the pattern returns when Blackout is released.
@@ -132,29 +131,6 @@ Calibration Mode is operational Runtime state. It is not persisted and clears
 when Studio exits it or the Studio session that entered it disconnects. While it
 is active, the other Surfaces of the Output are hidden, drawn as outlines, or
 drawn as dimmer patterns, as the operator chooses.
-
-### Region
-
-A named two-dimensional subsection of a Surface. A Region is a reusable render
-Target, such as `Ceiling Surround` or `North Ceiling`.
-
-A Region is an axis-aligned rectangle in its Surface's own Surface Space,
-described by two opposite corners. It inherits that Surface's calibration
-exactly and adds no perspective of its own, so placing content inside a Surface
-is a matter of choosing bounds rather than calibrating a second quadrilateral.
-Regions on one Surface may overlap.
-
-Use the whole Surface when no subsection is needed. Do not create thin
-rectangular Regions to represent lines.
-
-### Region Space
-
-The normalized unit rectangle a Region presents to the Visual targeting it, from
-`(0, 0)` at the Region's top-left corner to `(1, 1)` at its bottom-right. A
-Region spanning its whole Surface is identical to targeting the Surface.
-
-Aspect ratio is not corrected: a tall narrow Region squashes a circular Visual
-into an ellipse exactly as a wide Surface already does.
 
 ### Path
 
@@ -358,8 +334,8 @@ hides everything inside it without changing what those Layers have authored.
 
 ### Target
 
-The Surface or Region into which a Layer may render. The Target provides bounds,
-clipping, and Surface Space; it is not an Output.
+The Surface into which a Layer may render. The Target provides bounds, clipping,
+and Surface Space; it is not an Output.
 
 ### Scene
 

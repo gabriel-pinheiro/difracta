@@ -7,7 +7,7 @@ export function registerStatus(program: Command, cli: Cli): void {
   program
     .command("health")
     .description(
-      "Show the runtime, its open Installation, every Output's Sessions and the OSC door.",
+      "Show the runtime, its open Installation (and whether it has unsaved changes), every Output's Sessions and the OSC door.",
     )
     .action(() =>
       cli.withClient(async (client) => {
@@ -26,7 +26,7 @@ export function registerStatus(program: Command, cli: Cli): void {
         cli.print({ sessionId, document: summary, live }, () =>
           [
             `Connected as ${sessionId ?? "?"}`,
-            `  ${summary.name}  ${summary.id}  ${summary.path ?? "(unsaved)"}${summary.dirty ? " *" : ""}  revision ${String(summary.revision)}`,
+            `  ${summary.name}  ${summary.id}  ${summary.path ?? "(unsaved)"}${summary.dirty ? "  unsaved changes" : ""}  revision ${String(summary.revision)}`,
             ...formatLiveStatus(live).map((line) => `  ${line}`),
           ].join("\n"),
         );

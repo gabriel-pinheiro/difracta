@@ -3,18 +3,19 @@ import {
   getAtPath,
   linkAt,
   listAddresses,
+  resolveAddress,
 } from "@difracta/core";
 import type { Command } from "commander";
 
 import type { Cli } from "../cli.ts";
 import { fetchCatalog } from "../connection.ts";
-import { resolvePathNames } from "../names.ts";
+import { resolveAddressNames, resolvePathNames } from "../names.ts";
 
 export function registerRead(program: Command, cli: Cli): void {
   program
     .command("get [path]")
     .description(
-      "Read the Installation, or one value by slash path such as outputs, installation/name or layers/<id|name>/opacity. A missing path is an error; --json wraps the value with the revision.",
+      "Read the Installation, or one value by document path (outputs, installation/name, layers/<id|name>/opacity) or by Address (layer/Wash/opacity, controller/Energy/value, installation/blackout), a linked Address at its effective value. Nothing there is an error; --json wraps the value with the revision.",
     )
     .action((path: string | undefined) =>
       cli.withDocument(async (client, summary) => {
@@ -27,9 +28,25 @@ export function registerRead(program: Command, cli: Cli): void {
           return;
         }
         const resolved = resolvePathNames(document, path);
-        const value = getAtPath(document, resolved.split("/"));
-        if (value === undefined) throw new Error(`No value at “${path}”.`);
-        cli.print({ path: resolved, revision, value }, () =>
+        const atPath = getAtPath(document, resolved.split("/"));
+        if (atPath !== undefined) {
+          cli.print({ path: resolved, revision, value: atPath }, () =>
+            JSON.stringify(atPath, null, 2),
+          );
+          return;
+        }
+        // Not a document path: an Address, read the way a Link or OSC sees it.
+        const address = resolveAddressNames(document, path);
+        const entry = resolveAddress(
+          document,
+          address,
+          await fetchCatalog(client),
+        );
+        if (entry === undefined) throw new Error(`No value at “${path}”.`);
+        if (entry.type === "trigger")
+          throw new Error(`“${address}” is a trigger, not a value.`);
+        const value = effectiveValue(document, entry);
+        cli.print({ path: address, revision, value }, () =>
           JSON.stringify(value, null, 2),
         );
       }),

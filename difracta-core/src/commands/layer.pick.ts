@@ -62,9 +62,12 @@ function pick(
     return rejected(`${label} “${nextId}” is not in the Catalog.`);
   if (nextId === currentId && values === undefined) return accepted([]);
 
+  // Given values sit over the definition's defaults, so a caller names
+  // only what differs.
   const parameters: ParameterValues =
-    values ??
-    (next === undefined ? {} : defaultParameterValues(next.parameters));
+    next === undefined
+      ? (values ?? {})
+      : { ...defaultParameterValues(next.parameters), ...values };
   if (next !== undefined) {
     const problem = validateParameterValues(next.parameters, parameters);
     if (problem !== undefined) return rejected(problem);
@@ -148,7 +151,7 @@ export const layerVisual = defineCommand({
   name: "layer.visual",
   kind: "authoring",
   description:
-    "Give a Visual Layer a Visual from the Catalog, with default Parameters unless values are given.",
+    "Give a Visual Layer a Visual from the Catalog, with the Catalog defaults for every Parameter not given.",
   payload: PickPayload.extend({
     /** Visual id, or null to leave the Layer without one. */
     visual: z.string().min(1).nullable(),
@@ -170,7 +173,7 @@ export const layerFilter = defineCommand({
   name: "layer.filter",
   kind: "authoring",
   description:
-    "Give a Filter Layer a Filter from the Catalog, with default Parameters unless values are given.",
+    "Give a Filter Layer a Filter from the Catalog, with the Catalog defaults for every Parameter not given.",
   payload: PickPayload.extend({
     /** Filter id, or null to leave the Layer without one. */
     filter: z.string().min(1).nullable(),

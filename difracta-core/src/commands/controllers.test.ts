@@ -373,3 +373,29 @@ describe("Parameter Links", () => {
     expect(layer(reset, "a").parameters.hold).toBe(100);
   });
 });
+
+describe("controller.create placement", () => {
+  it("lands first unless `after` names the sibling to follow", () => {
+    let document = emptyDocument("Living");
+    for (const payload of [
+      { id: "a", kind: "number", name: "A" },
+      { id: "b", kind: "number", name: "B" },
+      { id: "c", kind: "number", name: "C", after: "b" },
+      { id: "d", kind: "number", name: "D", after: null },
+    ] as const)
+      document = run(document, "controller.create", payload).document;
+    expect(orderedEntries(document.controllers).map((c) => c.id)).toEqual([
+      "d",
+      "b",
+      "c",
+      "a",
+    ]);
+    const result = executeCommand(registry, document, "controller.create", {
+      kind: "number",
+      after: "nope",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.error).toBe("Controller “nope” is not among the siblings.");
+  });
+});

@@ -7,6 +7,7 @@ import type { Cli } from "../cli.ts";
 import { parseJsonArgument } from "../connection.ts";
 import { resolvePayloadNames } from "../names.ts";
 import { formatCommandResult } from "../result.ts";
+import { formatSchema } from "../schema.ts";
 
 /** The registry is the only source for `commands`, `describe` and `run`. */
 const registry = createBuiltInRegistry();
@@ -56,13 +57,21 @@ export function registerRun(program: Command, cli: Cli): void {
 
   program
     .command("describe <command>")
-    .description("Print a command's payload schema as JSON Schema.")
+    .description(
+      "Print a command's payload fields: type, required (*), default, nested shapes. --json prints the JSON Schema.",
+    )
     .action((name: string) => {
       const description = describeCommand(registry, name);
-      cli.print(
-        description,
-        () =>
-          `${description.name} (${description.kind})\n${description.description}\n\nPayload:\n${JSON.stringify(description.payload, null, 2)}`,
+      cli.print(description, () =>
+        [
+          `${description.name} (${description.kind})`,
+          description.description,
+          "",
+          "Payload (* required):",
+          ...formatSchema(description.payload as never).map(
+            (line) => `  ${line}`,
+          ),
+        ].join("\n"),
       );
     });
 

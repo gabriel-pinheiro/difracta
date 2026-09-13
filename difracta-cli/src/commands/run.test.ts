@@ -17,6 +17,7 @@ describe("describeCommand", () => {
     const payload = description.payload as ObjectSchema;
     expect(description.kind).toBe("authoring");
     expect(Object.keys(payload.properties).sort()).toEqual([
+      "after",
       "id",
       "kind",
       "name",

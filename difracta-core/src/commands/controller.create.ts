@@ -1,4 +1,3 @@
-import { generateKeyBetween } from "fractional-indexing";
 import { z } from "zod";
 
 import { resolveAddress, type ResolvedAddress } from "../address/address.ts";
@@ -11,12 +10,13 @@ import type { Color } from "../catalog/parameters.ts";
 import { CONTROLLER_KINDS, type Controller } from "../document/document.ts";
 import { uniqueName } from "../document/names.ts";
 import { getAtPath } from "../document/patch.ts";
+import { orderKeyForNew } from "../document/tree.ts";
 import { generateId, id } from "../ids.ts";
 import { linkPatches } from "./link.create.ts";
 
 /**
- * A new Controller lands first at the root or in the Group it was added to:
- * Number at 0, Color opaque white. With `addresses` it is linked to them in
+ * A new Controller lands first at the root or in the Group it was added to,
+ * or right after the sibling `after` names: Number at 0, Color opaque white. With `addresses` it is linked to them in
  * the same step, which is how a Parameter row grows its own Controller, and
  * it starts at the value that leaves the first target where it is.
  */
@@ -34,6 +34,8 @@ export const controllerCreate = defineCommand({
       name: z.string().trim().min(1).max(120).optional(),
       /** Addresses the new Controller drives from the start. */
       addresses: z.array(z.string().min(1)).optional(),
+      /** Sibling to land after; null or absent for first. */
+      after: z.string().min(1).nullable().optional(),
     })
     .strict(),
   label: ({ kind }) => `Add ${CONTROLLER_LABELS[kind]}`,
@@ -56,6 +58,8 @@ export const controllerCreate = defineCommand({
         return rejected(`“${payload.parentId}” is not a Controller Group.`);
     }
     const siblings = childControllers(document.controllers, payload.parentId);
+    const order = orderKeyForNew(siblings, payload.after ?? null, "Controller");
+    if (typeof order !== "string") return rejected(order.error);
     const base = {
       id: controllerId,
       name: uniqueName(
@@ -63,7 +67,7 @@ export const controllerCreate = defineCommand({
         payload.name ?? CONTROLLER_LABELS[payload.kind],
       ),
       parentId: payload.parentId,
-      order: generateKeyBetween(null, siblings[0]?.order ?? null),
+      order,
     };
     const controller: Controller =
       payload.kind === "number"

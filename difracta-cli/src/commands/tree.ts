@@ -1,6 +1,8 @@
+import { flattenTree, qualifiedName } from "@difracta/core";
 import type { Command } from "commander";
 
 import type { Cli } from "../cli.ts";
+import { liveStatus } from "../live-status.ts";
 import { resolveId } from "../names.ts";
 import {
   describeController,
@@ -57,6 +59,57 @@ export function registerTree(program: Command, cli: Cli): void {
         const nodes = treeNodes(document.controllers);
         cli.print(nodes, () =>
           formatTreeNodes(nodes, describeController).join("\n"),
+        );
+      }),
+    );
+
+  program
+    .command("osc")
+    .description(
+      "List the OSC tree a hub such as Chataigne binds to: one leaf per Controller (float 0–1 or RGBA colour) and per Macro (impulse), each described as Group · Name.",
+    )
+    .action(() =>
+      cli.withDocument(async (client, summary) => {
+        const { document, view } = await cli.replica(client, summary.id);
+        const live = liveStatus(document, view.liveState.get());
+        const leaves = [
+          ...flattenTree(document.controllers).flatMap((controller) =>
+            controller.kind === "group"
+              ? []
+              : [
+                  {
+                    path: `/controller/${controller.id}`,
+                    type: controller.kind === "number" ? "f" : "r",
+                    description: qualifiedName(
+                      document.controllers,
+                      controller,
+                    ),
+                    value: controller.value,
+                  },
+                ],
+          ),
+          ...flattenTree(document.macros).flatMap((macro) =>
+            macro.kind === "group"
+              ? []
+              : [
+                  {
+                    path: `/macro/${macro.id}`,
+                    type: "I",
+                    description: qualifiedName(document.macros, macro),
+                  },
+                ],
+          ),
+        ];
+        cli.print({ osc: live.osc, leaves }, () =>
+          [
+            live.osc.port === null
+              ? "OSC is off"
+              : `OSC and OSCQuery on port ${String(live.osc.port)}`,
+            ...leaves.map(
+              (leaf) =>
+                `${leaf.path.padEnd(36)} ${leaf.type}  ${leaf.description}${"value" in leaf ? `  ${JSON.stringify(leaf.value)}` : ""}`,
+            ),
+          ].join("\n"),
         );
       }),
     );

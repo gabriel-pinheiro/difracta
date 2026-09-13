@@ -1,6 +1,11 @@
 import type { Table } from "./document.ts";
 import { uniqueName } from "./names.ts";
-import { orderedEntries, orderKeysAfter, orderKeysForMove } from "./order.ts";
+import {
+  orderedEntries,
+  orderKeysAfter,
+  orderKeysForMove,
+  type Ordered,
+} from "./order.ts";
 import type { Patch } from "./patch.ts";
 
 /**
@@ -38,6 +43,46 @@ export function flattenTree<TEntity extends TreeEntity>(
   };
   visit(null);
   return result;
+}
+
+/**
+ * The entity's name with its Groups' names before it, outermost first,
+ * joined by " · ": what the OSCQuery tree and the CLI show so a leaf reads
+ * like the navigator ("Colors · Blink Color").
+ */
+export function qualifiedName<TEntity extends TreeEntity>(
+  table: Table<TEntity>,
+  entity: TEntity,
+): string {
+  const names = [entity.name];
+  let parentId = entity.parentId;
+  while (parentId !== null) {
+    const parent = table[parentId];
+    if (parent === undefined) break;
+    names.unshift(parent.name);
+    parentId = parent.parentId;
+  }
+  return names.join(" · ");
+}
+
+/**
+ * The order key for a new entity placed after `after` (null for first)
+ * among `siblings`, which is already ordered, or an error naming the
+ * sibling that is not there or the neighbours that leave no room.
+ */
+export function orderKeyForNew(
+  siblings: readonly Ordered[],
+  after: string | null,
+  noun: string,
+): string | { readonly error: string } {
+  if (after !== null && !siblings.some((sibling) => sibling.id === after))
+    return { error: `${noun} “${after}” is not among the siblings.` };
+  const [key] = orderKeysAfter(siblings, after, 1) ?? [];
+  return (
+    key ?? {
+      error: "The neighbours' order keys leave no room; move them first.",
+    }
+  );
 }
 
 /** Every entity below `id`, depth first in display order; empty unless it is a Group. */

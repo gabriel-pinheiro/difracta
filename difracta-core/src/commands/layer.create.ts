@@ -4,12 +4,13 @@ import { accepted, defineCommand, rejected } from "../command/command.ts";
 import { LAYER_KINDS, type Layer } from "../document/document.ts";
 import { childLayers, LAYER_LABELS } from "../document/layers.ts";
 import { uniqueName } from "../document/names.ts";
-import { generateKeyBetween } from "fractional-indexing";
+import { orderKeyForNew } from "../document/tree.ts";
 import { generateId, id } from "../ids.ts";
 
 /**
  * A new Layer lands at the top of the Scene root or Group it was added to,
- * without a Visual, Filter or Target: those are picked afterwards.
+ * or right below the sibling `after` names, without a Visual, Filter or
+ * Target: those are picked afterwards.
  */
 export const layerCreate = defineCommand({
   name: "layer.create",
@@ -23,6 +24,8 @@ export const layerCreate = defineCommand({
       /** Group to add into; null for the Scene's root. */
       parentId: z.string().min(1).nullable().default(null),
       name: z.string().trim().min(1).max(120).optional(),
+      /** Sibling to land below; null or absent for the top. */
+      after: z.string().min(1).nullable().optional(),
     })
     .strict(),
   label: ({ kind }) => `Add ${LAYER_LABELS[kind]}`,
@@ -45,6 +48,8 @@ export const layerCreate = defineCommand({
       payload.sceneId,
       payload.parentId,
     );
+    const order = orderKeyForNew(siblings, payload.after ?? null, "Layer");
+    if (typeof order !== "string") return rejected(order.error);
     const base = {
       id: layerId,
       name: uniqueName(
@@ -54,7 +59,7 @@ export const layerCreate = defineCommand({
       sceneId: payload.sceneId,
       parentId: payload.parentId,
       enabled: true,
-      order: generateKeyBetween(null, siblings[0]?.order ?? null),
+      order,
     };
     const layer: Layer =
       payload.kind === "visual"

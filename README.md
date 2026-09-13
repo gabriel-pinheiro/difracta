@@ -72,9 +72,10 @@ node difracta-cli/bin/difracta.mjs --help
 The CLI is a client of the same runtime as Studio. Every Studio gesture is a
 command or a request, so `difracta run <command>` and `difracta documents` reach
 all of them, and the everyday ones have shortcuts: `scene`, `get`, `edit`,
-`set`, `trigger`, `outputs`. Names work wherever ids do, replies name what they
-created, and `--json` makes every output one JSON value. `difracta --help` ends
-with a guide to the Address grammar and a Layer recipe.
+`set`, `trigger`, `outputs`, `osc` (the tree a hub binds to). Names work
+wherever ids do, replies name what they created, and `--json` makes every output
+one JSON value. `difracta --help` ends with a guide to the Address grammar and a
+Layer recipe.
 
 ## Quality
 

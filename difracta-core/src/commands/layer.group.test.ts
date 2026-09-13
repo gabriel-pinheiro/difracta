@@ -94,3 +94,37 @@ describe("layer.ungroup", () => {
     expect(ungrouped.links).toBe(document.links);
   });
 });
+
+describe("layer.create placement", () => {
+  it("lands on top unless `after` names the sibling to sit below", () => {
+    let document = stage();
+    for (const payload of [
+      { id: "sun", sceneId: "s", kind: "visual", name: "Sun" },
+      { id: "moon", sceneId: "s", kind: "visual", name: "Moon", after: "grp" },
+      {
+        id: "haze",
+        sceneId: "s",
+        parentId: "grp",
+        kind: "visual",
+        name: "Haze",
+        after: "stars",
+      },
+    ] as const)
+      document = run(document, "layer.create", payload);
+    const order = (parentId: string | null): string[] =>
+      tableEntries(document.layers)
+        .filter((layer) => layer.parentId === parentId)
+        .sort((first, second) => (first.order < second.order ? -1 : 1))
+        .map((layer) => layer.id);
+    expect(order(null)).toEqual(["sun", "grp", "moon"]);
+    expect(order("grp")).toEqual(["stars", "haze"]);
+    const result = executeCommand(registry, document, "layer.create", {
+      sceneId: "s",
+      kind: "visual",
+      after: "stars",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.error).toBe("Layer “stars” is not among the siblings.");
+  });
+});

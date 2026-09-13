@@ -12,8 +12,17 @@ import { formatWarnings } from "../result.ts";
 export interface TriggerOutcome {
   readonly address: string;
   readonly ok: boolean;
+  /** How many actions the Macro holds, when the Address is a Macro's run. */
+  readonly actions?: number;
   readonly warnings: readonly string[];
   readonly error?: string;
+}
+
+/** "(5 actions, 1 skipped)" after a Macro run; nothing for a Cue or a Scene. */
+function firedDetail(outcome: TriggerOutcome): string {
+  if (outcome.actions === undefined) return "";
+  const skipped = outcome.warnings.length;
+  return ` (${String(outcome.actions)} ${outcome.actions === 1 ? "action" : "actions"}${skipped === 0 ? "" : `, ${String(skipped)} skipped`})`;
 }
 
 export function registerAddress(program: Command, cli: Cli): void {
@@ -123,7 +132,7 @@ export function registerAddress(program: Command, cli: Cli): void {
   program
     .command("trigger <address...>")
     .description(
-      "Fire trigger Addresses, one command each: layer/<id|name>/cue/<key>, scene/<id|name>/play or macro/<id|name>/run. A Macro run lists what it skipped; a refused Address fails the exit code.",
+      "Fire trigger Addresses, one command each: layer/<id|name>/cue/<key>, scene/<id|name>/play or macro/<id|name>/run. A Macro run says how many actions it holds and lists what it skipped; a refused Address fails the exit code.",
     )
     .action((addresses: string[]) =>
       cli.withDocument(async (client, summary) => {
@@ -137,9 +146,14 @@ export function registerAddress(program: Command, cli: Cli): void {
               "address.trigger",
               { address },
             );
+            const [kind, id = ""] = address.split("/");
+            const macro = kind === "macro" ? document.macros[id] : undefined;
             outcomes.push({
               address,
               ok: true,
+              ...(macro?.kind === "macro"
+                ? { actions: macro.actions.length }
+                : {}),
               warnings: result.warnings ?? [],
             });
           } catch (error) {
@@ -157,7 +171,10 @@ export function registerAddress(program: Command, cli: Cli): void {
           outcomes
             .flatMap((o) =>
               o.ok
-                ? [`${o.address} fired`, ...formatWarnings(o.warnings)]
+                ? [
+                    `${o.address} fired${firedDetail(o)}`,
+                    ...formatWarnings(o.warnings),
+                  ]
                 : [`${o.address}: ${o.error ?? "refused"}`],
             )
             .join("\n"),

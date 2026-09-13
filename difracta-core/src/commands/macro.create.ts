@@ -1,13 +1,13 @@
-import { generateKeyBetween } from "fractional-indexing";
 import { z } from "zod";
 
 import { accepted, defineCommand, rejected } from "../command/command.ts";
 import { MACRO_KINDS, type Macro } from "../document/document.ts";
 import { childMacros, MACRO_LABELS } from "../document/macros.ts";
 import { uniqueName } from "../document/names.ts";
+import { orderKeyForNew } from "../document/tree.ts";
 import { generateId, id } from "../ids.ts";
 
-/** A new Macro lands first at the root or in the Group it was added to, with no actions yet. */
+/** A new Macro lands first at the root or in the Group it was added to, or right after the sibling `after` names, with no actions yet. */
 export const macroCreate = defineCommand({
   name: "macro.create",
   kind: "authoring",
@@ -19,6 +19,8 @@ export const macroCreate = defineCommand({
       /** Group to add into; null for the root. */
       parentId: z.string().min(1).nullable().default(null),
       name: z.string().trim().min(1).max(120).optional(),
+      /** Sibling to land after; null or absent for first. */
+      after: z.string().min(1).nullable().optional(),
     })
     .strict(),
   label: ({ kind }) => `Add ${MACRO_LABELS[kind]}`,
@@ -33,6 +35,8 @@ export const macroCreate = defineCommand({
         return rejected(`“${payload.parentId}” is not a Macro Group.`);
     }
     const siblings = childMacros(document.macros, payload.parentId);
+    const order = orderKeyForNew(siblings, payload.after ?? null, "Macro");
+    if (typeof order !== "string") return rejected(order.error);
     const base = {
       id: macroId,
       name: uniqueName(
@@ -40,7 +44,7 @@ export const macroCreate = defineCommand({
         payload.name ?? MACRO_LABELS[payload.kind],
       ),
       parentId: payload.parentId,
-      order: generateKeyBetween(null, siblings[0]?.order ?? null),
+      order,
     };
     const macro: Macro =
       payload.kind === "macro"

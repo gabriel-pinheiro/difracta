@@ -1,5 +1,6 @@
 import {
   flattenTree,
+  qualifiedName,
   type Color,
   type Controller,
   type Document,
@@ -96,28 +97,11 @@ export interface OscLeaf {
 export function leavesOf(document: Document | undefined): readonly OscLeaf[] {
   if (document === undefined) return [];
   const leaves: OscLeaf[] = [];
-  const named = (
-    entity: { readonly name: string; readonly parentId: string | null },
-    table: Record<
-      string,
-      { readonly name: string; readonly parentId: string | null }
-    >,
-  ): string => {
-    const names = [entity.name];
-    let parentId = entity.parentId;
-    while (parentId !== null) {
-      const parent = table[parentId];
-      if (parent === undefined) break;
-      names.unshift(parent.name);
-      parentId = parent.parentId;
-    }
-    return names.join(" · ");
-  };
   for (const controller of flattenTree(document.controllers)) {
     if (controller.kind === "group") continue;
     const target: OscTarget = { kind: "controller", id: controller.id };
     const path = oscPathOf(target);
-    const description = named(controller, document.controllers);
+    const description = qualifiedName(document.controllers, controller);
     leaves.push({
       path,
       target,
@@ -150,7 +134,7 @@ export function leavesOf(document: Document | undefined): readonly OscLeaf[] {
       target,
       node: {
         FULL_PATH: path,
-        DESCRIPTION: named(macro, document.macros),
+        DESCRIPTION: qualifiedName(document.macros, macro),
         ACCESS: 2,
         TYPE: "I",
       },

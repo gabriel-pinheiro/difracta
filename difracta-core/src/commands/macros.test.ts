@@ -365,3 +365,28 @@ describe("Macros", () => {
     expect(run(next, "scene.remove", { sceneId: "v" }).warnings).toEqual([]);
   });
 });
+
+describe("macro.create placement", () => {
+  it("lands first unless `after` names the sibling to follow, within its Group", () => {
+    let document = emptyDocument("Living");
+    for (const payload of [
+      { id: "g", kind: "group", name: "Hits" },
+      { id: "a", parentId: "g", name: "A" },
+      { id: "b", parentId: "g", name: "B", after: "a" },
+      { id: "c", parentId: "g", name: "C", after: "a" },
+    ] as const)
+      document = run(document, "macro.create", payload).document;
+    expect(
+      orderedEntries(document.macros)
+        .filter((macro) => macro.parentId === "g")
+        .map((macro) => macro.id),
+    ).toEqual(["a", "c", "b"]);
+    const result = executeCommand(registry, document, "macro.create", {
+      parentId: "g",
+      after: "g",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.error).toBe("Macro “g” is not among the siblings.");
+  });
+});
