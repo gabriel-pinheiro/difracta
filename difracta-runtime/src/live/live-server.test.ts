@@ -504,15 +504,30 @@ describe("live protocol", () => {
       filters: Record<string, unknown>[];
     }>("catalog.list", {});
     expect(catalog.visuals.map((visual) => visual.id)).toEqual([
+      "barcode-runner",
       "beam-web",
       "blink",
       "bubbles",
+      "chevron-flight",
+      "contour-drift",
+      "conveyor",
+      "flash-matrix",
       "frame-electric",
+      "gradient",
       "koi-pond",
       "lightning-strikes",
+      "moving-head-spot",
+      "pixel-bar",
+      "radial-streaks",
+      "scanner-shot",
       "solid-color",
+      "spot",
+      "star-field",
       "strobe",
+      "tension-lines",
       "thunder",
+      "tunnel",
+      "water-caustics",
     ]);
     expect(catalog.filters.map((filter) => filter.id)).toEqual([
       "impact-shake",
@@ -520,7 +535,7 @@ describe("live protocol", () => {
       "tile-scramble",
     ]);
     expect(catalog.filters[0]).not.toHaveProperty("fragment");
-    const koi = catalog.visuals[4]!;
+    const koi = catalog.visuals.find((visual) => visual.id === "koi-pond")!;
     expect(koi.parameters).toHaveProperty("speed");
     expect(koi).not.toHaveProperty("create");
     expect(typeof koi.notes).toBe("string");

@@ -9,7 +9,7 @@ export const signalDistortion = defineFilter({
   description:
     "Tears the frame into horizontal bands that drift sideways like a bad video signal, continuously.",
   notes:
-    "A broken-transmission look: fine bands and a few coarse ones slide left and right by smoothly changing random amounts, so the picture wobbles and tears without ever cutting hard. Amount is how far bands travel, as a fraction of the frame; the default is a nervous flicker, the top of the range shreds the picture. Bands is how many strips the frame is cut into; fewer gives broad tears, more gives a fine shimmer. Speed is how fast the noise evolves, and zero freezes the tear in place, still costing nothing while frozen. Bands are horizontal in the projector frame, not per Surface, and content slides out of one Surface into the next. Edges clamp, so a band pulled from beyond the frame stretches the last pixel. Costs one full-frame pass every frame while Speed is above zero.",
+    "A broken-transmission look: fine bands and a few coarse ones slide left and right by smoothly changing random amounts, so the picture wobbles and tears without ever cutting hard. Amount is how far bands travel, as a fraction of the frame; the default is a nervous flicker, the top of the range shreds the picture. Bands is how many strips the frame is cut into; fewer gives broad tears, more gives a fine shimmer. Speed is how fast the noise evolves, and zero freezes the tear in place, still costing nothing while frozen. RGB Split pulls the red and blue channels apart sideways for a chromatic fringe; it costs two more samples per pixel, and at zero with Amount at zero the Filter passes through. Bands are horizontal in the projector frame, not per Surface, and content slides out of one Surface into the next. Edges clamp, so a band pulled from beyond the frame stretches the last pixel. Costs one full-frame pass every frame while Speed is above zero.",
   parameters: {
     amount: {
       kind: "number",
@@ -35,6 +35,16 @@ export const signalDistortion = defineFilter({
       max: 30,
       step: 0.5,
     },
+    rgbSplit: {
+      kind: "number",
+      label: "RGB Split",
+      default: 0.008,
+      min: 0,
+      max: 0.05,
+      step: 0.001,
+      description:
+        "How far red and blue are pulled apart, as a fraction of the frame.",
+    },
   },
   fragment: `
 uniform float u_fine_phase;
@@ -58,7 +68,13 @@ vec4 filter_image(vec2 uv) {
   float coarse_noise = signal_noise(coarse_band + 193.0, u_coarse_phase);
   float displacement =
     ((fine_noise - 0.5) * 1.4 + (coarse_noise - 0.5) * 0.6) * u_amount;
-  return sample_input(uv + vec2(displacement, 0.0));
+  vec2 displaced = uv + vec2(displacement, 0.0);
+  vec4 center = sample_input(displaced);
+  if (u_rgbSplit <= 0.0) return center;
+  vec4 red = sample_input(displaced + vec2(u_rgbSplit, 0.0));
+  vec4 blue = sample_input(displaced - vec2(u_rgbSplit, 0.0));
+  float alpha = max(center.a, max(red.a, blue.a));
+  return vec4(red.r, center.g, blue.b, alpha);
 }`,
   create() {
     let fine = 0;
@@ -70,7 +86,7 @@ vec4 filter_image(vec2 uv) {
         coarse = (coarse + advance * 0.37) % TICKS;
         return {
           changed: changed || advance > 0,
-          identity: params.amount <= 0,
+          identity: params.amount <= 0 && params.rgbSplit <= 0,
           uniforms: { fine_phase: fine, coarse_phase: coarse },
         };
       },

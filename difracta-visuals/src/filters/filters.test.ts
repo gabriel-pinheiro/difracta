@@ -18,12 +18,19 @@ function player(filter: ShaderFilter) {
 }
 
 describe("every Filter", () => {
-  it.each([tileScramble, impactShake, signalDistortion])(
-    "$id defines filter_image and passes through at Amount zero",
-    (filter) => {
+  it.each([
+    { filter: tileScramble, off: { amount: 0 } },
+    { filter: impactShake, off: { amount: 0 } },
+    {
+      filter: signalDistortion,
+      off: { amount: 0, rgbSplit: 0 },
+    },
+  ])(
+    "$filter.id defines filter_image and passes through with nothing to do",
+    ({ filter, off }) => {
       expect(filter.fragment).toContain("vec4 filter_image(vec2 uv)");
       const frame = player(filter);
-      expect(frame({ amount: 0 }).identity).toBe(true);
+      expect(frame(off).identity).toBe(true);
       expect(frame({}).identity).toBe(false);
     },
   );
