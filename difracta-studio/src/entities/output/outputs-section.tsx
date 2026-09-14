@@ -1,5 +1,10 @@
 import type { DocumentView } from "@difracta/client";
-import { orderedEntries, type Output, type Table } from "@difracta/core";
+import {
+  generateId,
+  orderedEntries,
+  type Output,
+  type Table,
+} from "@difracta/core";
 import { Monitor, MonitorUp, Trash2 } from "lucide-react";
 import { useState } from "react";
 
@@ -29,10 +34,6 @@ import {
   type SessionTable,
 } from "./output-live";
 
-function generateOutputId(): string {
-  return `output_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
-}
-
 /** Navigator section listing the Outputs; "+" asks for a name, creates one and selects it. */
 export function OutputsSection({ view }: { readonly view: DocumentView }) {
   const command = useCommand(view);
@@ -42,7 +43,7 @@ export function OutputsSection({ view }: { readonly view: DocumentView }) {
   const ordered = orderedEntries(outputs);
 
   function create(name: string): void {
-    const id = generateOutputId();
+    const id = generateId("output");
     void command("output.create", { id, name }).then(() => {
       select({ kind: "output", id });
     });

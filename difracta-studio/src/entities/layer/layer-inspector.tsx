@@ -1,5 +1,6 @@
 import type { DocumentView } from "@difracta/client";
 import {
+  generateId,
   effectiveValue,
   flattenControllers,
   layerAddresses,
@@ -37,8 +38,6 @@ import { catalog, definitionOf } from "@/lib/catalog";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useExpansion } from "@/navigator/expansion";
 import { useSelection } from "@/selection/selection";
-
-import { generatePathId } from "@/entities/surface/child-rows";
 
 import { DefinitionBlock } from "./definition-block";
 
@@ -112,7 +111,7 @@ export function LayerInspector({
           addresses: [resolved.address],
         }),
       onCreate: (kind) => {
-        const controllerId = `controller_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
+        const controllerId = generateId("controller");
         void command("controller.create", {
           id: controllerId,
           kind,
@@ -155,7 +154,7 @@ export function LayerInspector({
               : null;
           const createPath = (): void => {
             if (target === null) return;
-            const pathId = generatePathId();
+            const pathId = generateId("path");
             void command("path.create", {
               id: pathId,
               surfaceId: target,

@@ -3,7 +3,7 @@ import {
   type DocumentView,
   type ReadonlySignal,
 } from "@difracta/client";
-import type { PatchPath } from "@difracta/core";
+import { generateId, type PatchPath } from "@difracta/core";
 import {
   createContext,
   useCallback,
@@ -29,11 +29,11 @@ function studioActor(): string {
   try {
     const stored = localStorage.getItem(key);
     if (stored !== null) return stored;
-    const created = `studio:${crypto.randomUUID().slice(0, 8)}`;
+    const created = generateId("studio");
     localStorage.setItem(key, created);
     return created;
   } catch {
-    return `studio:${crypto.randomUUID().slice(0, 8)}`;
+    return generateId("studio");
   }
 }
 

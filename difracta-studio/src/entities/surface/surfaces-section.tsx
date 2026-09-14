@@ -1,5 +1,6 @@
 import type { DocumentView } from "@difracta/client";
 import {
+  generateId,
   orderedEntries,
   type Mask,
   type Output,
@@ -18,21 +19,13 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import {
-  ChildRows,
-  generateMaskId,
-  generatePathId,
-} from "@/entities/surface/child-rows";
+import { ChildRows } from "@/entities/surface/child-rows";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useExpansion } from "@/navigator/expansion";
 import { NavigatorEmptyRow, NavigatorRow } from "@/navigator/navigator-row";
 import { NavigatorSection } from "@/navigator/navigator-section";
 import { SortableItem, SortableList } from "@/navigator/sortable";
 import { isSelected, useSelection } from "@/selection/selection";
-
-function generateSurfaceId(): string {
-  return `surface_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
-}
 
 /** Navigator section listing the Surfaces; each row names the Output it renders through. */
 export function SurfacesSection({ view }: { readonly view: DocumentView }) {
@@ -53,7 +46,7 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
   function create(name: string): void {
     if (naming?.kind === "mask" || naming?.kind === "path") {
       const kind = naming.kind;
-      const id = kind === "mask" ? generateMaskId() : generatePathId();
+      const id = generateId(kind);
       const surfaceId = naming.surface.id;
       void command(`${kind}.create`, { id, surfaceId, name }).then(() => {
         setExpanded("surface", surfaceId, true);
@@ -61,7 +54,7 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
       });
       return;
     }
-    const id = generateSurfaceId();
+    const id = generateId("surface");
     void command("surface.create", { id, name }).then(() => {
       select({ kind: "surface", id });
     });

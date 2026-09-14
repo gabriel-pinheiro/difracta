@@ -1,5 +1,6 @@
 import type { DocumentView } from "@difracta/client";
 import {
+  generateId,
   CONTROLLER_KINDS,
   childControllers,
   type Controller,
@@ -17,10 +18,6 @@ import { useSelection } from "@/selection/selection";
 
 import { ControllerRows } from "./controller-rows";
 import { controllerIcons, controllerKindLabels } from "./controller-icons";
-
-function generateControllerId(): string {
-  return `controller_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
-}
 
 /**
  * Navigator section listing the Controllers as a tree of Groups. Number and
@@ -49,7 +46,7 @@ export function ControllersSection({ view }: { readonly view: DocumentView }) {
       initial: `${controllerKindLabels[kind]} ${String(siblings.length + 1)}`,
       submitLabel: "Create",
       onSubmit: (name) => {
-        const id = generateControllerId();
+        const id = generateId("controller");
         void command("controller.create", { id, kind, parentId, name }).then(
           () => {
             if (parentId !== null) setExpanded("controller", parentId, true);

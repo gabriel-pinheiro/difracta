@@ -1,5 +1,6 @@
 import type { DocumentView } from "@difracta/client";
 import {
+  generateId,
   MACRO_KINDS,
   childMacros,
   type Macro,
@@ -17,10 +18,6 @@ import { useSelection } from "@/selection/selection";
 
 import { MacroRows } from "./macro-rows";
 import { macroIcons, macroKindLabels } from "./macro-icons";
-
-function generateMacroId(): string {
-  return `macro_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
-}
 
 /**
  * Navigator section listing the Macros as a tree of Groups, each Macro with
@@ -47,7 +44,7 @@ export function MacrosSection({ view }: { readonly view: DocumentView }) {
       initial: `${macroKindLabels[kind]} ${String(siblings.length + 1)}`,
       submitLabel: "Create",
       onSubmit: (name) => {
-        const id = generateMacroId();
+        const id = generateId("macro");
         void command("macro.create", { id, kind, parentId, name }).then(() => {
           if (parentId !== null) setExpanded("macro", parentId, true);
           select({ kind: "macro", id });

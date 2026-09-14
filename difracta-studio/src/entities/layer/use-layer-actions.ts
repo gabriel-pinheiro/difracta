@@ -1,5 +1,5 @@
 import type { DocumentView } from "@difracta/client";
-import { LAYER_KINDS, type LayerKind } from "@difracta/core";
+import { generateId, LAYER_KINDS, type LayerKind } from "@difracta/core";
 
 import { useCommand } from "@/lib/client";
 import { useBrowser } from "@/library/browser-state";
@@ -8,10 +8,6 @@ import type { CreateItem } from "@/navigator/navigator-row";
 import { useSelection } from "@/selection/selection";
 
 import { layerIcons, layerKindLabels } from "./layer-icons";
-
-function generateLayerId(): string {
-  return `layer_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
-}
 
 /**
  * Creating Layers from a Scene row or a Group row: one entry per kind for
@@ -30,7 +26,7 @@ export function useLayerActions(view: DocumentView) {
     sceneId: string,
     parentId: string | null,
   ): void {
-    const id = generateLayerId();
+    const id = generateId("layer");
     void command("layer.create", { id, kind, sceneId, parentId }).then(() => {
       setExpanded("scene", sceneId, true);
       if (parentId !== null) setExpanded("layer", parentId, true);

@@ -23,11 +23,12 @@ export function id<TKind extends string>(_kind: TKind, raw: string): Id<TKind> {
 }
 
 export function generateId<TKind extends string>(kind: TKind): Id<TKind> {
-  const random = (
-    globalThis as unknown as { crypto: { randomUUID(): string } }
-  ).crypto
-    .randomUUID()
-    .replaceAll("-", "")
-    .slice(0, 12);
+  const { crypto } = globalThis as unknown as {
+    crypto: { getRandomValues(bytes: Uint8Array): Uint8Array };
+  };
+  const bytes = crypto.getRandomValues(new Uint8Array(6));
+  const random = Array.from(bytes, (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
   return `${kind}_${random}` as Id<TKind>;
 }

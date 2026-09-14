@@ -116,11 +116,3 @@ export function ChildRows({
     </SortableList>
   );
 }
-
-export function generateMaskId(): string {
-  return `mask_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
-}
-
-export function generatePathId(): string {
-  return `path_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
-}
