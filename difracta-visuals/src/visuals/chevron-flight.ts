@@ -5,6 +5,7 @@ export const chevronFlight = defineShaderVisual({
   name: "Chevron Flight",
   description:
     "Columns of luminous chevrons fly up and down the Surface, neighbouring columns going opposite ways in two colors.",
+  recommended: true,
   notes:
     "A strong directional pattern for electronic music: each column is a stack of V-shaped stripes travelling vertically, even columns one way in Color A, odd columns the other way in Color B. Columns sets how many stripes-wide the Surface is and Rows how many chevrons fit top to bottom, so 6 by 5 reads as bold arrows and 24 by 10 as a herringbone texture. Chevron Depth bends the stripes from nearly flat bars into sharp arrowheads and thickens them a little. Width is the base stripe thickness. Speed integrates, so it can be swept live and stopped without a jump, and a stopped pattern costs nothing. Additive blend mode makes two Layers of it interfere brightly. Costs one full-Surface pass per frame while moving.",
   parameters: {

@@ -25,6 +25,7 @@ export const blink = defineShaderVisual({
   name: "Blink",
   description:
     "A flat color flash on every Blink Cue: a delay, a fade in, a hold and a fade out, with an optional chance of not firing.",
+  recommended: true,
   notes:
     "The simplest Cue Visual: nothing until Blink fires, then Color over the whole Target with the envelope the durations describe. Hold at 100 ms with no fades is a hard hit for drums; fades of a few hundred ms make it a swell. Delay staggers several Layers fired by one Macro. Trigger Chance below 100% lets some hits through and drops others at random, which keeps a fast pattern from feeling mechanical. Blinks overlap: a Cue during a fade starts another blink and the brighter of the two shows, so retriggering never cuts a flash short. Costs nothing between blinks and one full-Surface shader pass while one is visible. Additive blend mode on a colored Layer makes it a light on top of everything.",
   parameters: {

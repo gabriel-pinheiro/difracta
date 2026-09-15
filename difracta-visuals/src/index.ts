@@ -22,6 +22,15 @@ import { conveyor } from "./visuals/conveyor.ts";
 import { flashMatrix } from "./visuals/flash-matrix.ts";
 import { frameElectric } from "./visuals/frame-electric.ts";
 import { gradient } from "./visuals/gradient.ts";
+import { frameEmbers } from "./visuals/frame-embers.ts";
+import { frameGarland } from "./visuals/frame-garland.ts";
+import { frameIvy } from "./visuals/frame-ivy.ts";
+import { frameMarquee } from "./visuals/frame-marquee.ts";
+import { frameNeon } from "./visuals/frame-neon.ts";
+import { frameOrbit } from "./visuals/frame-orbit.ts";
+import { frameStripes } from "./visuals/frame-stripes.ts";
+import { pathHalo } from "./visuals/path-halo.ts";
+import { pathRibbons } from "./visuals/path-ribbons.ts";
 import { koiPond } from "./visuals/koi-pond.ts";
 import { lightningStrikes } from "./visuals/lightning-strikes.ts";
 import { movingHeadSpot } from "./visuals/moving-head-spot.ts";
@@ -36,6 +45,42 @@ import { tensionLines } from "./visuals/tension-lines.ts";
 import { thunder } from "./visuals/thunder.ts";
 import { tunnel } from "./visuals/tunnel.ts";
 import { waterCaustics } from "./visuals/water-caustics.ts";
+import { bladeCross } from "./visuals/blade-cross.ts";
+import { lightSweep } from "./visuals/light-sweep.ts";
+import { neonLattice } from "./visuals/neon-lattice.ts";
+import { noiseField } from "./visuals/noise-field.ts";
+import { orbitalArcs } from "./visuals/orbital-arcs.ts";
+import { prismInterference } from "./visuals/prism-interference.ts";
+import { ribbonCurrent } from "./visuals/ribbon-current.ts";
+import { rotor } from "./visuals/rotor.ts";
+import { shutter } from "./visuals/shutter.ts";
+import { crtGlitch } from "./visuals/crt-glitch.ts";
+import { flame } from "./visuals/flame.ts";
+import { lavaLamp } from "./visuals/lava-lamp.ts";
+import { nebula } from "./visuals/nebula.ts";
+import { netherPortal } from "./visuals/nether-portal.ts";
+import { plasmaTurbulence } from "./visuals/plasma-turbulence.ts";
+import { smoke } from "./visuals/smoke.ts";
+import { sunSurface } from "./visuals/sun-surface.ts";
+import { synthHorizon } from "./visuals/synth-horizon.ts";
+
+import { confetti } from "./visuals/confetti.ts";
+import { glyphRain } from "./visuals/glyph-rain.ts";
+import { graph } from "./visuals/graph.ts";
+import { lissajous } from "./visuals/lissajous.ts";
+import { rain } from "./visuals/rain.ts";
+import { repeatingShapes } from "./visuals/repeating-shapes.ts";
+import { snowDrift } from "./visuals/snow-drift.ts";
+
+import { colorWipe } from "./visuals/color-wipe.ts";
+import { fireworks } from "./visuals/fireworks.ts";
+import { noiseBurst } from "./visuals/noise-burst.ts";
+import { petalBuild } from "./visuals/petal-build.ts";
+import { shockwave } from "./visuals/shockwave.ts";
+import { shootingStars } from "./visuals/shooting-stars.ts";
+import { silkWisp } from "./visuals/silk-wisp.ts";
+import { sparkShower } from "./visuals/spark-shower.ts";
+import { tileCascade } from "./visuals/tile-cascade.ts";
 
 /**
  * The built-in Catalog: every Visual and Filter Difracta ships, one file
@@ -67,6 +112,49 @@ export const builtInCatalog = new Catalog({
     scannerShot,
     pixelBar,
     tensionLines,
+    frameMarquee,
+    frameStripes,
+    frameOrbit,
+    frameNeon,
+    frameEmbers,
+    pathHalo,
+    frameGarland,
+    frameIvy,
+    pathRibbons,
+    bladeCross,
+    rotor,
+    orbitalArcs,
+    ribbonCurrent,
+    lightSweep,
+    shutter,
+    noiseField,
+    prismInterference,
+    neonLattice,
+    crtGlitch,
+    flame,
+    lavaLamp,
+    nebula,
+    netherPortal,
+    plasmaTurbulence,
+    smoke,
+    sunSurface,
+    synthHorizon,
+    confetti,
+    glyphRain,
+    graph,
+    lissajous,
+    rain,
+    repeatingShapes,
+    snowDrift,
+    shockwave,
+    tileCascade,
+    colorWipe,
+    noiseBurst,
+    fireworks,
+    petalBuild,
+    shootingStars,
+    silkWisp,
+    sparkShower,
   ],
   filters: [
     tileScramble,

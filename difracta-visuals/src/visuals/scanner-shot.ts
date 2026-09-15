@@ -12,6 +12,7 @@ export const scannerShot = defineShaderVisual({
   name: "Scanner Shot",
   description:
     "Every Scan sends a soft-edged bar with a fading trail across the Surface in one direction; scans overlap and add up.",
+  recommended: true,
   notes:
     "A hit Visual that reads as a sweep: fire Scan on a snare and a bar crosses the Surface in Travel Duration, entering from outside one edge and leaving past the other. Band Width is the bar's thickness as a share of the way across, Edge Softness feathers it, and Trail is how far behind the head the light lingers, also as a share of the way across; a bar keeps going until its trail has left too. Automatic Rate fires scans on its own for a texture; at zero it is purely played. Two dozen scans can be in flight and they add, so a roll brightens toward white. Direction is fixed per Layer; put two Layers with opposite directions on one Surface for crossing sweeps. Costs nothing between scans and one full-Surface pass per frame while any is crossing. Additive blend mode over a Scene lights it rather than covering it.",
   parameters: {

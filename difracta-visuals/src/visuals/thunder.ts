@@ -84,6 +84,7 @@ export const thunder = defineShaderVisual({
   name: "Thunder",
   description:
     "Lightning: a burst of a few irregular flat flashes with a lingering fade, on every Flash Cue or on its own at an Automatic Rate.",
+  recommended: true,
   notes:
     "Reads as distant lightning on a wall or a ceiling. Each burst is Flashes quick strikes spaced by Flash Spacing with a little random jitter, each Flash Duration long and the last one lingering for Fade Out. Automatic Rate fires bursts on its own, jittered around the mean, and Flash fires one on demand; both overlap freely, the brightest strike showing. The Cue starts a burst with the Parameters as they are at that moment. Intensity scales the whole thing without touching Color's alpha, which is what a Controller should ride. Additive blend mode over a Scene lights it up rather than covering it. Costs nothing between bursts and one full-Surface shader pass while one is lit.",
   parameters: {

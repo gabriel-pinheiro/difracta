@@ -19,6 +19,7 @@ export const flashMatrix = defineShaderVisual({
   name: "Flash Matrix",
   description:
     "Every Flash lights a random selection of cells in a grid, each after its own short delay, holding and fading out; flashes overlap.",
+  recommended: true,
   notes:
     "A hit Visual for walls and ceilings: the Surface is cut into Columns by Rows cells and every Flash Cue gives each cell a Coverage chance to light, each cell starting within Delay Spread, holding for Hold and fading over Fade Out, so one hit reads as a scatter of sparks rather than a single blink. Coverage is an average share, so the count varies per Flash. Cell colors are drawn between Cell Color A and B per cell. Gap is the dark gutter between cells in pixels. Automatic Rate fires flashes on its own, jittered around the mean, for a texture that needs no Cues; leave it at zero for a purely played instrument. Flashes overlap up to two dozen in flight and add up, so a fast pattern brightens toward white. Changing Columns or Rows keeps each cell's own luck, only the grid moves. Costs nothing between flashes and one full-Surface pass per frame while any is lit. Additive blend mode over a Scene makes it a light on top.",
   parameters: {
