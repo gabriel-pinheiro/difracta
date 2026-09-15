@@ -20,7 +20,7 @@ export const flashMatrix = defineShaderVisual({
   description:
     "Every Flash lights a random selection of cells in a grid, each after its own short delay, holding and fading out; flashes overlap.",
   notes:
-    "A hit Visual for walls and ceilings: the Surface is cut into Columns by Rows cells and every Flash Cue lights Coverage of them, each cell starting within Delay Spread, holding for Hold and fading over Fade Out, so one hit reads as a scatter of sparks rather than a single blink. Cell colors are drawn between Cell Color A and B per cell. Gap is the dark gutter between cells in pixels. Automatic Rate fires flashes on its own, jittered around the mean, for a texture that needs no Cues; leave it at zero for a purely played instrument. Flashes overlap up to two dozen in flight and add up, so a fast pattern brightens toward white. Changing Columns or Rows keeps each cell's own luck, only the grid moves. Costs nothing between flashes and one full-Surface pass per frame while any is lit. Additive blend mode over a Scene makes it a light on top.",
+    "A hit Visual for walls and ceilings: the Surface is cut into Columns by Rows cells and every Flash Cue gives each cell a Coverage chance to light, each cell starting within Delay Spread, holding for Hold and fading over Fade Out, so one hit reads as a scatter of sparks rather than a single blink. Coverage is an average share, so the count varies per Flash. Cell colors are drawn between Cell Color A and B per cell. Gap is the dark gutter between cells in pixels. Automatic Rate fires flashes on its own, jittered around the mean, for a texture that needs no Cues; leave it at zero for a purely played instrument. Flashes overlap up to two dozen in flight and add up, so a fast pattern brightens toward white. Changing Columns or Rows keeps each cell's own luck, only the grid moves. Costs nothing between flashes and one full-Surface pass per frame while any is lit. Additive blend mode over a Scene makes it a light on top.",
   parameters: {
     colorA: { kind: "color", label: "Cell Color A", default: [1, 1, 1, 1] },
     colorB: {
@@ -97,6 +97,18 @@ export const flashMatrix = defineShaderVisual({
 uniform vec2 u_flashes[${String(MAX_FLASHES)}];
 uniform float u_flash_count;
 
+// Separate integer keys for each seed, cell and channel. The fixed 32-cell
+// stride preserves each cell's luck when the grid changes. Integer mixing
+// avoids the precision loss of a sine hash with large seeded coordinates.
+float cell_random(vec2 cell, float seed, uint channel) {
+  uint value = ((uint(seed) * 32u + uint(cell.y)) * 32u + uint(cell.x)) * 4u + channel;
+  value = (value ^ (value >> 16u)) * 0x45d9f3bu;
+  value = (value ^ (value >> 16u)) * 0x45d9f3bu;
+  value ^= value >> 16u;
+  // Keep 24 bits so conversion to float stays exact and never rounds to 1.
+  return float(value >> 8u) / 16777216.0;
+}
+
 // One cell's alpha in one flash: nothing before its delay, full for the
 // hold, then a smooth fade.
 float cell_envelope(float age, float delay) {
@@ -122,12 +134,11 @@ vec4 render_visual(vec2 uv) {
     if (float(index) >= u_flash_count) break;
     float age = u_flashes[index].x;
     float seed = u_flashes[index].y;
-    vec2 luck = cell * vec2(7.13, 3.71) + seed;
-    if (hash2(luck) >= u_coverage) continue;
-    float delay = hash2(luck + 17.0) * u_delaySpread / 1000.0;
+    if (cell_random(cell, seed, 0u) >= u_coverage) continue;
+    float delay = cell_random(cell, seed, 1u) * u_delaySpread / 1000.0;
     float lit = cell_envelope(age, delay);
     if (lit <= 0.0) continue;
-    vec4 color = mix(u_colorA, u_colorB, hash2(luck + 41.0));
+    vec4 color = mix(u_colorA, u_colorB, cell_random(cell, seed, 2u));
     rgb += color.rgb * color.a * lit;
     alpha += color.a * lit;
   }
