@@ -63,6 +63,10 @@ import { plasmaTurbulence } from "./visuals/plasma-turbulence.ts";
 import { smoke } from "./visuals/smoke.ts";
 import { sunSurface } from "./visuals/sun-surface.ts";
 import { synthHorizon } from "./visuals/synth-horizon.ts";
+import { checkerFlicker } from "./visuals/checker-flicker.ts";
+import { segmentStrobe } from "./visuals/segment-strobe.ts";
+import { vortex } from "./visuals/vortex.ts";
+import { zoomRush } from "./visuals/zoom-rush.ts";
 
 import { confetti } from "./visuals/confetti.ts";
 import { glyphRain } from "./visuals/glyph-rain.ts";
@@ -81,6 +85,9 @@ import { shootingStars } from "./visuals/shooting-stars.ts";
 import { silkWisp } from "./visuals/silk-wisp.ts";
 import { sparkShower } from "./visuals/spark-shower.ts";
 import { tileCascade } from "./visuals/tile-cascade.ts";
+import { hyperdrive } from "./visuals/hyperdrive.ts";
+import { laserRain } from "./visuals/laser-rain.ts";
+import { sirenBeacon } from "./visuals/siren-beacon.ts";
 
 /**
  * The built-in Catalog: every Visual and Filter Difracta ships, one file
@@ -139,6 +146,10 @@ export const builtInCatalog = new Catalog({
     smoke,
     sunSurface,
     synthHorizon,
+    segmentStrobe,
+    checkerFlicker,
+    zoomRush,
+    vortex,
     confetti,
     glyphRain,
     graph,
@@ -155,6 +166,9 @@ export const builtInCatalog = new Catalog({
     shootingStars,
     silkWisp,
     sparkShower,
+    hyperdrive,
+    sirenBeacon,
+    laserRain,
   ],
   filters: [
     tileScramble,
