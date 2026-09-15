@@ -1,8 +1,17 @@
 import { Catalog } from "@difracta/core";
 
+import { blockGlitch } from "./filters/block-glitch.ts";
+import { chromaticAberration } from "./filters/chromatic-aberration.ts";
+import { dither } from "./filters/dither.ts";
 import { impactShake } from "./filters/impact-shake.ts";
+import { pixelCrush } from "./filters/pixel-crush.ts";
+import { punchZoom } from "./filters/punch-zoom.ts";
+import { rollingTvTear } from "./filters/rolling-tv-tear.ts";
+import { scanlines } from "./filters/scanlines.ts";
 import { signalDistortion } from "./filters/signal-distortion.ts";
+import { sliceShift } from "./filters/slice-shift.ts";
 import { tileScramble } from "./filters/tile-scramble.ts";
+import { waveDistortion } from "./filters/wave-distortion.ts";
 import { barcodeRunner } from "./visuals/barcode-runner.ts";
 import { beamWeb } from "./visuals/beam-web.ts";
 import { blink } from "./visuals/blink.ts";
@@ -59,7 +68,20 @@ export const builtInCatalog = new Catalog({
     pixelBar,
     tensionLines,
   ],
-  filters: [tileScramble, impactShake, signalDistortion],
+  filters: [
+    tileScramble,
+    impactShake,
+    signalDistortion,
+    dither,
+    scanlines,
+    chromaticAberration,
+    waveDistortion,
+    rollingTvTear,
+    blockGlitch,
+    punchZoom,
+    pixelCrush,
+    sliceShift,
+  ],
 });
 
 /**

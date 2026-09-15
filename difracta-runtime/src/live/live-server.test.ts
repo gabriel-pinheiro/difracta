@@ -530,9 +530,18 @@ describe("live protocol", () => {
       "water-caustics",
     ]);
     expect(catalog.filters.map((filter) => filter.id)).toEqual([
+      "block-glitch",
+      "chromatic-aberration",
+      "dither",
       "impact-shake",
+      "pixel-crush",
+      "punch-zoom",
+      "rolling-tv-tear",
+      "scanlines",
       "signal-distortion",
+      "slice-shift",
       "tile-scramble",
+      "wave-distortion",
     ]);
     expect(catalog.filters[0]).not.toHaveProperty("fragment");
     const koi = catalog.visuals.find((visual) => visual.id === "koi-pond")!;
