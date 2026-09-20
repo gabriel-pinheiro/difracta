@@ -539,6 +539,7 @@ describe("live protocol", () => {
       "lightning-strikes",
       "liquid-chrome",
       "lissajous",
+      "monolith",
       "moving-head-spot",
       "nebula",
       "neon-lattice",

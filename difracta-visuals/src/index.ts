@@ -69,6 +69,7 @@ import { vortex } from "./visuals/vortex.ts";
 import { cathedral } from "./visuals/cathedral/cathedral.ts";
 import { zoomRush } from "./visuals/zoom-rush.ts";
 import { liquidChrome } from "./visuals/liquid-chrome/liquid-chrome.ts";
+import { monolith } from "./visuals/monolith/monolith.ts";
 
 import { confetti } from "./visuals/confetti.ts";
 import { glyphRain } from "./visuals/glyph-rain.ts";
@@ -152,6 +153,7 @@ export const builtInCatalog = new Catalog({
     checkerFlicker,
     zoomRush,
     liquidChrome,
+    monolith,
     vortex,
     cathedral,
     confetti,
