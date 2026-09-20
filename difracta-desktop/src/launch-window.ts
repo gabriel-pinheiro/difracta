@@ -34,14 +34,24 @@ export function serveLaunchScheme(studioDist: string): void {
 /**
  * The window showing the launch page. It is the only one with the launch
  * preload, and it goes nowhere: no navigation, no new windows.
+ *
+ * Opened from File ▸ Connect to... it has the Studio window as `parent`,
+ * which keeps it in front of Studio without stopping Studio from being used:
+ * the session goes on until something is chosen here. It is not `modal`,
+ * which Linux window managers honour each in their own way.
  */
-export function createLaunchWindow(preload: string): BrowserWindow {
+export function createLaunchWindow(
+  preload: string,
+  parent: BrowserWindow | undefined,
+): BrowserWindow {
   const window = new BrowserWindow({
     width: settings.desktop.launchWindowWidth,
     height: settings.desktop.launchWindowHeight,
     title: "Difracta",
     backgroundColor: BACKGROUND,
-    autoHideMenuBar: true,
+    // Its own small menu (`native-menu.ts`), always shown like Studio's.
+    autoHideMenuBar: false,
+    ...(parent === undefined ? {} : { parent }),
     webPreferences: { ...pageSecurity, preload },
   });
   window.webContents.on("will-navigate", (event) => event.preventDefault());

@@ -1,169 +1,31 @@
-import { DifractaClient } from "@difracta/client";
-import { emptyDocument } from "@difracta/core";
-import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { createServer, type AddressInfo } from "node:net";
-import { tmpdir } from "node:os";
+import { readFile } from "node:fs/promises";
+import { createServer } from "node:net";
+import { homedir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+
 import {
-  _electron as electron,
-  type ElectronApplication,
-  type Page,
-} from "playwright";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+  LAUNCH_PAGE,
+  app,
+  clickMenu,
+  env,
+  eventually,
+  installationFile,
+  launch,
+  launchToPage,
+  menuItems,
+  quit,
+  renameFromElsewhere,
+  secondLaunch,
+  standaloneRuntime,
+  stopStandalone,
+  studioTitle,
+  userData,
+  windowAfter,
+  useDesktop,
+} from "./harness.ts";
 
-import { serializeDocument } from "../../difracta-runtime/src/documents/document-file.ts";
-
-const packageDir = fileURLToPath(new URL("..", import.meta.url));
-
-/** A port nothing uses, so the suite never meets a runtime already on 4800. */
-async function sparePort(): Promise<number> {
-  const server = createServer();
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const { port } = server.address() as AddressInfo;
-  await new Promise((resolve) => server.close(resolve));
-  return port;
-}
-
-async function eventually<T>(
-  read: () => Promise<T>,
-  wanted: (value: T) => boolean,
-) {
-  const deadline = Date.now() + 20_000;
-  for (;;) {
-    const value = await read().catch(() => undefined);
-    if (value !== undefined && wanted(value)) return value;
-    if (Date.now() > deadline) throw new Error("Waited too long.");
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-}
-
-let dir: string;
-let userData: string;
-let env: Record<string, string>;
-let app: ElectronApplication | undefined;
-let standalone: ChildProcess | undefined;
-
-/** The app's arguments: its folder, a user data folder of its own, maybe a file. */
-const launchArguments = (file?: string): string[] => [
-  packageDir,
-  `--user-data-dir=${userData}`,
-  ...(file === undefined ? [] : [file]),
-];
-
-async function launch(file?: string): Promise<Page> {
-  app = await electron.launch({ args: launchArguments(file), env });
-  return app.firstWindow();
-}
-
-const LAUNCH_PAGE = "app://desktop/studio/launch.html";
-
-/** The window an action opens: Studio's after a choice on the launch page, the launch page's after Switch. */
-async function windowAfter(action: () => Promise<void>): Promise<Page> {
-  const [window] = await Promise.all([app?.waitForEvent("window"), action()]);
-  if (window === undefined) throw new Error("No application.");
-  return window;
-}
-
-/** A launch that lands on the launch page. */
-async function launchToPage(): Promise<Page> {
-  const page = await launch();
-  await page.waitForURL(LAUNCH_PAGE);
-  return page;
-}
-
-/**
- * A runtime of its own, as a mini-PC would run one: the bundle Desktop forks,
- * started by the test on a spare port with `file` pinned.
- */
-async function standaloneRuntime(file: string): Promise<number> {
-  const port = await sparePort();
-  standalone = spawn(
-    process.execPath,
-    [
-      path.join(packageDir, "dist/runtime.mjs"),
-      ...["--host", "127.0.0.1", "--port", String(port), file],
-    ],
-    {
-      env: {
-        ...env,
-        DIFRACTA_STUDIO_DIST: path.join(packageDir, "dist/studio"),
-        DIFRACTA_OUTPUT_DIST: path.join(packageDir, "dist/output"),
-      },
-      stdio: "ignore",
-    },
-  );
-  await eventually(
-    () => fetch(`http://127.0.0.1:${port}/health`),
-    (response) => response.ok,
-  );
-  return port;
-}
-
-async function stopStandalone(): Promise<void> {
-  const child = standalone;
-  standalone = undefined;
-  if (child?.exitCode !== null) return;
-  const exited = new Promise((resolve) => child.once("exit", resolve));
-  child.kill("SIGTERM");
-  await exited;
-}
-
-/** Clicks an item of the native menu, which no page can reach. */
-async function clickMenu(menu: string, item: string): Promise<void> {
-  await app?.evaluate(
-    ({ Menu }, [menuLabel, itemLabel]) => {
-      Menu.getApplicationMenu()
-        ?.items.find((entry) => entry.label === menuLabel)
-        ?.submenu?.items.find((entry) => entry.label === itemLabel)
-        ?.click();
-    },
-    [menu, item] as const,
-  );
-}
-
-/**
- * A second launch: it finds the lock taken, passes its file on and exits.
- * Playwright starts Electron with --no-sandbox on Linux, where a checkout's
- * Electron often cannot use Chromium's sandbox; this launch does the same.
- */
-async function secondLaunch(file: string): Promise<void> {
-  const other = spawn(
-    (await import("electron")).default as unknown as string,
-    [
-      ...(process.platform === "linux" ? ["--no-sandbox"] : []),
-      ...launchArguments(file),
-    ],
-    { env, stdio: "ignore" },
-  );
-  await new Promise((resolve) => other.once("exit", resolve));
-}
-
-async function installationFile(name: string): Promise<string> {
-  const file = path.join(dir, `${name}.difracta`);
-  await writeFile(file, serializeDocument(emptyDocument(name)));
-  return file;
-}
-
-beforeEach(async () => {
-  dir = await mkdtemp(path.join(tmpdir(), "difracta-desktop-e2e-"));
-  userData = path.join(dir, "user-data");
-  env = {
-    ...(process.env as Record<string, string>),
-    DIFRACTA_PORT: String(await sparePort()),
-    // Nothing of a test run belongs on the network.
-    DIFRACTA_NO_OSC: "1",
-    DIFRACTA_NO_DISCOVERY: "1",
-  };
-});
-
-afterEach(async () => {
-  await app?.close().catch(() => undefined);
-  app = undefined;
-  await stopStandalone();
-  await rm(dir, { recursive: true, force: true });
-});
+useDesktop();
 
 describe("Difracta Desktop", () => {
   it("opens the file it is launched with, in a Studio that has the bridge", async () => {
@@ -181,6 +43,10 @@ describe("Difracta Desktop", () => {
       bridge: ["onOpenRequest", "pickOpenPath", "pickSavePath"],
       node: "undefined",
     });
+    // Main writes the title: the file, the home directory as "~" when inside it.
+    expect(await studioTitle()).toBe(
+      `Tonight - ${file.replace(homedir(), "~")} - Difracta`,
+    );
 
     // An Output page opened from Studio is an app window without the bridge;
     // a link to anywhere else never replaces Studio.
@@ -191,8 +57,25 @@ describe("Difracta Desktop", () => {
       }),
     ]);
     await output?.waitForURL(/\/output\/\?output=none$/);
-    expect(await output?.evaluate(() => typeof window.difractaDesktop)).toBe(
-      "undefined",
+    expect(
+      await output?.evaluate(() => [
+        typeof window.difractaDesktop,
+        typeof window.difractaMenu,
+      ]),
+    ).toEqual(["undefined", "undefined"]);
+    // Nor a menu bar, so no key of the menu's does anything on a projector.
+    expect(
+      await app?.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows().map((window) => [
+          new URL(window.webContents.getURL()).pathname,
+          window.isMenuBarVisible(),
+        ]),
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        ["/studio/", true],
+        ["/output/", false],
+      ]),
     );
     await page.evaluate(() => {
       location.href = "http://127.0.0.1:9/elsewhere";
@@ -229,20 +112,7 @@ describe("Difracta Desktop", () => {
     const page = await launch(file);
     await page.waitForFunction(() => document.title.startsWith("Before"));
 
-    // A change from another client, as the CLI would make it.
-    const client = new DifractaClient({
-      url: `ws://127.0.0.1:${env.DIFRACTA_PORT}/live`,
-      kind: "cli",
-      reconnect: false,
-    });
-    const summary = await eventually(
-      () => Promise.resolve(client.document.get()),
-      (document) => document !== null,
-    );
-    await client.command(summary?.id ?? "", "installation.rename", {
-      name: "After",
-    });
-    client.close();
+    await renameFromElsewhere(env.DIFRACTA_PORT, "After");
     await page.waitForFunction(() => document.title.startsWith("After*"));
 
     // A native dialog cannot be clicked from here, so main's is answered for it.
@@ -274,6 +144,7 @@ describe("Difracta Desktop", () => {
     ).toEqual({
       launch: [
         "connect",
+        "current",
         "forget",
         "onRuntimesChanged",
         "problem",
@@ -310,14 +181,14 @@ describe("Difracta Desktop", () => {
         launch: typeof window.difractaLaunch,
       })),
     ).toEqual({ desktop: "object", launch: "undefined" });
+    expect(await studioTitle()).toBe("Untitled - Difracta");
     await eventually(
       () => Promise.resolve(launchPage.isClosed()),
       (closed) => closed,
     );
 
     // Quitting stops the runtime.
-    await app?.close();
-    app = undefined;
+    await quit();
     const log = await readFile(
       path.join(userData, "logs", "runtime.log"),
       "utf8",
@@ -333,7 +204,7 @@ describe("Difracta Desktop", () => {
     expect(resumed.url()).toContain(`:${env.DIFRACTA_PORT}/studio/`);
   });
 
-  it("connects to a runtime by address, resumes it, and switches back", async () => {
+  it("connects to a runtime by address, resumes it, and marks it on the launch page", async () => {
     const port = await standaloneRuntime(await installationFile("Elsewhere"));
     const launchPage = await launchToPage();
     const address = launchPage.getByRole("textbox");
@@ -345,24 +216,40 @@ describe("Difracta Desktop", () => {
       .filter({ hasText: "not an address" })
       .waitFor();
 
-    // A runtime elsewhere shows its own Studio, and gets no bridge of any kind.
+    // A runtime elsewhere shows its own Studio, which gets the menu bridge for
+    // its menu and nothing that reaches this computer's disk or Desktop itself.
     await address.fill(`127.0.0.1:${port}`);
     let page = await windowAfter(() => address.press("Enter"));
     await page.waitForFunction(() => document.title.startsWith("Elsewhere"));
     expect(page.url()).toBe(`http://127.0.0.1:${port}/studio/`);
     expect(
       await page.evaluate(() => ({
+        menu: Object.keys(window.difractaMenu ?? {}).sort(),
         desktop: typeof window.difractaDesktop,
         launch: typeof window.difractaLaunch,
+        node: typeof (globalThis as { require?: unknown }).require,
       })),
-    ).toEqual({ desktop: "undefined", launch: "undefined" });
-    // Main names the runtime in the title, from its own link to it.
+    ).toEqual({
+      menu: ["onFullScreenChange", "onMenuCommand", "setMenu"],
+      desktop: "undefined",
+      launch: "undefined",
+      node: "undefined",
+    });
+    // Main names the runtime in the title, from its own link to it, and that
+    // Studio's menu is in the native bar: a pinned runtime's, so no Open.
     await eventually(
-      () =>
-        app?.evaluate(({ BrowserWindow }) =>
-          BrowserWindow.getAllWindows()[0]?.getTitle(),
-        ) ?? Promise.resolve(undefined),
-      (title) => title === `Elsewhere – 127.0.0.1:${port} – Difracta`,
+      studioTitle,
+      (title) => title === `Elsewhere - 127.0.0.1:${port} - Difracta`,
+    );
+    await eventually(
+      () => menuItems("file"),
+      (items) => items.some(([id]) => id === "page:save"),
+    );
+    expect((await menuItems("file")).map(([id]) => id)).not.toContain(
+      "page:open",
+    );
+    expect((await menuItems("help")).map(([id]) => id)).not.toContain(
+      "help:runtime-log",
     );
     // No runtime was started on this computer for it.
     await expect(
@@ -375,13 +262,21 @@ describe("Difracta Desktop", () => {
     await page.waitForFunction(() => document.title.startsWith("Elsewhere"));
     expect(page.url()).toBe(`http://127.0.0.1:${port}/studio/`);
 
-    // Runtime ▸ Switch… returns to the launch page, which remembers it.
-    const again = await windowAfter(() => clickMenu("Runtime", "Switch…"));
+    // File ▸ Connect to... opens the launch page over the session, with the
+    // runtime in use marked; closing it changes nothing.
+    const again = await windowAfter(() => clickMenu("desktop:connect-to"));
     await again.waitForURL(LAUNCH_PAGE);
-    await again.getByText("Not on the network now").waitFor();
-    await eventually(
-      () => Promise.resolve(page.isClosed()),
-      (closed) => closed,
+    await again.getByText("Connected", { exact: true }).waitFor();
+    expect(
+      await again
+        .getByLabel("Runtimes")
+        .getByRole("button", { name: "Connect" })
+        .isDisabled(),
+    ).toBe(true);
+    await again.close();
+    expect(page.isClosed()).toBe(false);
+    expect(await studioTitle()).toBe(
+      `Elsewhere - 127.0.0.1:${port} - Difracta`,
     );
 
     // A remembered runtime that is gone sends the next launch here, saying why.
@@ -433,7 +328,7 @@ describe("Difracta Desktop", () => {
     }
   });
 
-  it("says on the launch page why this computer's runtime cannot start, and switches from local", async () => {
+  it("says on the launch page why this computer's runtime cannot start", async () => {
     // Something else holds Desktop's port.
     const blocker = createServer();
     await new Promise<void>((resolve) =>
@@ -452,12 +347,5 @@ describe("Difracta Desktop", () => {
     await new Promise((resolve) => blocker.close(resolve));
     const page = await windowAfter(() => run.click());
     await page.waitForFunction(() => document.title.startsWith("Untitled"));
-
-    // Switching away stops the runtime before the launch page offers anything.
-    const again = await windowAfter(() => clickMenu("Runtime", "Switch…"));
-    await again.waitForURL(LAUNCH_PAGE);
-    await expect(
-      fetch(`http://127.0.0.1:${env.DIFRACTA_PORT}/health`),
-    ).rejects.toThrow();
   });
 });

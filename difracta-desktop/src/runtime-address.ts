@@ -60,8 +60,8 @@ export function addressLabel(origin: string): string {
 }
 
 /**
- * A runtime elsewhere as the Runtime menu and the window title name it,
- * "stage-pc — 10.0.0.5:4800": the machine out of the announced name
+ * A runtime elsewhere as the window title and Desktop's questions name it,
+ * "stage-pc (10.0.0.5:4800)": the machine out of the announced name
  * ("Difracta on stage-pc") when there is one, and always the address.
  */
 export function remoteLabel(origin: string, name: string | null): string {
@@ -69,7 +69,7 @@ export function remoteLabel(origin: string, name: string | null): string {
   const address = addressLabel(origin);
   return machine === undefined || machine === ""
     ? address
-    : `${machine} — ${address}`;
+    : `${machine} (${address})`;
 }
 
 /** The live socket of the runtime at `origin`. */

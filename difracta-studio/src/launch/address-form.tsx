@@ -27,7 +27,7 @@ export function AddressForm({
     >
       <Label className="grid flex-1 gap-1">
         <span className="text-xs text-muted-foreground">
-          Or by address: host, host:port or URL
+          Address: host, host:port or URL
         </span>
         <Input
           value={address}

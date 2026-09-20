@@ -5,7 +5,7 @@ import {
 } from "@/documents/document-commands";
 import { ShortcutKeys } from "@/keyboard/shortcut-keys";
 import { useClient, useSignal } from "@/lib/client";
-import { MenuBar } from "@/menu/menu-bar";
+import { AppMenu } from "@/menu/app-menu";
 import { StatusStrip } from "@/status/status-strip";
 import { Workspace } from "@/workspace/workspace";
 
@@ -13,7 +13,7 @@ export function App() {
   return (
     <DocumentCommandsProvider>
       <div className="flex h-dvh flex-col">
-        <MenuBar />
+        <AppMenu />
         <Main />
         <StatusStrip />
       </div>

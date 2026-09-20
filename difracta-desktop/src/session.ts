@@ -8,8 +8,10 @@ import type { LastMode } from "./desktop-state.ts";
  * `remote-session.ts` make them; main holds at most one.
  */
 export interface Session {
-  /** Where Studio is coming from, as the Runtime menu says it: "This computer", "stage-pc — 10.0.0.5:4800". */
+  /** Where Studio is coming from, as Desktop's questions say it: "This computer", "stage-pc (10.0.0.5:4800)". */
   readonly where: string;
+  /** The origin Studio is loaded from, `http://host:port`: what its window is confined to, and what tells two runtimes apart. */
+  readonly origin: string;
   /** What the next launch resumes; undefined for a stay that is not resumed. */
   readonly resume: LastMode | undefined;
   readonly window: BrowserWindow;
@@ -21,8 +23,8 @@ export interface Session {
   readonly bridgeOrigin: string | undefined;
   /** The open file, else the last one: where a file dialog starts. */
   currentFile(): string | undefined;
-  /** Asked before switching away, as closing the window asks; false stays. */
-  mayLeave(): Promise<boolean>;
+  /** Asked before switching away, as closing the window asks; false stays. `over` is the window the question belongs to. */
+  mayLeave(over: BrowserWindow): Promise<boolean>;
   /** Drops the link and stops what the session started. Its windows are closed by then. */
   end(): Promise<void>;
 }

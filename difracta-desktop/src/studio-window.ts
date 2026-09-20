@@ -3,6 +3,8 @@ import { BrowserWindow, shell, type WebContents } from "electron";
 
 import { BRIDGE_ORIGIN_ARGUMENT, channels } from "./bridge-contract.ts";
 import { linkTarget, isFromOrigin } from "./local-origin.ts";
+import type { RuntimeLink } from "./runtime-link.ts";
+import { windowTitle, type TitleWhere } from "./window-title.ts";
 
 /**
  * What every page in Desktop runs with, spelled out although these are
@@ -44,14 +46,25 @@ function confine(contents: WebContents, origin: string): void {
  * page opened from Studio shows. No preload, so no bridge; and no background
  * throttling, because an Output must keep its frame rate while it sits behind
  * other windows or on a projector nobody clicks on.
+ *
+ * No menu either (`removeMenu`; on macOS the one menu belongs to the app, and
+ * its items leave this window alone, see `native-menu.ts`). With the bar go
+ * its shortcuts, so no key zooms, reloads or opens developer tools on a
+ * projector. F11 is the one key kept, handled here because the menu that had
+ * it is gone: a window that cannot go full screen is no use on a projector.
  */
 function openPageWindow(url: string, origin: string): void {
   const window = new BrowserWindow({
     width: 1280,
     height: 720,
     backgroundColor: "#000000",
-    autoHideMenuBar: true,
     webPreferences: { ...pageSecurity, backgroundThrottling: false },
+  });
+  window.removeMenu();
+  window.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown" || input.key !== "F11") return;
+    event.preventDefault();
+    window.setFullScreen(!window.isFullScreen());
   });
   confine(window.webContents, origin);
   void window.loadURL(url);
@@ -61,19 +74,19 @@ export interface StudioWindowOptions {
   /** The runtime's origin; Studio is its `/studio/`. */
   readonly origin: string;
   /**
-   * The preload script that hands Studio the document bridge, for the runtime
-   * on this computer only. A runtime elsewhere gets none: no preload runs in
-   * its window at all, so there is nothing in it for a page to find.
+   * The preload script: `preload.cjs` for the runtime on this computer (the
+   * native menu and the document bridge), `menu-preload.cjs` for one
+   * elsewhere (the native menu only).
    */
-  readonly preload: string | undefined;
+  readonly preload: string;
   /** Asked before the window closes; false keeps it open. */
   readonly mayClose: (window: BrowserWindow) => Promise<boolean>;
 }
 
 /**
  * The window showing Studio, loaded from the runtime's own URL like any
- * browser tab would. Only this window can get the preload script, and the
- * preload is told the one origin it may hand the bridge to.
+ * browser tab would. Only this window gets a Studio preload, and the preload
+ * is told the one origin it may hand its bridges to.
  */
 export function createStudioWindow(
   options: StudioWindowOptions,
@@ -83,17 +96,15 @@ export function createStudioWindow(
     height: settings.desktop.windowHeight,
     title: "Difracta",
     backgroundColor: BACKGROUND,
-    // Studio has its own menu bar; the native one shows while Alt is held
-    // (Windows and Linux) and its shortcuts work either way.
-    autoHideMenuBar: true,
-    webPreferences:
-      options.preload === undefined
-        ? pageSecurity
-        : {
-            ...pageSecurity,
-            preload: options.preload,
-            additionalArguments: [`${BRIDGE_ORIGIN_ARGUMENT}${options.origin}`],
-          },
+    // The native menu bar is Studio's menu in Desktop (the page draws none,
+    // see `application-menu.ts`), so it is always there, not behind Alt as
+    // Electron can have it on Windows and Linux.
+    autoHideMenuBar: false,
+    webPreferences: {
+      ...pageSecurity,
+      preload: options.preload,
+      additionalArguments: [`${BRIDGE_ORIGIN_ARGUMENT}${options.origin}`],
+    },
   });
   confine(window.webContents, options.origin);
 
@@ -119,6 +130,23 @@ export function createStudioWindow(
 
   void window.loadURL(`${options.origin}/studio/`);
   return window;
+}
+
+/**
+ * Writes the window's title from main's own link to the runtime, now and on
+ * every change of the document summary. The page's own title is refused
+ * (`page-title-updated`): only main knows where Studio comes from, and a page
+ * from another machine does not get to name the window.
+ */
+export function followTitle(
+  window: BrowserWindow,
+  link: RuntimeLink,
+  where: TitleWhere,
+): void {
+  window.on("page-title-updated", (event) => event.preventDefault());
+  link.onDocumentChange((summary) => {
+    if (!window.isDestroyed()) window.setTitle(windowTitle(summary, where));
+  });
 }
 
 /** Hands Studio a file to open, once its page is there to hear it. */

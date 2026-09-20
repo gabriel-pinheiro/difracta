@@ -674,12 +674,18 @@ runtime's own `http://<host>:<port>/studio/`. The **launch page** is where a
 person chooses: "Run on this computer", a live list of the runtimes discovered
 on the network, the ones connected to before (kept when they are not on the
 network now, and forgettable), and an address typed by hand (`host`, `host:port`
-or a URL; the default port fills in). Runtime ▸ Switch… in the native menu,
-which also says where Studio is coming from, goes back to it: the session is
-left first (in local mode through the same unsaved-changes question as closing
-the window, then the runtime child is stopped and waited for), so nothing starts
-while something is still stopping. `desktop-modes.ts` holds these moves;
-`local-session.ts` and `remote-session.ts` are what each mode starts and ends.
+or a URL; the default port fills in). File ▸ Connect to... in the native menu
+opens it again as a window over the running session, which goes on: the runtime
+in use is marked there instead of offered, and closing the window changes
+nothing. Only a chosen target ends the session, in this order (`connect-to.ts`):
+the target is checked (`/health` for a runtime elsewhere, the port being free
+for this computer), then the session is left (in local mode through the same
+unsaved-changes question as closing the window; Cancel closes the launch page
+and stays), the runtime child is stopped and waited for, and the new session
+starts, so nothing starts while something is still stopping. A target that fails
+the check is reported on the page with the session untouched. `desktop-modes.ts`
+holds these moves; `local-session.ts` and `remote-session.ts` are what each mode
+starts and ends.
 
 Start-up: take the single-instance lock, then decide what to start with
 (`start-up-mode.ts`). A file from the OS (command line, second launch,
@@ -704,10 +710,20 @@ runtime that started with nothing open is sent `documents.new`, so Desktop lands
 in a working Studio; an untouched Installation is not dirty, so that never
 causes a question later. The runtime's output goes to `runtime.log` under
 Electron's logs folder (Help ▸ Show Runtime Log), the previous launch's kept
-beside it. In remote mode the link only reads: the window's title is written
-from its summary with the runtime's name and address, and a connection that
-drops is retried quietly by the client while Studio's own page shows the
-reconnect.
+beside it. In remote mode the link only reads, and a connection that drops is
+retried quietly by the client while Studio's own page shows the reconnect.
+
+In both modes main writes the Studio window's title from that summary
+(`window-title.ts`) and refuses the page's own (`page-title-updated`). It stands
+in for the middle of Studio's in-page bar, which Desktop does not draw:
+`Living - ~/shows/living.difracta - Difracta` in local mode, the home directory
+as `~`, and `Untitled - Difracta` before a first save;
+`Living - stage-pc (10.0.0.5:4800) - Difracta` in remote mode, with the machine
+out of the announced name when it is known and no path, which is on the other
+machine's disk. `* ` in front means unsaved changes, and with nothing open the
+title is what is left: `Difracta`, or `stage-pc (10.0.0.5:4800) - Difracta`. It
+is plain ASCII, like File ▸ Connect to..., because window managers and task
+switchers draw titles with whatever font they have.
 
 The launch page is a second entry of `difracta-studio` (`launch.html`,
 `src/launch/`): it shares Studio's components and theme and imports no client,
@@ -719,16 +735,17 @@ the launch page and `assets/` only, and resolves every path inside that folder
 whatever the URL spells. The page talks to main through a bridge of its own,
 `window.difractaLaunch` (`launch-contract.ts`, from a separate preload given
 only to the launch window): `runLocal()`, `connect(address)`, `runtimes()` with
-`onRuntimesChanged`, `remembered()`, `forget(address)` and `problem()`. The two
-promises resolve with the reason when a start fails, so the port being taken or
-an address not answering shows on the page. Main checks that each message comes
-from the launch page's own URL. While the page is open main browses
-`_difracta._tcp` and pushes every change. One runtime is left out of the list:
-the one Desktop itself is starting or running, recognised as this computer (its
-hostname, or an address of its own) on the local runtime's port. Any other
-runtime on this computer, a `difracta-runtime` service for one, is a target like
-the rest. In a browser the page has no bridge and says only that it belongs to
-Desktop.
+`onRuntimesChanged`, `remembered()`, `forget(address)`, `problem()` and
+`current()`, the runtime in use when the page is open over a session and null
+when the page is all there is. The two starting promises resolve with the reason
+when a start fails, so the port being taken or an address not answering shows on
+the page. Main checks that each message comes from the launch page's own URL.
+While the page is open main browses `_difracta._tcp` and pushes every change.
+One runtime is left out of the list: the one Desktop itself is starting or
+running, recognised as this computer (its hostname, or an address of its own) on
+the local runtime's port. Any other runtime on this computer, a
+`difracta-runtime` service for one, is a target like the rest. In a browser the
+page has no bridge and says only that it belongs to Desktop.
 
 Studio in Desktop gets `window.difractaDesktop` from the preload script:
 `pickOpenPath()`, `pickSavePath(suggestedName)` and `onOpenRequest(callback)`.
@@ -740,12 +757,29 @@ second launch, which the lock turns into a message to the first; `open-file` on
 macOS) is handed to Studio through `onOpenRequest` and goes through Studio's own
 open, unsaved-changes question included. The preload exposes the bridge only to
 the local runtime's origin, main answers only IPC whose sender frame is from
-that origin, and only while a local session exists. A remote runtime's window is
-created without any preload, so nothing of Desktop is in it. In both modes
-windows refuse to navigate away from their runtime's origin, an Output page
-opened from Studio gets an unthrottled window of its own, other links open in
-the person's browser, and every window runs with `contextIsolation`, `sandbox`
-and no `nodeIntegration`.
+that origin, and only while a local session exists.
+
+Every Studio window, local or remote, also gets `window.difractaMenu`
+(`menu-contract.ts`): `setMenu(model)`, `onMenuCommand(callback)` and
+`onFullScreenChange(callback)`. It is how Studio's menu shows in the native menu
+bar (see Studio, the menu model): the page describes its File and Edit items,
+and hears the id of the one that was clicked. The local window's preload
+(`preload.ts`) exposes both bridges; a remote runtime's window gets
+`menu-preload.ts`, which exposes this one only, and each preload hands its
+bridges to the session's origin and no other. Main takes `setMenu` only from the
+Studio window's own page at that origin, and validates the model with Zod
+(`page-menu.ts`): only the `file` and `edit` menus, a bounded number of items,
+bounded strings, ids of plain characters. Unknown menus and keys are dropped
+rather than refused, so a newer Studio still gets its menus in an older Desktop.
+Labels are drawn as plain text, `&` doubled so that it cannot become an Alt
+mnemonic, and a shortcut is shown only when it has the plain `Ctrl+Shift+S`
+form. What a page described is forgotten when its window navigates or reloads
+and when the session changes. A Studio from before this bridge never calls it:
+it keeps its in-page bar, and the native bar shows Desktop's own items. In both
+modes windows refuse to navigate away from their runtime's origin, an Output
+page opened from Studio gets an unthrottled window of its own, other links open
+in the person's browser, and every window runs with `contextIsolation`,
+`sandbox` and no `nodeIntegration`.
 
 Closing the Studio window in local mode with unsaved changes asks Save, Don't
 Save or Cancel natively (remote mode asks nothing: the Installation lives in
@@ -754,10 +788,44 @@ dialog, Don't Save closes the document as discarded so its autosave does not
 return as a recovery. Closing Studio quits Desktop, and quitting stops the
 runtime: main posts `shutdown` on the child's parent port, the runtime flushes
 its autosave, closes and exits, and is killed only after
-`settings.desktop.runtimeStopTimeoutMs`. The native menu is Electron's roles
-(Edit, View, Window, Help with Developer Tools) plus Runtime, and hides behind
-Alt on Windows and Linux; New, Open and Save stay in Studio's menu bar, so each
-shortcut has one handler.
+`settings.desktop.runtimeStopTimeoutMs`.
+
+The native menu bar is always visible and dark (`nativeTheme` is forced dark, as
+Studio is), and one builder (`native-menu.ts`, a pure template;
+`application-menu.ts` sets it) merges Desktop's items with the page's. **File**:
+the page's items, Connect to..., Quit. **Edit**: the page's Undo and Redo, which
+are the Installation's, then the cut, copy, paste and select-all roles; the
+`undo` and `redo` roles are left out beside them, and the keys still undo typing
+inside a text field. **View**: Actual Size, Zoom In (with a hidden `Ctrl+=`
+twin), Zoom Out, Toggle Full Screen. **Help**: Reload Studio, Toggle Developer
+Tools, and Show Runtime Log in local mode. Windows and Linux have no Window menu
+and no Close Window: closing the Studio window quits Desktop and stops the local
+runtime, too much for a casual Ctrl+W; Quit keeps its accelerator and goes
+through the unsaved-changes question. macOS keeps its conventions (the
+application menu with Quit, Close Window in File, a Window menu). Items have
+stable ids (`page:save`, `desktop:connect-to`, `help:reload-studio`), which is
+how the e2e suite clicks them from the main process. A native menu cannot be
+edited once set, so it is built again when the page's model, the session or the
+launch window changes, after `settings.desktop.menuRebuildDelayMs` so a burst
+makes one rebuild. The launch window has a smaller menu of its own (Quit, the
+text roles with undo and redo for its address field, zoom, Developer Tools). An
+Output window has none (`removeMenu`), and so none of the menu's shortcuts; F11
+alone is handled in the window itself, since an Output has to go full screen. On
+macOS, where one menu serves every window, zoom and Developer Tools act only
+when the focused window is Studio's or the launch page's.
+
+The page's items show their shortcuts and do not act on them. Studio's key
+handler (`keyboard/shortcut-keys.tsx`) is the only handler of Ctrl+S, Ctrl+O,
+Ctrl+Shift+S, Ctrl+Z and Ctrl+Y, identical in a browser and in Desktop: on
+Windows and Linux the items are built with `registerAccelerator: false`, which
+prints the accelerator without listening for it. macOS has no such switch; there
+a key goes to the page first and reaches the menu only if the page did not
+`preventDefault()` it, which Studio does for every key it handles, and a click
+that still arrives `triggeredByAccelerator` is never sent to the page as a
+command (for Undo and Redo it is passed to the focused text field instead, which
+is the one case Studio leaves the key alone). Windows and Linux hide the native
+bar while a window is full screen, so main tells the page (`onFullScreenChange`)
+and Studio draws its in-page bar for as long as that lasts.
 
 **Why the runtime is a child process:** it is the same program a mini-PC runs
 standalone, so Desktop adds no second way of holding an Installation, a busy
@@ -774,15 +842,31 @@ paths. **Why remote mode loads the remote runtime's Studio** rather than
 pointing Desktop's own at it: the two machines may run different versions, and a
 Studio whose Catalog differs from its runtime's breaks previews and Parameter
 controls; every use of `location.host` would need a parameter and the runtime
-CORS. **Why remote content gets no bridge:** a path picked on this disk means
-nothing to a runtime elsewhere, and a page from another machine, possibly
-another version, is not one to hand native dialogs to. **Why the launch page has
-a bridge of its own:** choosing where Desktop goes and starting runtimes is
-something Studio must never be able to do, and the launch page has no use for
-file pickers; two preloads keep each page to its own few functions. **Why the
-bridge is three functions:** anything a page can call in main is attack surface
-and is out of the CLI's reach; a file dialog is the one thing that needs the OS,
-and what it returns is only a path for a request the CLI can send too.
+CORS. **Why remote content gets no document bridge:** a path picked on this disk
+means nothing to a runtime elsewhere, and a page from another machine, possibly
+another version, is not one to hand native dialogs to. **Why it may have the
+menu bridge:** that bridge gives a page no power over Desktop. The page
+describes a menu, which main bounds, validates and draws as plain labels, and it
+hears which of its own items was clicked; it cannot read anything, open anything
+or choose where Desktop goes, so the worst a hostile page can do is label its
+own menu badly. **Why the launch page has a bridge of its own:** choosing where
+Desktop goes and starting runtimes is something Studio must never be able to do,
+and the launch page has no use for file pickers; three bridges keep each page to
+its own few functions. **Why Studio's menu is in the native bar:** one menu bar
+instead of two stacked ones, in the place the platform puts it, and the title
+bar carries what the in-page bar's middle did. **Why shortcuts are only shown
+there:** two handlers for Ctrl+S would save twice the day their conditions drift
+apart; the page's handler exists anyway, for the browser. **Why an Output window
+has no menu:** it sits on a projector in front of an audience, where a stray
+Ctrl+R, Ctrl+Minus or Ctrl+Shift+I must do nothing. **Why Connect to... keeps
+the session until a target is chosen:** leaving local mode stops the runtime and
+turns every Output dark, which looking at a list, a change of mind or a mistyped
+address must never cost; checking the target first keeps a failure from costing
+it either. **Why main writes the title:** only main knows where Studio comes
+from, and a page from another machine does not get to name the window. **Why the
+document bridge is three functions:** anything a page can call in main is attack
+surface and is out of the CLI's reach; a file dialog is the one thing that needs
+the OS, and what it returns is only a path for a request the CLI can send too.
 
 ## Settings
 
@@ -1030,19 +1114,36 @@ round trips are short enough, and the input channel gives sliders immediate
 local feedback.
 
 The shell is a menu bar (File, Edit, Blackout, the Installation's name), three
-resizable columns and a status strip. The left column is the navigator: the
-Installation as root row, then one collapsible section per entity kind. The
-right column is the inspector, showing the settings of whatever is selected. The
-center holds tabs; the Outputs tab shows one card per Output. Selection is
-Studio-local state and never reaches the runtime; the selected row and card
-carry an outline so the inspector's subject is visible at a glance. Rows with
-children open and close with a chevron: Output rows start open so their live
-sessions stay in view, Surface rows start closed so Masks and Paths do not crowd
-the list; creating a child or selecting one from an inspector opens its parent.
-Column sizes and section open states are remembered per browser in localStorage;
-row open states live in memory and reset with the Installation. An empty section
-says how to add its first entity, and an open row without children says so in
-one dim line.
+resizable columns and a status strip. The File and Edit menus are a **menu
+model** (`menu/menu-model.ts`): plain data, items of
+`{ id, label, shortcutLabel?, enabled, separatorBefore? }` computed from the
+document commands, the connection phase and whether the connection is free (a
+pinned one has no New, Open, Save As or Close), with one function,
+`runMenuCommand`, from an item's id to the command it runs. Two renderers draw
+it (`menu/app-menu.tsx` picks): in a browser the in-page bar (`menu-bar.tsx`, a
+Base UI menubar), and in Difracta Desktop the native menu bar, which gets the
+model through `window.difractaMenu.setMenu` whenever its JSON text differs and
+answers with ids through `onMenuCommand`. In Desktop the in-page bar is not
+rendered at all, except while the window is full screen, where Windows and Linux
+hide the native one; its Blackout toggle moves to the status strip and the
+Installation's name and path are in the window title. Shortcuts have one handler
+in both (`keyboard/shortcut-keys.tsx`), which calls `preventDefault()` for every
+key it takes; menus only show them. Why a model: a menu item added to one
+renderer would be missing from the other, and data is also what can cross to
+another process and be tested without rendering anything.
+
+The left column is the navigator: the Installation as root row, then one
+collapsible section per entity kind. The right column is the inspector, showing
+the settings of whatever is selected. The center holds tabs; the Outputs tab
+shows one card per Output. Selection is Studio-local state and never reaches the
+runtime; the selected row and card carry an outline so the inspector's subject
+is visible at a glance. Rows with children open and close with a chevron: Output
+rows start open so their live sessions stay in view, Surface rows start closed
+so Masks and Paths do not crowd the list; creating a child or selecting one from
+an inspector opens its parent. Column sizes and section open states are
+remembered per browser in localStorage; row open states live in memory and reset
+with the Installation. An empty section says how to add its first entity, and an
+open row without children says so in one dim line.
 
 Why per-entity folders: every entity kind contributes the same two pieces, a
 navigator section and an inspector, and they change together. Each kind lives in

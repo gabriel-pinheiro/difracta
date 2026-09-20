@@ -107,11 +107,19 @@ export const settings = {
     windowWidth: 1440,
     windowHeight: 900,
     /** The launch page's window: a chooser, so smaller than Studio's. */
-    launchWindowWidth: 760,
-    launchWindowHeight: 680,
+    launchWindowWidth: 980,
+    launchWindowHeight: 780,
     /** How long a runtime somewhere else gets to answer `/health` before Desktop says it cannot be reached. */
     remoteCheckTimeoutMs: 4_000,
     /** Runtimes connected to before that the launch page keeps; the oldest drop off. */
     rememberedRuntimesLimit: 12,
+    /**
+     * How long Desktop waits for more changes before it rebuilds the native
+     * menu, which cannot be edited in place.
+     */
+    menuRebuildDelayMs: 30,
+    /** The most items per menu, and the longest label, Desktop takes from a page for the native menu. */
+    pageMenuItemsLimit: 40,
+    pageMenuLabelLimit: 80,
   },
 } as const;

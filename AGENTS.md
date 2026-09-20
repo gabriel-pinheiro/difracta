@@ -48,14 +48,24 @@ near-synonyms.
   gestures are commands and requests, so a new one is reachable through
   `difracta run` or `difracta documents` at once; give the everyday ones a
   shortcut and check `difracta --help` reads well to an agent.
-- Desktop's preload bridge (`difracta-desktop/src/bridge-contract.ts`) carries
-  only what needs the operating system, such as a file dialog. Anything else
-  goes through the runtime as a command or request, so the CLI can do it too.
-  That bridge is for the local runtime's Studio only: a runtime elsewhere gets a
-  window with no preload. Desktop's launch page (`difracta-studio/src/launch/`)
-  has a bridge of its own (`launch-contract.ts`); it imports no client, app
-  shell or Visuals, and neither bridge grows to serve the other's page. In
-  `difracta-desktop`, keep what is pure apart from what needs Electron: the
+- Desktop has three preload bridges, each for one kind of page, and none grows
+  to serve another's. `window.difractaDesktop` (`bridge-contract.ts`) is for the
+  local runtime's Studio only and carries only what needs the operating system,
+  such as a file dialog; anything else goes through the runtime as a command or
+  request, so the CLI can do it too. `window.difractaLaunch`
+  (`launch-contract.ts`) is for the launch page (`difracta-studio/src/launch/`),
+  which chooses where Desktop goes and imports no client, app shell or Visuals.
+  `window.difractaMenu` (`menu-contract.ts`) goes to every Studio window, remote
+  ones too, so it must give the page no power over Desktop: the page describes
+  its menu, main validates it with Zod and draws it, and the page hears which
+  item was clicked. Never add to it anything a page from another machine should
+  not be able to do.
+- A Studio menu item is added to the menu model
+  (`difracta-studio/src/menu/menu-model.ts`), never to one renderer: the in-page
+  bar and Desktop's native menu both draw that model, and `runMenuCommand` is
+  the one place an item's id becomes a command. Its shortcut is handled in
+  `keyboard/shortcut-keys.tsx` only; menus show it.
+- In `difracta-desktop`, keep what is pure apart from what needs Electron: the
   `electron` module only exists inside the app, so a file with unit tests does
   not import it.
 - A Visual's or Filter's `notes` are what an agent reads before using it. Write

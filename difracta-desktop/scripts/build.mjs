@@ -3,6 +3,7 @@
 //
 //   dist/main.js       the main process (ESM)
 //   dist/preload.cjs   Studio's preload script; a sandboxed preload must be one CommonJS file
+//   dist/menu-preload.cjs    the preload of a Studio window showing a runtime elsewhere
 //   dist/launch-preload.cjs   the launch page's preload script
 //   dist/runtime.mjs   difracta-runtime and all it depends on, in one file, forked by main
 //   dist/studio, dist/output, dist/thumbnails   what that runtime serves
@@ -46,7 +47,7 @@ await build({
   external: ["electron"],
 });
 
-for (const preload of ["preload", "launch-preload"])
+for (const preload of ["preload", "menu-preload", "launch-preload"])
   await build({
     ...shared,
     entryPoints: [path.join(packageDir, `src/${preload}.ts`)],

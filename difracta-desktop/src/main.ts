@@ -11,11 +11,12 @@
  *     first launch, or a failure → the launch page, which starts one of those
  *   quit   → unsaved-changes prompt → windows close → runtime stops → exit
  *
- * `desktop-modes.ts` holds the moves between those; Runtime ▸ Switch… goes
- * back to the launch page.
+ * `desktop-modes.ts` holds the moves between those; File ▸ Connect to... opens
+ * the launch page again, over the session. `application-menu.ts` is the native
+ * menu bar, which in Desktop shows Studio's own File and Edit items.
  */
 import { watchRuntimes } from "@difracta/client/discovery";
-import { app } from "electron";
+import { app, nativeTheme } from "electron";
 import { hostname, networkInterfaces } from "node:os";
 
 import { DesktopModes } from "./desktop-modes.ts";
@@ -94,6 +95,10 @@ async function start(): Promise<void> {
 
 // A custom scheme has to be declared before the app is ready.
 registerLaunchScheme();
+
+// Studio is dark only, and in Desktop the native menu bar is Studio's menu, so
+// the bar and the native dialogs are dark too, whatever the OS theme is.
+nativeTheme.themeSource = "dark";
 
 // One Desktop per machine: the runtime's port is fixed, so a second launch
 // could not start one. The second instance gets no lock and quits, and

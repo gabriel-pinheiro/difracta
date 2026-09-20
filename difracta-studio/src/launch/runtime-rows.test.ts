@@ -26,18 +26,21 @@ describe("launch page rows", () => {
         title: "Difracta on stage-pc",
         found: stage,
         remembered: true,
+        current: false,
       },
       {
         address: "10.0.0.9:4800",
         title: "10.0.0.9:4800",
         found: undefined,
         remembered: true,
+        current: false,
       },
       {
         address: "10.0.0.7:4800",
         title: "Difracta on booth",
         found: undefined,
         remembered: true,
+        current: false,
       },
     ]);
   });
@@ -51,7 +54,16 @@ describe("launch page rows", () => {
     expect(rows[0]).toMatchObject({
       address: "10.0.0.5:4800",
       remembered: true,
+      current: false,
     });
+  });
+
+  it("marks the runtime Desktop is showing, found or only remembered", () => {
+    const remembered = [{ address: "10.0.0.9:4800", name: null }];
+    const current = (address: string): boolean[] =>
+      runtimeRows([stage], remembered, address).map((row) => row.current);
+    expect(current("10.0.0.5:4800")).toEqual([true, false]);
+    expect(current("10.0.0.9:4800")).toEqual([false, true]);
   });
 
   it("marks a runtime never connected to as not remembered", () => {

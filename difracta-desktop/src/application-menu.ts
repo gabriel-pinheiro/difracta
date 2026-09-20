@@ -1,73 +1,147 @@
-import { Menu, shell, type MenuItemConstructorOptions } from "electron";
+import { settings } from "@difracta/core";
+import { BrowserWindow, Menu, shell, type BaseWindow } from "electron";
+
+import { nativeMenuTemplate, type NativeMenuActions } from "./native-menu.ts";
+import { emptyPageMenu, type PageMenu } from "./page-menu.ts";
+import {
+  followMenuWindow,
+  registerMenuBridge,
+  sendMenuCommand,
+  type MenuWindow,
+} from "./menu-bridge.ts";
+
+/** The session's Studio window, as far as the menu cares. */
+export interface MenuStudio extends MenuWindow {
+  /** Whether Studio comes from the runtime on this computer. */
+  readonly local: boolean;
+}
 
 /**
- * The native menu, made of Electron's roles: items whose label, shortcut and
- * behaviour Electron supplies per platform. The Edit roles are what make
- * copy, paste and undo work in text fields on macOS, and macOS expects the
- * application menu first.
+ * Keeps the native menu bar in step with what Desktop shows. `native-menu.ts`
+ * says what is in the menu; this file is the Electron around it: whose menu
+ * each window gets, what the items do, and when to build it again.
  *
- * Documents (New, Open, Save…) are not here: Studio's own menu bar has them,
- * the same in a browser and in Desktop, and one handler per shortcut means
- * Ctrl+S can never save twice. A page sees a key before the menu does, so
- * Studio's Ctrl+Z still undoes in the Installation and Edit ▸ Undo's only
- * acts in a text field.
- *
- * The Runtime menu is Desktop's own: where Studio is coming from, and the way
- * back to the launch page. It is here and not in Studio because it is about
- * the app, not the Installation, and has to work whichever runtime's Studio
- * is showing. A menu cannot be edited once set, so this is called again
- * whenever `where` changes.
+ * A native menu cannot be edited once set, so every change means a new one:
+ * the page describing its items (`setMenu`, on every dirty flip), another
+ * session, the launch window coming or going. Changes arrive in bursts, so
+ * the rebuild waits `settings.desktop.menuRebuildDelayMs` for the last.
  */
-export function installApplicationMenu(options: {
-  readonly runtimeLog: string;
-  /** "This computer", "stage-pc — 10.0.0.5:4800"; undefined on the launch page. */
-  readonly where: string | undefined;
-  readonly onSwitch: () => void;
-}): void {
-  const template: MenuItemConstructorOptions[] = [
-    ...(process.platform === "darwin" ? [{ role: "appMenu" as const }] : []),
-    { role: "fileMenu" },
-    { role: "editMenu" },
-    {
-      label: "View",
-      submenu: [
-        { role: "reload" },
-        { role: "forceReload" },
-        { type: "separator" },
-        { role: "resetZoom" },
-        { role: "zoomIn" },
-        // The role's shortcut is Ctrl+Plus, which is Ctrl+Shift+= on most
-        // layouts; browsers also take the bare Ctrl+=, so a hidden twin does.
-        { role: "zoomIn", accelerator: "CommandOrControl+=", visible: false },
-        { role: "zoomOut" },
-        { type: "separator" },
-        { role: "togglefullscreen" },
-      ],
+export class ApplicationMenu {
+  readonly #options: {
+    readonly runtimeLog: string;
+    readonly onConnectTo: () => void;
+  };
+  #studio: MenuStudio | undefined;
+  #launchWindow: BrowserWindow | undefined;
+  #page: PageMenu = emptyPageMenu;
+  #timer: NodeJS.Timeout | undefined;
+
+  constructor(options: {
+    readonly runtimeLog: string;
+    readonly onConnectTo: () => void;
+  }) {
+    this.#options = options;
+    registerMenuBridge({
+      studio: () => this.#studio,
+      onMenu: (menu) => {
+        this.#page = menu;
+        this.#changed();
+      },
+    });
+    this.#apply();
+  }
+
+  /** Another session's Studio window, or none. What the last page described is forgotten. */
+  setStudio(studio: MenuStudio | undefined): void {
+    this.#studio = studio;
+    this.#page = emptyPageMenu;
+    if (studio !== undefined)
+      followMenuWindow(studio.window, () => {
+        if (this.#studio !== studio) return;
+        this.#page = emptyPageMenu;
+        this.#changed();
+      });
+    // At once: a window must never show the menu of the session before it.
+    this.#apply();
+  }
+
+  setLaunchWindow(window: BrowserWindow | undefined): void {
+    this.#launchWindow = window;
+    this.#apply();
+  }
+
+  #changed(): void {
+    clearTimeout(this.#timer);
+    this.#timer = setTimeout(
+      () => this.#apply(),
+      settings.desktop.menuRebuildDelayMs,
+    );
+  }
+
+  /**
+   * The application menu is the Studio window's while there is a session and
+   * the launch window's otherwise. On macOS that one menu is the whole story.
+   * On Windows and Linux each window carries its own bar, and
+   * `setApplicationMenu` hands its menu to every window there is, so the
+   * others are put right after it: the launch window opened over a session
+   * gets its smaller menu, and an Output window gets none at all, which also
+   * takes every menu shortcut away from it. A stray key on a projector's
+   * window must do nothing.
+   */
+  #apply(): void {
+    clearTimeout(this.#timer);
+    const studio = this.#studio;
+    const build = (kind: "studio" | "launch"): Menu =>
+      Menu.buildFromTemplate(
+        nativeMenuTemplate({
+          platform: process.platform,
+          kind,
+          page: this.#page,
+          local: studio?.local ?? false,
+          actions: this.#actions,
+        }),
+      );
+    Menu.setApplicationMenu(build(studio === undefined ? "launch" : "studio"));
+    if (process.platform === "darwin" || studio === undefined) return;
+    for (const window of BrowserWindow.getAllWindows())
+      if (window === this.#launchWindow) window.setMenu(build("launch"));
+      else if (window !== studio.window) window.removeMenu();
+  }
+
+  /** The focused window when it is one the View and Help items may act on: Studio or the launch page, never an Output. */
+  #ownWindow(window: BaseWindow | undefined): BrowserWindow | undefined {
+    return [this.#studio?.window, this.#launchWindow].find(
+      (own) => own !== undefined && own === window && !own.isDestroyed(),
+    );
+  }
+
+  readonly #actions: NativeMenuActions = {
+    pageCommand: (id, byKey) => {
+      const window = this.#studio?.window;
+      if (window === undefined || window.isDestroyed()) return;
+      if (!byKey) {
+        sendMenuCommand(window, id);
+        return;
+      }
+      // Only macOS gets here (see `pageItem`), with a key the page left
+      // alone. Studio leaves Undo and Redo alone inside a text field, where
+      // they belong to the typing, and macOS undoes typing through the menu.
+      if (id === "undo") window.webContents.undo();
+      else if (id === "redo") window.webContents.redo();
     },
-    {
-      label: "Runtime",
-      submenu: [
-        { label: options.where ?? "Not connected", enabled: false },
-        { type: "separator" },
-        {
-          label: "Switch…",
-          enabled: options.where !== undefined,
-          click: options.onSwitch,
-        },
-      ],
+    connectTo: () => this.#options.onConnectTo(),
+    zoom: (focused, change) => {
+      const contents = this.#ownWindow(focused)?.webContents;
+      if (contents === undefined) return;
+      // Half a level is the step of Electron's own zoom roles.
+      const step = change === "in" ? 0.5 : -0.5;
+      contents.setZoomLevel(
+        change === "reset" ? 0 : contents.getZoomLevel() + step,
+      );
     },
-    { role: "windowMenu" },
-    {
-      role: "help",
-      submenu: [
-        // Kept in production builds: it is how a problem on someone's rig gets looked at.
-        { role: "toggleDevTools" },
-        {
-          label: "Show Runtime Log",
-          click: () => shell.showItemInFolder(options.runtimeLog),
-        },
-      ],
-    },
-  ];
-  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+    toggleDevTools: (focused) =>
+      this.#ownWindow(focused)?.webContents.toggleDevTools(),
+    reloadStudio: () => this.#studio?.window.webContents.reload(),
+    showRuntimeLog: () => shell.showItemInFolder(this.#options.runtimeLog),
+  };
 }

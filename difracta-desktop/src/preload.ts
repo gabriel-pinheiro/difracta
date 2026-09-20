@@ -6,24 +6,21 @@
  * function sends one fixed message, so a page can ask for a file picker and
  * nothing else.
  *
+ * This is the preload for the runtime on this computer, so it hands out two
+ * bridges: `window.difractaMenu` (the native menu; every Studio window has
+ * it, see `menu-expose.ts`) and `window.difractaDesktop` below.
+ *
  * A sandboxed preload cannot `import` other files at run time, so
  * `scripts/build.mjs` bundles this one into a single CommonJS file.
  */
 import { contextBridge, ipcRenderer } from "electron";
 
-import {
-  BRIDGE_ORIGIN_ARGUMENT,
-  channels,
-  type DifractaDesktop,
-} from "./bridge-contract.ts";
+import { channels, type DifractaDesktop } from "./bridge-contract.ts";
+import { exposeMenu } from "./menu-expose.ts";
 
 // Main names the origin of the runtime it started. Only a page from there gets
-// the bridge: a path on this machine's disk means nothing to any other runtime.
-const bridgeOrigin = process.argv
-  .find((argument) => argument.startsWith(BRIDGE_ORIGIN_ARGUMENT))
-  ?.slice(BRIDGE_ORIGIN_ARGUMENT.length);
-
-if (bridgeOrigin !== undefined && location.origin === bridgeOrigin) {
+// the bridges: a path on this machine's disk means nothing to any other runtime.
+if (exposeMenu() !== undefined) {
   // Open requests that arrive before Studio subscribes wait here.
   const waiting: string[] = [];
   let listener: ((path: string) => void) | undefined;

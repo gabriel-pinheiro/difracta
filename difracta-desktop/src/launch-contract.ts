@@ -28,12 +28,26 @@ export interface LaunchRemembered {
   readonly name: string | null;
 }
 
+/**
+ * What Desktop is showing while the launch page is open over it (File ▸
+ * Connect to...): the runtime on this computer, or the one at `address`.
+ */
+export type LaunchCurrent =
+  | { readonly kind: "local" }
+  | { readonly kind: "remote"; readonly address: string };
+
 export type LaunchResult =
   { readonly ok: true } | { readonly ok: false; readonly reason: string };
 
 export interface DifractaLaunch {
   /** Why Desktop shows this page instead of resuming (a runtime that did not answer), or null. */
   problem(): Promise<string | null>;
+  /**
+   * The runtime in use, which the page marks instead of offering; null when
+   * the page is all there is (the first launch, a resume that failed).
+   * Choosing it anyway only closes the page.
+   */
+  current(): Promise<LaunchCurrent | null>;
   /**
    * Starts a runtime on this computer and opens its Studio. Resolves once it
    * is up, which takes a moment, or with the reason it is not (the port is
@@ -55,6 +69,7 @@ export interface DifractaLaunch {
 
 export const launchChannels = {
   problem: "difracta-launch:problem",
+  current: "difracta-launch:current",
   runLocal: "difracta-launch:run-local",
   connect: "difracta-launch:connect",
   runtimes: "difracta-launch:runtimes",

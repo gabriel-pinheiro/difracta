@@ -32,8 +32,10 @@ npm run desktop -- show.difracta     # opens that file on this computer
 
 Difracta Desktop is the Electron application (`difracta-desktop`). Its launch
 page asks once where Studio should come from, and later launches resume that
-choice; Runtime ▸ Switch… in the native menu (Alt shows it on Windows and Linux)
-brings the page back.
+choice. File ▸ Connect to... in the menu bar opens the page again over what is
+running, and nothing stops until another target is chosen there. Studio's File
+and Edit menus are in the native menu bar, and the window title names the
+Installation and its file, or the runtime it is open in.
 
 - **Run on this computer** starts a runtime of Desktop's own on port 4800 with
   `--documents free`, shows its Studio in a window, and opens and saves
@@ -146,5 +148,10 @@ npm run build
 
 `npm run test:gpu` renders the compositor's pixel tests in headless Chromium,
 which `npx playwright install chromium` provides once. `npm run test:desktop`
-launches the built Desktop through Playwright and needs a display
-(`xvfb-run -a npm run test:desktop` without one); run `npm run build` first.
+launches the built Desktop through Playwright and needs a display; run
+`npm run build` first. To keep its windows off your screen, or without a screen,
+run it under Xvfb:
+`env -u WAYLAND_DISPLAY XDG_SESSION_TYPE=x11 xvfb-run -a npm run test:desktop`.
+With `WAYLAND_DISPLAY` set Electron would open its windows on the real Wayland
+session; the suite drops it by itself inside `xvfb-run`, and the long form says
+the same by hand.

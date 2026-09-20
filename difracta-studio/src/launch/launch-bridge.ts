@@ -24,12 +24,19 @@ export interface LaunchRemembered {
   readonly name: string | null;
 }
 
+/** What Desktop is showing while this page is open over it: this computer's runtime, or the one at `address`. */
+export type LaunchCurrent =
+  | { readonly kind: "local" }
+  | { readonly kind: "remote"; readonly address: string };
+
 export type LaunchResult =
   { readonly ok: true } | { readonly ok: false; readonly reason: string };
 
 export interface DifractaLaunch {
   /** Why Desktop shows this page instead of resuming, or null. */
   problem(): Promise<string | null>;
+  /** The runtime in use, marked instead of offered; null when this page is all Desktop shows. */
+  current(): Promise<LaunchCurrent | null>;
   /** Starts a runtime on this computer; resolves once it is up, or with why it is not. */
   runLocal(): Promise<LaunchResult>;
   /** Opens the Studio of the runtime at `host`, `host:port` or a URL. */

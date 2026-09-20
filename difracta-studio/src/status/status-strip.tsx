@@ -6,6 +6,8 @@ import { useDocumentCommands } from "@/documents/document-commands";
 import { useCalibration } from "@/lib/calibration";
 import { useClient, useDocumentPath, useSignal } from "@/lib/client";
 import { cn } from "@/lib/utils";
+import { BlackoutToggle } from "@/menu/blackout-toggle";
+import { useInPageBar } from "@/menu/use-in-page-bar";
 
 import { liveSessions, sessionList } from "@/entities/output/output-live";
 
@@ -15,6 +17,9 @@ export function StatusStrip() {
   const phase = useSignal(client.phase);
   const { selected, view, revert } = useDocumentCommands();
   const connected = phase === "connected";
+  // Blackout lives in the in-page bar; where Difracta Desktop's native menu
+  // stands in for that bar, it stays in reach from here.
+  const inPageBar = useInPageBar();
 
   return (
     <footer className="flex h-6 shrink-0 items-center gap-3 border-t bg-sidebar px-2 text-[0.6875rem] text-muted-foreground">
@@ -47,6 +52,9 @@ export function StatusStrip() {
         )}
       </span>
       {view !== undefined && <DocumentStatus view={view} />}
+      {view !== undefined && !inPageBar && (
+        <BlackoutToggle view={view} className="py-0 text-[0.6875rem]" />
+      )}
     </footer>
   );
 }

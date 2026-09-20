@@ -2,22 +2,19 @@ import { settings } from "@difracta/core";
 import { app, BrowserWindow } from "electron";
 import path from "node:path";
 
-import { installApplicationMenu } from "./application-menu.ts";
+import { ApplicationMenu } from "./application-menu.ts";
+import { switchSession } from "./connect-to.ts";
 import type { DesktopStateStore } from "./desktop-state.ts";
 import { registerFileDialogs } from "./file-dialogs.ts";
 import { mayLeaveRemoteFor } from "./file-from-os-prompt.ts";
-import { registerLaunchBridge } from "./launch-bridge.ts";
-import {
-  launchChannels,
-  type LaunchRemembered,
-  type LaunchResult,
-} from "./launch-contract.ts";
+import type { LaunchCurrent, LaunchResult } from "./launch-contract.ts";
+import { LaunchPage } from "./launch-page.ts";
 import type { LaunchRuntimes } from "./launch-runtimes.ts";
-import { createLaunchWindow } from "./launch-window.ts";
 import { startLocalSession } from "./local-session.ts";
-import { forgetRuntime, rememberRuntime } from "./remembered-runtimes.ts";
+import { rememberRuntime } from "./remembered-runtimes.ts";
 import { startRemoteSession } from "./remote-session.ts";
 import { addressLabel, parseRuntimeAddress } from "./runtime-address.ts";
+import { checkRuntime } from "./runtime-health.ts";
 import type { RuntimeProcess } from "./runtime-process.ts";
 import type { Session, SessionStart } from "./session.ts";
 import type { StartUpMode } from "./start-up-mode.ts";
@@ -30,24 +27,36 @@ export interface DesktopModesOptions {
   readonly runtimes: LaunchRuntimes;
 }
 
+/** What a person chose on the launch page. */
+type Target =
+  | { readonly kind: "local" }
+  | {
+      readonly kind: "remote";
+      readonly origin: string;
+      readonly name: string | null;
+    };
+
+const BUSY = "Difracta is already starting a Runtime.";
+
 /**
  * Which of its three faces Desktop shows, and the way from one to the next:
  *
  *   launch page ── Run on this computer ──▶ local session ──┐
  *        ▲    └─── Connect to a Runtime ──▶ remote session ─┤
- *        └──────────── Runtime ▸ Switch… ◀──────────────────┘
+ *        └──────────── File ▸ Connect to... ◀───────────────┘
  *
- * There is one session at most, and the launch page shows only while there is
- * none, so a runtime is never started while another is still stopping.
+ * There is one session at most. On the first launch the launch page is all
+ * there is; from File ▸ Connect to... it opens over the running session,
+ * which goes on until another target is chosen there (`connect-to.ts` has the
+ * order of that), so a runtime is never started while another is stopping.
  */
 export class DesktopModes {
   readonly #options: DesktopModesOptions;
+  readonly #menu: ApplicationMenu;
+  readonly #launchPage: LaunchPage;
   #session: Session | undefined;
-  #launchWindow: BrowserWindow | undefined;
   /** A session is starting or being left; whatever else is asked waits or is refused. */
   #busy = false;
-  /** Why the launch page shows instead of the mode that was to resume. */
-  #problem: string | null = null;
   /** A file the OS asked for while busy. */
   #pendingFile: string | undefined;
 
@@ -58,23 +67,21 @@ export class DesktopModes {
       window: () => this.#session?.window,
       currentFile: () => this.#session?.currentFile(),
     });
-    registerLaunchBridge({
-      problem: () => this.#problem,
-      runLocal: () => this.#runLocal(undefined),
+    this.#launchPage = new LaunchPage(options, {
+      current: () => this.#current(),
+      runLocal: () => this.#choose({ kind: "local" }),
       connect: (address) => this.#connect(address),
-      runtimes: () => options.runtimes.list(),
-      remembered: async () =>
-        this.#remembered((await options.state.read()).remembered),
-      forget: (address) => this.#forget(address),
     });
-    this.#installMenu();
+    this.#menu = new ApplicationMenu({
+      runtimeLog: options.runtime.logFile,
+      onConnectTo: () => this.connectTo(),
+    });
   }
 
   async startUp(mode: StartUpMode): Promise<void> {
     if (mode.kind === "launch-page") this.#showLaunchPage(null);
     else if (mode.kind === "local") await this.#runLocal(mode.file);
-    else if (mode.kind === "remote")
-      await this.#enter(() => startRemoteSession(mode));
+    else if (mode.kind === "remote") await this.#enter(this.#remote(mode));
     else await this.#runLocal(mode.file, mode.url);
   }
 
@@ -90,20 +97,18 @@ export class DesktopModes {
   }
 
   focus(): void {
-    const window = this.#session?.window ?? this.#launchWindow;
+    // The launch page, when open, is in front of Studio.
+    const window = this.#launchPage.window ?? this.#session?.window;
     if (window === undefined) return;
     if (window.isMinimized()) window.restore();
     window.focus();
   }
 
-  /** Runtime ▸ Switch…: leave the session, its question asked first, then the launch page. */
-  async switchRuntime(): Promise<void> {
+  /** File ▸ Connect to...: the launch page, over the session, which goes on. */
+  connectTo(): void {
     if (this.#busy || this.#session === undefined) return;
-    this.#busy = true;
-    const left = await this.#leave().finally(() => {
-      this.#busy = false;
-    });
-    if (left) this.#showLaunchPage(null);
+    this.#showLaunchPage(null);
+    this.focus();
   }
 
   /** The last thing before exit: the link closed, the runtime stopped and waited for. */
@@ -139,12 +144,66 @@ export class DesktopModes {
     const parsed = parseRuntimeAddress(address);
     if (!parsed.ok) return parsed;
     const { origin } = parsed;
-    const { remembered } = await this.#options.state.read();
-    const name =
-      this.#options.runtimes.nameAt(origin) ??
-      remembered.find((known) => known.origin === origin)?.name ??
-      null;
-    return this.#enter(() => startRemoteSession({ origin, name }));
+    const name = await this.#launchPage.knownName(origin);
+    return this.#choose({ kind: "remote", origin, name });
+  }
+
+  #remote(target: {
+    readonly origin: string;
+    readonly name: string | null;
+  }): () => Promise<SessionStart> {
+    const preload = path.join(this.#options.distDir, "menu-preload.cjs");
+    return () => startRemoteSession({ ...target, preload });
+  }
+
+  #current(): LaunchCurrent | null {
+    const session = this.#session;
+    if (session === undefined) return null;
+    return session.bridgeOrigin === undefined
+      ? { kind: "remote", address: addressLabel(session.origin) }
+      : { kind: "local" };
+  }
+
+  /**
+   * A choice on the launch page. With no session it simply starts. Over a
+   * session it is a switch: checked first, then the session is left, its
+   * question asked, then the new one starts. Choosing what is in use, or
+   * cancelling that question, closes the launch page and changes nothing.
+   */
+  async #choose(target: Target): Promise<LaunchResult> {
+    const start = (): Promise<LaunchResult> =>
+      target.kind === "local"
+        ? this.#runLocal(undefined)
+        : this.#enter(this.#remote(target));
+    const session = this.#session;
+    if (session === undefined) return start();
+    if (this.#busy) return { ok: false, reason: BUSY };
+
+    this.#busy = true;
+    const outcome = await switchSession({
+      isCurrent:
+        target.kind === "local"
+          ? session.bridgeOrigin !== undefined
+          : session.origin === target.origin,
+      check: () =>
+        target.kind === "local"
+          ? this.#options.runtime.checkPort()
+          : checkRuntime(target.origin),
+      leave: () => this.#leave(),
+      start: () => {
+        this.#busy = false;
+        return start();
+      },
+    }).finally(() => {
+      this.#busy = false;
+    });
+    if (outcome.kind === "current" || outcome.kind === "stayed")
+      this.#launchPage.close();
+    // A switch that started something has passed the file on already (`#enter`).
+    this.#openPendingFile();
+    return outcome.kind === "refused" || outcome.kind === "failed"
+      ? { ok: false, reason: outcome.reason }
+      : { ok: true };
   }
 
   /**
@@ -154,7 +213,7 @@ export class DesktopModes {
    */
   async #enter(start: () => Promise<SessionStart>): Promise<LaunchResult> {
     if (this.#busy || this.#session !== undefined)
-      return { ok: false, reason: "Difracta is already starting a Runtime." };
+      return { ok: false, reason: BUSY };
     this.#busy = true;
     let result: LaunchResult;
     try {
@@ -169,25 +228,33 @@ export class DesktopModes {
     } finally {
       this.#busy = false;
     }
-    if (!result.ok && this.#launchWindow === undefined)
+    if (!result.ok && this.#launchPage.window === undefined)
       this.#showLaunchPage(result.reason);
 
+    this.#openPendingFile();
+    return result;
+  }
+
+  /** A file the OS asked for while Desktop was busy gets its turn. */
+  #openPendingFile(): void {
     const file = this.#pendingFile;
     this.#pendingFile = undefined;
     if (file !== undefined) this.openFromOs(file);
-    return result;
   }
 
   #adopt(session: Session): void {
     this.#session = session;
-    this.#problem = null;
     // Without its Studio window Desktop has nothing to show for itself, so
     // closing Studio quits, on macOS too. Switching ends the session first.
     session.window.on("closed", () => {
       if (this.#session === session) app.quit();
     });
-    this.#installMenu();
-    this.#launchWindow?.close();
+    this.#menu.setStudio({
+      window: session.window,
+      origin: session.origin,
+      local: session.bridgeOrigin !== undefined,
+    });
+    this.#launchPage.close();
 
     const { resume } = session;
     if (resume !== undefined)
@@ -209,15 +276,19 @@ export class DesktopModes {
   async #leave(): Promise<boolean> {
     const session = this.#session;
     if (session === undefined) return true;
-    if (!(await session.mayLeave())) return false;
+    // The question belongs to the window in front.
+    if (!(await session.mayLeave(this.#launchPage.window ?? session.window)))
+      return false;
     this.#session = undefined;
+    // The launch page outlives the Studio window it was opened over.
+    this.#launchPage.window?.setParentWindow(null);
     // Studio, and the Output pages opened from it. `destroy` skips the
     // question `close` would ask again.
     for (const window of BrowserWindow.getAllWindows())
-      if (window !== this.#launchWindow) window.destroy();
+      if (window !== this.#launchPage.window) window.destroy();
     await session.end();
     this.#options.runtimes.setLocalPort(undefined);
-    this.#installMenu();
+    this.#menu.setStudio(undefined);
     return true;
   }
 
@@ -233,50 +304,15 @@ export class DesktopModes {
   }
 
   #showLaunchPage(problem: string | null): void {
-    this.#problem = problem;
-    if (this.#launchWindow !== undefined) return;
-    const { runtimes, distDir } = this.#options;
-    const window = createLaunchWindow(path.join(distDir, "launch-preload.cjs"));
-    this.#launchWindow = window;
-    runtimes.open((list) => {
-      if (!window.isDestroyed())
-        window.webContents.send(launchChannels.runtimesChanged, list);
-    });
-    window.on("closed", () => {
-      runtimes.close();
-      this.#launchWindow = undefined;
-      // Closed by the person with nothing chosen: that is quitting.
-      if (this.#session === undefined && !this.#busy) app.quit();
-    });
-  }
-
-  #remembered(
-    remembered: readonly { origin: string; name: string | null }[],
-  ): LaunchRemembered[] {
-    return remembered.map(({ origin, name }) => ({
-      address: addressLabel(origin),
-      name,
-    }));
-  }
-
-  async #forget(address: string): Promise<LaunchRemembered[]> {
-    const parsed = parseRuntimeAddress(address);
-    const state = await this.#options.state.update((known) =>
-      parsed.ok
-        ? {
-            ...known,
-            remembered: forgetRuntime(known.remembered, parsed.origin),
-          }
-        : known,
-    );
-    return this.#remembered(state.remembered);
-  }
-
-  #installMenu(): void {
-    installApplicationMenu({
-      runtimeLog: this.#options.runtime.logFile,
-      where: this.#session?.where,
-      onSwitch: () => void this.switchRuntime(),
+    this.#launchPage.show({
+      problem,
+      parent: this.#session?.window,
+      onOpen: (window) => this.#menu.setLaunchWindow(window),
+      onClosed: () => {
+        this.#menu.setLaunchWindow(undefined);
+        // Closed by the person with nothing chosen: that is quitting.
+        if (this.#session === undefined && !this.#busy) app.quit();
+      },
     });
   }
 }

@@ -1,5 +1,6 @@
 import { app } from "electron";
 import { access } from "node:fs/promises";
+import { homedir } from "node:os";
 
 import { mayClose } from "./close-prompt.ts";
 import type { DesktopStateStore } from "./desktop-state.ts";
@@ -9,7 +10,11 @@ import { RuntimeLink } from "./runtime-link.ts";
 import type { RuntimeProcess } from "./runtime-process.ts";
 import type { SessionStart } from "./session.ts";
 import { startUpFile } from "./start-up-file.ts";
-import { createStudioWindow, requestOpen } from "./studio-window.ts";
+import {
+  createStudioWindow,
+  followTitle,
+  requestOpen,
+} from "./studio-window.ts";
 
 async function exists(file: string): Promise<boolean> {
   return access(file).then(
@@ -20,7 +25,7 @@ async function exists(file: string): Promise<boolean> {
 
 /**
  * Local mode: fork the runtime, wait for `/health`, connect as a client, open
- * the Studio window with the document bridge.
+ * the Studio window with the document bridge and the menu bridge.
  *
  * With `devOrigin` (`--studio-url`, development only) nothing is forked: the
  * Studio dev server there stands in, proxying to a runtime already running on
@@ -66,6 +71,7 @@ export async function startLocalSession(options: {
     preload: options.preload,
     mayClose: (closing) => mayClose(closing, link),
   });
+  followTitle(window, link, { kind: "local", home: homedir() });
   // The dev server's runtime was running before this file was asked for.
   if (devOrigin !== undefined && options.file !== undefined)
     requestOpen(window, options.file);
@@ -76,12 +82,13 @@ export async function startLocalSession(options: {
       where:
         devOrigin === undefined
           ? "This computer"
-          : `Studio dev server — ${addressLabel(devOrigin)}`,
+          : `Studio dev server (${addressLabel(devOrigin)})`,
+      origin,
       resume: devOrigin === undefined ? { kind: "local" } : undefined,
       window,
       bridgeOrigin: origin,
       currentFile: () => link.document()?.path ?? lastFile,
-      mayLeave: () => mayClose(window, link),
+      mayLeave: (over) => mayClose(over, link),
       end: async () => {
         link.close();
         await runtime.stop();

@@ -56,15 +56,22 @@ export class RuntimeProcess {
     this.logFile = path.join(app.getPath("logs"), "runtime.log");
   }
 
+  /** Whether the runtime's port is free to start on; also asked before a session elsewhere is left for this computer. */
+  async checkPort(): Promise<RuntimeStart> {
+    return (await portIsFree(this.port))
+      ? { ok: true }
+      : {
+          ok: false,
+          reason: `Port ${String(this.port)} is already in use, probably by another Difracta runtime on this machine. Stop it, then start Difracta again.`,
+        };
+  }
+
   /** Forks the runtime and resolves once it answers `/health`, or says why it will not. */
   async start(file: string | undefined): Promise<RuntimeStart> {
     // Asked first, because a `/health` answered by some other runtime already
     // on the port would pass for ours.
-    if (!(await portIsFree(this.port)))
-      return {
-        ok: false,
-        reason: `Port ${String(this.port)} is already in use, probably by another Difracta runtime on this machine. Stop it, then start Difracta again.`,
-      };
+    const port = await this.checkPort();
+    if (!port.ok) return port;
 
     // A runtime is started again after a switch away and back.
     this.#exitCode = undefined;

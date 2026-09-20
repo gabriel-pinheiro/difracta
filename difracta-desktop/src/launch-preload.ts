@@ -9,6 +9,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import {
   launchChannels,
   type DifractaLaunch,
+  type LaunchCurrent,
   type LaunchRemembered,
   type LaunchResult,
   type LaunchRuntime,
@@ -19,6 +20,10 @@ if (isLaunchPage(location.href)) {
   const bridge: DifractaLaunch = {
     problem: () =>
       ipcRenderer.invoke(launchChannels.problem) as Promise<string | null>,
+    current: () =>
+      ipcRenderer.invoke(
+        launchChannels.current,
+      ) as Promise<LaunchCurrent | null>,
     runLocal: () =>
       ipcRenderer.invoke(launchChannels.runLocal) as Promise<LaunchResult>,
     connect: (address) =>

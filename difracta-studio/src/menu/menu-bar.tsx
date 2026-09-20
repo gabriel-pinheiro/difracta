@@ -1,5 +1,4 @@
-import type { DocumentView } from "@difracta/client";
-import { useEffect } from "react";
+import { Fragment } from "react";
 
 import {
   Menubar,
@@ -11,31 +10,29 @@ import {
   MenubarTrigger,
 } from "@/components/ui/menubar";
 import { useDocumentCommands } from "@/documents/document-commands";
-import { useClient, useDocumentPath, useSignal } from "@/lib/client";
-import { cn } from "@/lib/utils";
-import { shortcuts } from "@/shortcuts";
+
+import { BlackoutToggle } from "./blackout-toggle";
+import type { MenuItemModel, MenuModel } from "./menu-model";
 
 /** Menus size to their content, not to the trigger, so items and shortcuts stay on one line. */
 const menuClass = "w-auto min-w-48 whitespace-nowrap";
 
-/** The application bar: File and Edit menus, Blackout, the Installation's name. */
-export function MenuBar() {
-  const client = useClient();
-  const phase = useSignal(client.phase);
-  const commands = useDocumentCommands();
-  const { selected, view } = commands;
-  const connected = phase === "connected";
-  const canRevert =
-    (selected?.path ?? null) !== null && selected?.dirty === true;
+/**
+ * The in-page application bar, the menu model's renderer in a browser: File
+ * and Edit menus, Blackout, the Installation's name and file.
+ */
+export function MenuBar({
+  model,
+  onCommand,
+}: {
+  readonly model: MenuModel;
+  readonly onCommand: (id: string) => void;
+}) {
+  const { selected, view } = useDocumentCommands();
   const name =
     selected === undefined
       ? undefined
       : `${selected.name}${selected.dirty ? "*" : ""}`;
-
-  useEffect(() => {
-    document.title =
-      name === undefined ? "Difracta Studio" : `${name} – Difracta Studio`;
-  }, [name]);
 
   return (
     <header className="grid h-8 shrink-0 grid-cols-[1fr_auto_1fr] items-center border-b bg-sidebar px-1 text-sidebar-foreground">
@@ -44,85 +41,8 @@ export function MenuBar() {
           Difracta
         </span>
         <Menubar className="h-auto rounded-none border-0 bg-transparent p-0">
-          <MenubarMenu>
-            <MenubarTrigger>File</MenubarTrigger>
-            <MenubarContent align="start" className={menuClass}>
-              {commands.free && (
-                <>
-                  <MenubarItem disabled={!connected} onClick={commands.create}>
-                    New Installation…
-                  </MenubarItem>
-                  <MenubarItem disabled={!connected} onClick={commands.open}>
-                    Open Installation…
-                    <MenubarShortcut>{shortcuts.open.label}</MenubarShortcut>
-                  </MenubarItem>
-                  <MenubarSeparator />
-                </>
-              )}
-              <MenubarItem
-                disabled={selected === undefined}
-                onClick={commands.save}
-              >
-                Save
-                <MenubarShortcut>{shortcuts.save.label}</MenubarShortcut>
-              </MenubarItem>
-              {commands.free && (
-                <MenubarItem
-                  disabled={selected === undefined}
-                  onClick={commands.saveAs}
-                >
-                  Save As…
-                  <MenubarShortcut>{shortcuts.saveAs.label}</MenubarShortcut>
-                </MenubarItem>
-              )}
-              <MenubarItem disabled={!canRevert} onClick={commands.revert}>
-                Revert to Saved
-              </MenubarItem>
-              <MenubarSeparator />
-              <MenubarItem
-                disabled={selected === undefined}
-                onClick={commands.downloadCopy}
-              >
-                Download a Copy
-              </MenubarItem>
-              <MenubarItem
-                disabled={!connected}
-                onClick={commands.replaceFromFile}
-              >
-                Replace from File…
-              </MenubarItem>
-              {commands.free && (
-                <>
-                  <MenubarSeparator />
-                  <MenubarItem
-                    disabled={selected === undefined}
-                    onClick={commands.close}
-                  >
-                    Close Installation
-                  </MenubarItem>
-                </>
-              )}
-            </MenubarContent>
-          </MenubarMenu>
-          <MenubarMenu>
-            <MenubarTrigger>Edit</MenubarTrigger>
-            <MenubarContent align="start" className={menuClass}>
-              <MenubarItem
-                disabled={selected === undefined}
-                onClick={commands.undo}
-              >
-                Undo
-                <MenubarShortcut>{shortcuts.undo.label}</MenubarShortcut>
-              </MenubarItem>
-              <MenubarItem
-                disabled={selected === undefined}
-                onClick={commands.redo}
-              >
-                Redo
-                <MenubarShortcut>{shortcuts.redo.label}</MenubarShortcut>
-              </MenubarItem>
-            </MenubarContent>
-          </MenubarMenu>
+          <ModelMenu label="File" items={model.file} onCommand={onCommand} />
+          <ModelMenu label="Edit" items={model.edit} onCommand={onCommand} />
         </Menubar>
         {view !== undefined && <BlackoutToggle view={view} />}
       </div>
@@ -147,26 +67,34 @@ export function MenuBar() {
   );
 }
 
-/** Performance control, always in reach: written through the input channel, not undoable. */
-function BlackoutToggle({ view }: { readonly view: DocumentView }) {
-  const client = useClient();
-  const blackout =
-    useDocumentPath<boolean>(view, ["operational", "blackout"]) ?? false;
+function ModelMenu({
+  label,
+  items,
+  onCommand,
+}: {
+  readonly label: string;
+  readonly items: readonly MenuItemModel[];
+  readonly onCommand: (id: string) => void;
+}) {
   return (
-    <button
-      type="button"
-      aria-pressed={blackout}
-      className={cn(
-        "rounded-md px-2 py-1 text-xs font-medium",
-        blackout
-          ? "bg-destructive text-white hover:bg-destructive/90"
-          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-      )}
-      onClick={() =>
-        client.input(view.documentId, "installation/blackout", !blackout)
-      }
-    >
-      Blackout
-    </button>
+    <MenubarMenu>
+      <MenubarTrigger>{label}</MenubarTrigger>
+      <MenubarContent align="start" className={menuClass}>
+        {items.map((item) => (
+          <Fragment key={item.id}>
+            {item.separatorBefore === true && <MenubarSeparator />}
+            <MenubarItem
+              disabled={!item.enabled}
+              onClick={() => onCommand(item.id)}
+            >
+              {item.label}
+              {item.shortcutLabel !== undefined && (
+                <MenubarShortcut>{item.shortcutLabel}</MenubarShortcut>
+              )}
+            </MenubarItem>
+          </Fragment>
+        ))}
+      </MenubarContent>
+    </MenubarMenu>
   );
 }

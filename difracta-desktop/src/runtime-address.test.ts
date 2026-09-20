@@ -63,7 +63,7 @@ describe("runtime address", () => {
 
   it("names a runtime elsewhere by its machine and its address", () => {
     expect(remoteLabel("http://10.0.0.5:4800", "Difracta on stage-pc")).toBe(
-      "stage-pc — 10.0.0.5:4800",
+      "stage-pc (10.0.0.5:4800)",
     );
     expect(remoteLabel("http://10.0.0.5:4800", null)).toBe("10.0.0.5:4800");
   });

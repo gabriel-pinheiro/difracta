@@ -9,6 +9,8 @@ export interface RuntimeRow {
   readonly found: LaunchRuntime | undefined;
   /** Connected to before; only such a row can be forgotten. */
   readonly remembered: boolean;
+  /** The runtime Desktop is showing right now, which is marked, not offered. */
+  readonly current: boolean;
 }
 
 /**
@@ -21,6 +23,8 @@ export interface RuntimeRow {
 export function runtimeRows(
   runtimes: readonly LaunchRuntime[],
   remembered: readonly LaunchRemembered[],
+  /** The address of the runtime in use, if it is one elsewhere. */
+  current?: string,
 ): RuntimeRow[] {
   const isFound = (known: LaunchRemembered): boolean =>
     runtimes.some(
@@ -37,6 +41,7 @@ export function runtimeRows(
         (known) =>
           known.address === runtime.address || known.name === runtime.name,
       ),
+      current: runtime.address === current,
     })),
     ...remembered
       .filter((known) => !isFound(known))
@@ -45,6 +50,7 @@ export function runtimeRows(
         title: known.name ?? known.address,
         found: undefined,
         remembered: true,
+        current: known.address === current,
       })),
   ];
 }
