@@ -17,10 +17,12 @@ export interface RuntimeConfig {
   readonly openPath: string | undefined;
   readonly studioDist: string | undefined;
   readonly outputDist: string | undefined;
+  /** The Catalog's thumbnails; undefined serves the ones inside `@difracta/visuals`. */
+  readonly thumbnailsDir: string | undefined;
   readonly autosaveIntervalMs: number;
   /** OSC and OSCQuery port; undefined keeps the door closed. */
   readonly oscPort: number | undefined;
-  /** Announce the runtime on the local network with Zeroconf. */
+  /** Announce the runtime on the local network with Zeroconf; one bound to loopback never is. */
   readonly discovery: boolean;
 }
 
@@ -76,6 +78,7 @@ export function configFromEnvironment(
     outputDist:
       env.DIFRACTA_OUTPUT_DIST ??
       path.join(packageRoot, "difracta-output", "dist"),
+    thumbnailsDir: nonEmpty(env.DIFRACTA_THUMBNAILS_DIR),
     autosaveIntervalMs: settings.autosave.delayMs,
     oscPort:
       values["no-osc"] === true || env.DIFRACTA_NO_OSC === "1"

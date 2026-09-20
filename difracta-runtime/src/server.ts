@@ -8,7 +8,10 @@ import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 
 import type { RuntimeConfig } from "./config.ts";
-import { RuntimeAdvertisement } from "./discovery/advertisement.ts";
+import {
+  reachableFromNetwork,
+  RuntimeAdvertisement,
+} from "./discovery/advertisement.ts";
 import { BonjourAnnouncer } from "./discovery/bonjour-announcer.ts";
 import { registerDocumentRoutes } from "./documents/document-routes.ts";
 import { DocumentStore } from "./documents/document-store.ts";
@@ -80,7 +83,7 @@ export async function buildRuntime(
 
   // Thumbnails of the Catalog, one per definition, for Studio's browser.
   await app.register(fastifyStatic, {
-    root: fileURLToPath(thumbnailsRoot),
+    root: config.thumbnailsDir ?? fileURLToPath(thumbnailsRoot),
     prefix: "/catalog/",
     decorateReply: false,
   });
@@ -132,7 +135,8 @@ export async function buildRuntime(
           log(`OSC is off: ${String(error)}`);
         }
       }
-      if (config.discovery) {
+      // A runtime bound to loopback has nobody on the network to tell.
+      if (config.discovery && reachableFromNetwork(config.host)) {
         const { port } = app.server.address() as AddressInfo;
         advertisement = new RuntimeAdvertisement({
           store,

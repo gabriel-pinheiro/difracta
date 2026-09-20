@@ -51,6 +51,21 @@ export function instanceName(host: string, port: number): string {
   return `${settings.discovery.name} on ${machine}${suffix}`;
 }
 
+/**
+ * Whether a runtime listening on `host` can be reached from another machine.
+ * One bound to loopback (127.0.0.0/8, `::1`, `localhost`) cannot, so
+ * announcing it would list a runtime nobody on the network could open.
+ */
+export function reachableFromNetwork(host: string): boolean {
+  const bare = host.toLowerCase().replace(/^\[|\]$/g, "");
+  return !(
+    bare === "localhost" ||
+    bare === "::1" ||
+    /^127(\.\d{1,3}){3}$/.test(bare) ||
+    /^::ffff:127(\.\d{1,3}){3}$/.test(bare)
+  );
+}
+
 /** Puts the service on the network; `bonjour-announcer.ts` is the real one. */
 export interface Announcer {
   /** Announces the service with this TXT record, in place of what it announced before. */

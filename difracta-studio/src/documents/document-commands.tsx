@@ -3,6 +3,7 @@ import type { DocumentSummary } from "@difracta/protocol";
 import {
   createContext,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -18,7 +19,8 @@ import {
   pickDocumentFile,
   replaceFromFile,
 } from "./document-transfer";
-import { filePathRequest } from "./file-path-request";
+import { desktopBridge } from "./desktop-bridge";
+import { requestFilePath } from "./file-path-request";
 
 /**
  * Every document-level action Studio exposes (menu items, shortcuts): new,
@@ -38,6 +40,8 @@ export interface DocumentCommands {
   readonly view: DocumentView | undefined;
   readonly create: () => void;
   readonly open: () => void;
+  /** Opens this file without asking which: Difracta Desktop passing on one the OS opened. */
+  readonly openPath: (path: string) => void;
   readonly save: () => void;
   readonly saveAs: () => void;
   readonly revert: () => void;
@@ -100,6 +104,8 @@ export function DocumentCommandsProvider({
         },
       });
     };
+    const showNameDialog = (request: NameRequest): void =>
+      setDialog({ kind: "name", request });
     const history = (name: "history.undo" | "history.redo"): void => {
       if (selected === undefined) return;
       void client.command(selected.id, name, {}).catch(() => undefined);
@@ -131,12 +137,19 @@ export function DocumentCommandsProvider({
       open: () => {
         if (!free) return;
         afterDiscardCheck("Opening another Installation", (discard) =>
-          setDialog({
-            kind: "name",
-            request: filePathRequest("open", selected?.path ?? null, (path) =>
+          requestFilePath({
+            purpose: "open",
+            current: selected,
+            showDialog: showNameDialog,
+            onPath: (path) =>
               run(() => client.request("documents.open", { path, discard })),
-            ),
           }),
+        );
+      },
+      openPath: (path) => {
+        if (!free) return;
+        afterDiscardCheck("Opening another Installation", (discard) =>
+          run(() => client.request("documents.open", { path, discard })),
         );
       },
       save: () => {
@@ -146,11 +159,11 @@ export function DocumentCommandsProvider({
       },
       saveAs: () => {
         if (selected === undefined || !free) return;
-        setDialog({
-          kind: "name",
-          request: filePathRequest("save", selected.path, (path) =>
-            saveTo(selected.id, path),
-          ),
+        requestFilePath({
+          purpose: "save",
+          current: selected,
+          showDialog: showNameDialog,
+          onPath: (path) => saveTo(selected.id, path),
         });
       },
       revert: () => {
@@ -206,6 +219,13 @@ export function DocumentCommandsProvider({
       redo: () => history("history.redo"),
     };
   }, [client, selected, free]);
+
+  // A file double-clicked in the OS while Desktop runs goes through the same
+  // open as the menu's, unsaved-changes question included.
+  useEffect(
+    () => desktopBridge()?.onOpenRequest(commands.openPath),
+    [commands],
+  );
 
   const closeDialog = (): void => setDialog(undefined);
   return (

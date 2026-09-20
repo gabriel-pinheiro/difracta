@@ -377,6 +377,14 @@ moment the performer asks for it.
 The browser UI used to calibrate an Installation, compose Scenes, edit selected
 Layers, and control playback. Do not call the whole application `Control`.
 
+### Desktop
+
+The installable application: a window showing Studio, with a Runtime it starts
+on the same machine and stops when it quits, native dialogs for opening and
+saving Installation files, and the operating system's ways of opening one (a
+double click, recent documents). Studio inside Desktop is the same Studio a
+browser shows. Do not call it `the app`, `the Electron app` or `the shell`.
+
 ### Output page
 
 The fullscreen browser experience that renders one Output's Projection Frames on

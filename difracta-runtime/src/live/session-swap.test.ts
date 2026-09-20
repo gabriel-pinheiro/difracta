@@ -27,6 +27,7 @@ beforeEach(async () => {
     openPath: undefined,
     studioDist: undefined,
     outputDist: undefined,
+    thumbnailsDir: undefined,
     autosaveIntervalMs: 60_000,
     oscPort: undefined,
     discovery: false,

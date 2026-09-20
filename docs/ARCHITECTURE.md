@@ -10,8 +10,13 @@ the decision is not re-litigated every time someone touches the area.
 ```text
 Studio (web) ──────────────┐
 Output pages (browsers) ───┼── websocket /live ──▶ Runtime ──▶ .difracta files
-difracta CLI (agents) ─────┘
+difracta CLI (agents) ─────┤
+Desktop (main process) ────┘
 ```
+
+Desktop is the same topology in one installable application: it starts a runtime
+on the machine, shows that runtime's Studio in a window, and is itself one more
+client of it (see Desktop below).
 
 The runtime is authoritative. It holds one Installation at a time as a Document,
 applies commands, replicates per-property deltas, keeps undo history, and saves
@@ -43,6 +48,7 @@ consistent.
 | `difracta-output`   | One display's page; no React                                                                                                                         | client, render                   |
 | `difracta-studio`   | React authoring and performance UI                                                                                                                   | client, visuals                  |
 | `difracta-cli`      | `difracta` command for shells and agents                                                                                                             | client                           |
+| `difracta-desktop`  | Electron application: forks a bundled runtime, shows its Studio, native file dialogs and OS file opening                                             | client, runtime (bundled)        |
 
 **Why:** Studio and Output are separate packages because an Output page runs in
 smart-TV browsers and must stay tiny. Everything that can be pure lives in
@@ -527,14 +533,16 @@ leaves the mark.
 
 The runtime announces itself with Zeroconf as `_difracta._tcp` on its HTTP port
 (`difracta-runtime/src/discovery/`), whether or not the OSC door is open;
-`--no-discovery` keeps it quiet. The instance is "Difracta on <hostname>", with
-the port added when it is not the default, so two runtimes on one machine do not
-claim one name. Its TXT record carries `version` and `document`, the open
-Installation's name, left out when nothing is open. The record follows the
-document: a different one is announced once the changes have been quiet for
-`settings.discovery.txtUpdateDelayMs`. `bonjour-service` cannot change the
-record of a published service, so that is an unpublish and a publish, and a
-browser sees the runtime leave and come back at once. `difracta runtimes`
+`--no-discovery` keeps it quiet, and a runtime bound to a loopback host
+(`127.0.0.0/8`, `::1`, `localhost`) never announces, since nobody on the network
+could reach it; `/health` reports `discovery: false` for both. The instance is
+"Difracta on <hostname>", with the port added when it is not the default, so two
+runtimes on one machine do not claim one name. Its TXT record carries `version`
+and `document`, the open Installation's name, left out when nothing is open. The
+record follows the document: a different one is announced once the changes have
+been quiet for `settings.discovery.txtUpdateDelayMs`. `bonjour-service` cannot
+change the record of a published service, so that is an unpublish and a publish,
+and a browser sees the runtime leave and come back at once. `difracta runtimes`
 browses the service for `settings.discovery.browseMs` and lists who answered,
 this machine included, with the `address:port` that `--url` takes. Zeroconf
 errors are logged and never stop the runtime.
@@ -636,12 +644,82 @@ with an autosave sidecar is the recovery model those tools use. Pinned is the
 default because a runtime driving a show is reached from other machines, and the
 show it holds should not depend on what any of them does in a File menu.
 
+## Desktop
+
+`difracta-desktop` is an Electron application with three kinds of process. The
+**main process** is Node: it owns the app's life cycle, windows, native dialogs
+and the runtime child. The **runtime** is the ordinary `difracta-runtime`,
+bundled with everything it imports into one file (`dist/runtime.mjs`, by
+`scripts/build.mjs` with esbuild) and forked with Electron's `utilityProcess`,
+started `--documents free` on every interface. Each **window** is a sandboxed
+Chromium renderer showing a page the runtime serves: Studio from
+`http://127.0.0.1:<port>/studio/`, and an Output page opened from Studio in a
+window of its own with background throttling off. The build copies the built
+Studio, Output page and Catalog thumbnails next to the bundle, and main names
+them to the runtime through `DIFRACTA_STUDIO_DIST`, `DIFRACTA_OUTPUT_DIST` and
+`DIFRACTA_THUMBNAILS_DIR`, so `dist/` runs without the repository or `tsx`.
+
+Start-up: take the single-instance lock; pick the file (the one on the command
+line, else the last one opened if it still exists, else none); check the port is
+free and fork the runtime; ask `/health` with a backoff until it answers, or
+show a native error when the port is taken, the child exits or
+`settings.desktop.runtimeStartTimeoutMs` passes; connect to it; open the Studio
+window. Main's connection is a `@difracta/client` of kind `desktop`
+(`runtime-link.ts`). From the document summary every client receives it learns
+the open file's path, which it remembers in its user data folder and gives to
+the OS's recent documents, and whether there are unsaved changes. A runtime that
+started with nothing open is sent `documents.new`, so Desktop lands in a working
+Studio; an untouched Installation is not dirty, so that never causes a question
+later. The runtime's output goes to `runtime.log` under Electron's logs folder
+(Help ▸ Show Runtime Log), the previous launch's kept beside it.
+
+Studio in Desktop gets `window.difractaDesktop` from the preload script:
+`pickOpenPath()`, `pickSavePath(suggestedName)` and `onOpenRequest(callback)`.
+Studio feature-detects it in `documents/file-path-request.ts`: with the bridge,
+Open and Save As show native dialogs and then send the same `documents.open` and
+`documents.save` with the absolute path; without it, in a browser on a free
+runtime, the path is typed. A file opened from the OS while Desktop runs (a
+second launch, which the lock turns into a message to the first; `open-file` on
+macOS) is handed to Studio through `onOpenRequest` and goes through Studio's own
+open, unsaved-changes question included. The preload exposes the bridge only to
+the local runtime's origin, main answers only IPC whose sender frame is from
+that origin, windows refuse to navigate away from it, other links open in the
+person's browser, and every window runs with `contextIsolation`, `sandbox` and
+no `nodeIntegration`.
+
+Closing the Studio window with unsaved changes asks Save, Don't Save or Cancel
+natively; Save without a file goes through the Save dialog, Don't Save closes
+the document as discarded so its autosave does not return as a recovery. Closing
+Studio quits Desktop, and quitting stops the runtime: main posts `shutdown` on
+the child's parent port, the runtime flushes its autosave, closes and exits, and
+is killed only after `settings.desktop.runtimeStopTimeoutMs`. The native menu is
+Electron's roles (Edit, View, Window, Help with Developer Tools) and hides
+behind Alt on Windows and Linux; New, Open and Save stay in Studio's menu bar,
+so each shortcut has one handler.
+
+**Why the runtime is a child process:** it is the same program a mini-PC runs
+standalone, so Desktop adds no second way of holding an Installation, a busy
+runtime cannot freeze the window, and either side can crash and leave the
+other's log. `utilityProcess` starts it from Electron's own binary, so an
+installed Desktop needs no Node. **Why a message and not a signal to stop it:**
+Windows has no signal a handler can catch, and an unflushed autosave is lost
+work. **Why Studio is loaded from the runtime's URL** rather than from files
+inside the app: Studio bundles `@difracta/visuals`, so the Studio a runtime
+serves always matches that runtime's Catalog, and `location.host` is the
+runtime, exactly as in a browser; Desktop's Studio and a laptop's browser tab
+are the same client. Loopback is also what makes the free runtime accept its
+paths. **Why the bridge is three functions:** anything a page can call in main
+is attack surface and is out of the CLI's reach; a file dialog is the one thing
+that needs the OS, and what it returns is only a path for a request the CLI can
+send too.
+
 ## Settings
 
 `difracta-core/src/settings.ts` holds every tunable in one object: history
 coalesce window and limit, autosave delay, default host, port and document mode,
 the discovery service and its delays, client reconnect backoff, CLI connect
-timeout. Packages import from there instead of carrying their own literals.
+timeout, Desktop's waits for its runtime to start and stop. Packages import from
+there instead of carrying their own literals.
 
 ## Rendering
 

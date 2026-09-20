@@ -95,4 +95,16 @@ export const settings = {
   cli: {
     connectTimeoutMs: 3_000,
   },
+  desktop: {
+    /** How long Desktop waits for the runtime it started to answer `/health`. */
+    runtimeStartTimeoutMs: 15_000,
+    /** The first wait between two `/health` attempts; doubles up to the maximum. */
+    healthPollInitialMs: 50,
+    healthPollMaxMs: 500,
+    /** How long the runtime gets to flush and exit on quit before it is killed. */
+    runtimeStopTimeoutMs: 5_000,
+    /** The Studio window's size on first show. */
+    windowWidth: 1440,
+    windowHeight: 900,
+  },
 } as const;

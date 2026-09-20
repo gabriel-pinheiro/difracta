@@ -48,6 +48,12 @@ near-synonyms.
   gestures are commands and requests, so a new one is reachable through
   `difracta run` or `difracta documents` at once; give the everyday ones a
   shortcut and check `difracta --help` reads well to an agent.
+- Desktop's preload bridge (`difracta-desktop/src/bridge-contract.ts`) carries
+  only what needs the operating system, such as a file dialog. Anything else
+  goes through the runtime as a command or request, so the CLI can do it too. In
+  `difracta-desktop`, keep what is pure apart from what needs Electron: the
+  `electron` module only exists inside the app, so a file with unit tests does
+  not import it.
 - A Visual's or Filter's `notes` are what an agent reads before using it. Write
   them when adding one: how it reads on a Surface, which Parameters interact,
   cost, what to stack it with.
@@ -71,5 +77,7 @@ Node 24. `npm run dev` starts the runtime (4800), Output dev server (4801) and
 Studio dev server (4802). `npm test`, `npm run typecheck`, `npm run lint`,
 `npm run format:check`, `npm run build`. `npm run test:gpu` renders the
 compositor's pixel tests (`difracta-render/gpu/`) in headless Chromium, which
-`npx playwright install chromium` provides once. The CLI is
-`node difracta-cli/bin/difracta.mjs` (or `npx difracta` inside the repo).
+`npx playwright install chromium` provides once. `npm run desktop` builds and
+launches Difracta Desktop; `npm run test:desktop` drives the built app through
+Playwright and needs a display. The CLI is `node difracta-cli/bin/difracta.mjs`
+(or `npx difracta` inside the repo).

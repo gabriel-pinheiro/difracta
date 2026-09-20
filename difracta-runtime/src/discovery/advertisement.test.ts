@@ -2,9 +2,11 @@ import { createBuiltInRegistry } from "@difracta/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DocumentStore } from "../documents/document-store.ts";
+import { buildRuntime } from "../server.ts";
 import {
   discoveryTxt,
   instanceName,
+  reachableFromNetwork,
   RuntimeAdvertisement,
   type Announcer,
   type DiscoveryTxt,
@@ -23,6 +25,44 @@ class FakeAnnouncer implements Announcer {
     return Promise.resolve();
   }
 }
+
+describe("reachable from the network", () => {
+  it("is every host but loopback", () => {
+    for (const host of ["0.0.0.0", "::", "192.168.1.20", "stage.local"])
+      expect(reachableFromNetwork(host), host).toBe(true);
+    for (const host of [
+      "127.0.0.1",
+      "127.8.0.1",
+      "::1",
+      "[::1]",
+      "::ffff:127.0.0.1",
+      "localhost",
+      "LOCALHOST",
+    ])
+      expect(reachableFromNetwork(host), host).toBe(false);
+  });
+
+  it("keeps a runtime bound to loopback off the network", async () => {
+    const runtime = await buildRuntime({
+      host: "127.0.0.1",
+      port: 0,
+      documents: "free",
+      openPath: undefined,
+      studioDist: undefined,
+      outputDist: undefined,
+      thumbnailsDir: undefined,
+      autosaveIntervalMs: 60_000,
+      oscPort: undefined,
+      discovery: true,
+    });
+    const address = await runtime.listen();
+    const health = (await (await fetch(`${address}/health`)).json()) as {
+      discovery: boolean;
+    };
+    expect(health.discovery).toBe(false);
+    await runtime.close();
+  });
+});
 
 describe("discovery TXT record", () => {
   it("carries the version and the open Installation's name, and no path", () => {

@@ -23,6 +23,23 @@ Studio and open the URL its inspector shows in a browser on the machine driving
 that projector. All three servers listen on every interface, so a laptop, the
 mini-PC and the projector's browser can sit on one LAN.
 
+## Desktop
+
+```sh
+npm run desktop                      # reopens the last Installation, or starts an untitled one
+npm run desktop -- show.difracta     # opens that file
+```
+
+Difracta Desktop is the Electron application (`difracta-desktop`): it starts a
+runtime of its own on port 4800 with `--documents free`, shows its Studio in a
+window, and opens and saves Installations with the operating system's file
+dialogs. The script builds the Output page, Studio and Desktop, then launches
+the build; stop `npm run dev` first, since both want port 4800, or move Desktop
+with `DIFRACTA_PORT`. The runtime's log is under Help ▸ Show Runtime Log. On a
+Linux that restricts unprivileged user namespaces (Ubuntu 23.10 and later) the
+script explains how to give Electron its sandbox helper, or to run this
+development build with `-- --no-sandbox`.
+
 ## Production
 
 ```sh
@@ -62,6 +79,7 @@ Flags and their environment variables (`difracta-runtime/src/config.ts`):
 | `--no-discovery`      | `DIFRACTA_NO_DISCOVERY=1` | announced              |
 |                       | `DIFRACTA_STUDIO_DIST`    | `difracta-studio/dist` |
 |                       | `DIFRACTA_OUTPUT_DIST`    | `difracta-output/dist` |
+|                       | `DIFRACTA_THUMBNAILS_DIR` | the Catalog's own      |
 
 File paths in requests are absolute paths on the runtime's machine; the CLI
 resolves a relative one against the shell's directory first.
@@ -69,7 +87,8 @@ resolves a relative one against the shell's directory first.
 The runtime announces itself on the local network with Zeroconf as
 `_difracta._tcp`, named "Difracta on <hostname>", with its version and the open
 Installation's name. `difracta runtimes` lists the ones that answer, with the
-address to pass to `--url`; `--no-discovery` keeps a runtime out of the list.
+address to pass to `--url`; `--no-discovery` keeps a runtime out of the list,
+and one bound to a loopback `--host` is never in it.
 
 ## Show control
 
@@ -110,4 +129,6 @@ npm run build
 ```
 
 `npm run test:gpu` renders the compositor's pixel tests in headless Chromium,
-which `npx playwright install chromium` provides once.
+which `npx playwright install chromium` provides once. `npm run test:desktop`
+launches the built Desktop through Playwright and needs a display
+(`xvfb-run -a npm run test:desktop` without one); run `npm run build` first.
