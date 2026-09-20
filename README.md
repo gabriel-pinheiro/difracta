@@ -32,15 +32,22 @@ node difracta-runtime/bin/difracta-runtime.mjs <file.difracta>
 
 The runtime serves the built Studio at `/studio/` (the root redirects there),
 the Output page at `/output/`, thumbnails at `/catalog/`, a `/health` JSON
-endpoint and the live WebSocket at `/live`. It holds the file given on the
-command line or in `DIFRACTA_FILE`, creating it when it does not exist, and
-refuses to start without one. Autosaves land next to the file and are recovered
-on the next open.
+endpoint, the open Installation as a file at `/document` and the live WebSocket
+at `/live`. It holds the file given on the command line or in `DIFRACTA_FILE`,
+creating it when it does not exist, and refuses to start without one. Autosaves
+land next to the file and are recovered on the next open.
 
 Started like this the runtime is **pinned**: clients save and revert its
 Installation but cannot create, open or close one, nor save it to another path.
 `--documents free` lifts that for clients on the runtime's own machine, and
 makes the file optional; clients elsewhere on the network stay pinned.
+
+In both modes any client can download a copy of the Installation
+(`difracta documents download`, Studio's File menu, or `GET /document`) and
+replace its content from a file of their own
+(`difracta documents replace <file>`, or `PUT /document`). The replaced
+Installation has unsaved changes until someone saves, and reverting brings the
+saved one back.
 
 Flags and their environment variables (`difracta-runtime/src/config.ts`):
 

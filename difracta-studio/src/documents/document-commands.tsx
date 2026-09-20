@@ -13,11 +13,17 @@ import { useClient, useSignal } from "@/lib/client";
 
 import { ConfirmDialog, type ConfirmRequest } from "./confirm-dialog";
 import { NameDialog, type NameRequest } from "@/components/name-dialog";
+import {
+  downloadCopy,
+  pickDocumentFile,
+  replaceFromFile,
+} from "./document-transfer";
 import { filePathRequest } from "./file-path-request";
 
 /**
  * Every document-level action Studio exposes (menu items, shortcuts): new,
- * open, save, save as, revert, close, undo, redo. Owns the dialogs those
+ * open, save, save as, revert, download a copy, replace from file, close,
+ * undo, redo. Owns the dialogs those
  * actions need and reports failures as toasts. The runtime holds one
  * Installation; `selected` is its summary and `view` its live document,
  * opened with live state so the Outputs monitor sees sessions.
@@ -35,6 +41,8 @@ export interface DocumentCommands {
   readonly save: () => void;
   readonly saveAs: () => void;
   readonly revert: () => void;
+  readonly downloadCopy: () => void;
+  readonly replaceFromFile: () => void;
   readonly close: () => void;
   readonly undo: () => void;
   readonly redo: () => void;
@@ -160,6 +168,22 @@ export function DocumentCommandsProvider({
                 client.request("documents.revert", { documentId: selected.id }),
               ),
           },
+        });
+      },
+      downloadCopy: () => {
+        if (selected !== undefined) downloadCopy();
+      },
+      replaceFromFile: () => {
+        void pickDocumentFile().then((file) => {
+          if (file === undefined) return;
+          afterDiscardCheck("The file's content", (discard) =>
+            run(async () => {
+              await replaceFromFile(file, discard);
+              toast.success(
+                `Replaced with “${file.name}”. Save to keep it, or Revert to Saved to go back.`,
+              );
+            }),
+          );
         });
       },
       close: () => {

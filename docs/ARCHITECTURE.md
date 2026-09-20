@@ -459,6 +459,9 @@ replaced one.
   paths on the runtime's machine. A pinned connection is refused `new`, `open`,
   `close` and a `save` to another path.
 
+The document as a file does not travel on the socket: `GET /document` downloads
+a copy and `PUT /document` replaces the content (see Files).
+
 **Why a live root instead of a second channel:** telemetry, calibration state
 and playback all need per-path subscriptions exactly like document values, so
 they ride the same view and the same hooks. Keeping them out of the revision
@@ -556,12 +559,39 @@ enforces for every client and tells each connection in `welcome`:
 
 Requests name files by absolute path and the runtime never lists a folder; the
 CLI resolves a relative path against its own working directory before sending
-it. Studio shows New, Open, Save As and Close only to a free connection.
+it. Studio shows New, Open, Save As and Close only to a free connection;
+Download a Copy and Replace from File are there for both.
 
 A new Installation starts clean and becomes dirty with its first change.
 Replacing a document with unsaved changes needs an explicit discard, which also
 removes that file's autosaves so the discarded state does not come back as a
 recovery.
+
+The open document also travels as a file over HTTP, in both modes and for every
+peer, because only content moves and no path on the runtime's disk is named.
+`GET /document` answers the text Save would write now, unsaved changes included,
+as an attachment named after the file (or the Installation when it has none),
+without touching the disk or the dirty state; 404 when nothing is open.
+`PUT /document` takes a `.difracta` file's text as its body, validates it like
+open does and replaces the document's content, keeping the path. The document is
+dirty afterwards and nothing is written until someone saves, so the saved show
+is still on disk and `documents.revert` undoes a bad upload; undo history does
+not survive it. It answers the summary, or `{ error }` with 409 over unsaved
+changes unless `?discard=true`, 422 for a file that is not an Installation and
+413 past `settings.runtime.maxDocumentBytes`. The same Installation is replaced
+in place, in one delta, as revert does. A file holding another Installation
+keeps its own id: it takes the session's place on the same path, so clients see
+a new summary and resubscribe as on open, and revert reopens the saved file the
+same way. With nothing open the file becomes a new unsaved document. Studio's
+Download a Copy and Replace from File, and `difracta documents download` and
+`replace`, are these two routes.
+
+**Why HTTP and not a `request`:** a browser downloads a GET natively, and the
+upload mirrors it. A file's text inside a live message would be escaped into
+JSON and parsed twice, and a frame past the socket's limit closes the connection
+instead of answering an error, where HTTP answers 413. PUT, unlike a form POST,
+is preflighted by browsers when it comes from another origin, and the runtime
+answers no preflight, so a web page elsewhere cannot replace the show.
 
 Save is explicit and atomic: the content is written to a sibling temporary file,
 flushed to disk, then renamed over the target, so a crash leaves either the old

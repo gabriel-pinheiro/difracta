@@ -78,6 +78,19 @@ export function MenuBar() {
               <MenubarItem disabled={!canRevert} onClick={commands.revert}>
                 Revert to Saved
               </MenubarItem>
+              <MenubarSeparator />
+              <MenubarItem
+                disabled={selected === undefined}
+                onClick={commands.downloadCopy}
+              >
+                Download a Copy
+              </MenubarItem>
+              <MenubarItem
+                disabled={!connected}
+                onClick={commands.replaceFromFile}
+              >
+                Replace from File…
+              </MenubarItem>
               {commands.free && (
                 <>
                   <MenubarSeparator />

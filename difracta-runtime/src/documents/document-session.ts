@@ -143,10 +143,14 @@ export class DocumentSession {
   /**
    * Replaces the whole content in place, as one delta that sets every table
    * of the Document, keeping the id, the subscribers and the operational
-   * state. Used to revert to the file as saved. History is cleared and the
-   * document is clean afterwards.
+   * state. History is cleared. Reverting to the file as saved leaves the
+   * document clean; content that came from elsewhere leaves it `dirty`.
    */
-  replaceDocument(document: Document, sessionId: string): void {
+  replaceDocument(
+    document: Document,
+    sessionId: string,
+    options: { readonly dirty?: boolean } = {},
+  ): void {
     const patches: Patch[] = Object.keys(document)
       .filter((table) => table !== "operational")
       .map((table) => ({
@@ -160,9 +164,10 @@ export class DocumentSession {
       patches,
       sessionId,
     );
-    this.#dirty = false;
+    this.#dirty = options.dirty ?? false;
     this.#recovered = false;
     this.#notifyMeta();
+    if (this.#dirty) for (const listener of this.#changeListeners) listener();
   }
 
   summary(): DocumentSummary {

@@ -17,6 +17,7 @@ export default defineConfig({
     proxy: {
       "/live": { target: runtime, ws: true },
       "/health": { target: runtime },
+      "/document": { target: runtime },
       "/catalog": { target: runtime },
       "/output": { target: output, ws: true },
     },

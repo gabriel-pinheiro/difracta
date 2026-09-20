@@ -7,6 +7,7 @@ import { access } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 import type { RuntimeConfig } from "./config.ts";
+import { registerDocumentRoutes } from "./documents/document-routes.ts";
 import { DocumentStore } from "./documents/document-store.ts";
 import { LiveServer } from "./live/live-server.ts";
 import { OscServer } from "./osc/osc-server.ts";
@@ -70,6 +71,7 @@ export async function buildRuntime(
     // The socket's own peer, not `request.ip`, which a proxy header can set.
     live.accept(socket, request.socket.remoteAddress);
   });
+  registerDocumentRoutes(app, store);
 
   // Thumbnails of the Catalog, one per definition, for Studio's browser.
   await app.register(fastifyStatic, {

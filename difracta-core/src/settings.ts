@@ -11,6 +11,13 @@ export const settings = {
     /** Where the live websocket is served. */
     livePath: "/live",
     /**
+     * Where the open document travels as a `.difracta` file: GET downloads a
+     * copy, PUT replaces its content.
+     */
+    documentPath: "/document",
+    /** The largest `.difracta` file a PUT there may carry. */
+    maxDocumentBytes: 64 * 1024 * 1024,
+    /**
      * Document mode when `--documents` is not given. `pinned` keeps the file
      * the runtime was started with; `free` lets loopback clients create, open
      * and close Installations and save them elsewhere.

@@ -28,6 +28,10 @@ Working from a shell
              "health" also says "documents pinned" or "documents free": a
              pinned runtime keeps its one file and refuses documents new,
              open, close and save <other path>.
+             "documents download [path]" writes a copy here, a backup;
+             "documents replace <file>" puts a local file's content in its
+             place, unsaved until "documents save" ("documents revert" goes
+             back). Both work on any runtime, from any machine.
 
   Order      A create lands first in its Group (a Layer: on top). Pass
              "after": <sibling id|name> to place it below that sibling, or

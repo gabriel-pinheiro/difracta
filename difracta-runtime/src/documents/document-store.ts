@@ -3,18 +3,19 @@ import type { DocumentSummary } from "@difracta/protocol";
 import path from "node:path";
 
 import {
-  autosavePathFor,
   DOCUMENT_FILE_EXTENSION,
   ensureExtension,
   modifiedAt,
   newerAutosave,
+  parseDocumentFile,
   readDocumentFile,
   removeAutosaves,
   serializeDocument,
   writeFileAtomically,
 } from "./document-file.ts";
-import { Autosave } from "./autosave.ts";
+import type { Autosave } from "./autosave.ts";
 import { DocumentSession } from "./document-session.ts";
+import { followWithAutosave } from "./session-autosave.ts";
 
 export interface DocumentStoreOptions {
   readonly registry: CommandRegistry;
@@ -29,12 +30,12 @@ export type StoreResult<TResult> =
   | { readonly ok: true; readonly result: TResult }
   | { readonly ok: false; readonly error: string };
 
-const UNSAVED_CHANGES =
+export const UNSAVED_CHANGES =
   "The open Installation has unsaved changes; save first or discard them.";
 
 /**
  * The one Document this runtime has open, or none. Owns new/open/save/
- * revert/close and the autosave sidecar while the document is dirty. Files
+ * revert/replace/close and the autosave sidecar while the document is dirty. Files
  * are named by absolute path; who may name one is the live server's call.
  *
  * New and open replace the current document. They refuse while it has
@@ -163,7 +164,11 @@ export class DocumentStore {
     return { ok: true, result: session.summary() };
   }
 
-  /** Reloads the file as last saved over the open document and drops autosaves. */
+  /**
+   * Reloads the file as last saved over the open document and drops
+   * autosaves. A file holding another Installation, as after `replaceContent`,
+   * takes the session's place the way open does.
+   */
   async revert(documentId: string): Promise<StoreResult<DocumentSummary>> {
     const session = this.session(documentId);
     if (session === undefined)
@@ -175,15 +180,52 @@ export class DocumentStore {
       };
     const loaded = await readDocumentFile(session.path);
     if (!loaded.ok) return loaded;
-    if (loaded.document.installation.id !== session.id)
-      return {
-        ok: false,
-        error: "The file on disk is a different Installation.",
-      };
     await this.#settleAutosave();
     await removeAutosaves(session.path);
+    if (loaded.document.installation.id !== session.id) {
+      const reopened = new DocumentSession(
+        loaded.document,
+        this.#options.registry,
+        { path: session.path },
+      );
+      await this.#replace(reopened);
+      return { ok: true, result: reopened.summary() };
+    }
     session.replaceDocument(loaded.document, "runtime");
     return { ok: true, result: session.summary() };
+  }
+
+  /**
+   * Replaces the open document's content with the text of a `.difracta` file
+   * sent by a client, keeping the path. The document is dirty and nothing is
+   * written until someone saves, so `revert` brings the saved show back. The
+   * same Installation is replaced in place, in one delta; another one keeps
+   * its own id and takes the session's place the way open does, so clients
+   * resubscribe. With nothing open it becomes a new, unsaved document.
+   */
+  async replaceContent(
+    text: string,
+    discard = false,
+  ): Promise<StoreResult<DocumentSummary>> {
+    const current = this.#session;
+    if (current?.dirty === true && !discard)
+      return { ok: false, error: UNSAVED_CHANGES };
+    const parsed = parseDocumentFile(text);
+    if (!parsed.ok) return parsed;
+    if (current?.id !== parsed.document.installation.id) {
+      const session = new DocumentSession(
+        parsed.document,
+        this.#options.registry,
+        { path: current?.path ?? null, dirty: true },
+      );
+      await this.#replace(session);
+      return { ok: true, result: session.summary() };
+    }
+    // The discarded state must not come back as a recovery.
+    await this.#settleAutosave();
+    if (current.path !== null) await removeAutosaves(current.path);
+    current.replaceDocument(parsed.document, "runtime", { dirty: true });
+    return { ok: true, result: current.summary() };
   }
 
   async save(
@@ -252,38 +294,20 @@ export class DocumentStore {
     this.#session = next;
     this.#autosave = undefined;
     if (next !== undefined) {
-      const autosave = new Autosave({
+      const { autosave, stop } = followWithAutosave(next, {
         delayMs: this.#options.autosaveIntervalMs ?? settings.autosave.delayMs,
         maxWaitMs:
           this.#options.autosaveMaxWaitMs ?? settings.autosave.maxWaitMs,
-        write: () => this.#writeSidecar(next),
+        log: this.#options.log,
       });
       this.#autosave = autosave;
       const unsubscribeMeta = next.onMeta(() => this.#emit());
-      const unsubscribeChange = next.onChange(() => autosave.changed());
       this.#unsubscribeSession = () => {
         unsubscribeMeta();
-        unsubscribeChange();
+        stop();
       };
-      if (next.dirty) autosave.schedule();
     }
     this.#emit();
-  }
-
-  /** Writes the session's sidecar; false when there is nothing to write or it failed. */
-  async #writeSidecar(session: DocumentSession): Promise<boolean> {
-    if (!session.dirty || session.path === null) return false;
-    try {
-      const sidecar = autosavePathFor(session.path);
-      await writeFileAtomically(sidecar, serializeDocument(session.document));
-      await removeAutosaves(session.path, sidecar);
-      return true;
-    } catch (error) {
-      this.#options.log?.(
-        `Autosave failed for ${session.path}: ${(error as Error).message}`,
-      );
-      return false;
-    }
   }
 
   #emit(): void {
