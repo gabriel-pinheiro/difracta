@@ -51,19 +51,25 @@ saved one back.
 
 Flags and their environment variables (`difracta-runtime/src/config.ts`):
 
-| Flag                  | Variable               | Default                |
-| --------------------- | ---------------------- | ---------------------- |
-| `--host <address>`    | `DIFRACTA_HOST`        | `0.0.0.0`              |
-| `--port <number>`     | `DIFRACTA_PORT`        | `4800`                 |
-| `<file.difracta>`     | `DIFRACTA_FILE`        | required when pinned   |
-| `--documents <mode>`  |                        | `pinned`               |
-| `--osc-port <number>` | `DIFRACTA_OSC_PORT`    | `9000`                 |
-| `--no-osc`            | `DIFRACTA_NO_OSC=1`    | OSC on                 |
-|                       | `DIFRACTA_STUDIO_DIST` | `difracta-studio/dist` |
-|                       | `DIFRACTA_OUTPUT_DIST` | `difracta-output/dist` |
+| Flag                  | Variable                  | Default                |
+| --------------------- | ------------------------- | ---------------------- |
+| `--host <address>`    | `DIFRACTA_HOST`           | `0.0.0.0`              |
+| `--port <number>`     | `DIFRACTA_PORT`           | `4800`                 |
+| `<file.difracta>`     | `DIFRACTA_FILE`           | required when pinned   |
+| `--documents <mode>`  |                           | `pinned`               |
+| `--osc-port <number>` | `DIFRACTA_OSC_PORT`       | `9000`                 |
+| `--no-osc`            | `DIFRACTA_NO_OSC=1`       | OSC on                 |
+| `--no-discovery`      | `DIFRACTA_NO_DISCOVERY=1` | announced              |
+|                       | `DIFRACTA_STUDIO_DIST`    | `difracta-studio/dist` |
+|                       | `DIFRACTA_OUTPUT_DIST`    | `difracta-output/dist` |
 
 File paths in requests are absolute paths on the runtime's machine; the CLI
 resolves a relative one against the shell's directory first.
+
+The runtime announces itself on the local network with Zeroconf as
+`_difracta._tcp`, named "Difracta on <hostname>", with its version and the open
+Installation's name. `difracta runtimes` lists the ones that answer, with the
+address to pass to `--url`; `--no-discovery` keeps a runtime out of the list.
 
 ## Show control
 

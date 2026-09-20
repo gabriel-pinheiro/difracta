@@ -20,6 +20,8 @@ export interface RuntimeConfig {
   readonly autosaveIntervalMs: number;
   /** OSC and OSCQuery port; undefined keeps the door closed. */
   readonly oscPort: number | undefined;
+  /** Announce the runtime on the local network with Zeroconf. */
+  readonly discovery: boolean;
 }
 
 function nonEmpty(value: string | undefined): string | undefined {
@@ -41,6 +43,7 @@ export function configFromEnvironment(
       documents: { type: "string" },
       "osc-port": { type: "string" },
       "no-osc": { type: "boolean" },
+      "no-discovery": { type: "boolean" },
     },
   });
   if (positionals.length > 1)
@@ -83,5 +86,8 @@ export function configFromEnvironment(
               String(settings.osc.port),
             10,
           ),
+    discovery: !(
+      values["no-discovery"] === true || env.DIFRACTA_NO_DISCOVERY === "1"
+    ),
   };
 }

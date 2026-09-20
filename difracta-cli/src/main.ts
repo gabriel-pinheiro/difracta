@@ -6,6 +6,7 @@ import { registerCatalog } from "./commands/catalog.ts";
 import { registerDocuments } from "./commands/documents.ts";
 import { registerRead } from "./commands/read.ts";
 import { registerRun } from "./commands/run.ts";
+import { registerRuntimes } from "./commands/runtimes.ts";
 import { registerStatus } from "./commands/status.ts";
 import { registerTree } from "./commands/tree.ts";
 import { DEFAULT_URL } from "./connection.ts";
@@ -38,6 +39,7 @@ const program = new Command("difracta")
 
 const cli = new Cli(program);
 registerStatus(program, cli);
+registerRuntimes(program, cli);
 registerTree(program, cli);
 registerRead(program, cli);
 registerRun(program, cli);

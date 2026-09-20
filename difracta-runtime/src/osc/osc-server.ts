@@ -16,6 +16,7 @@ import {
 import { hostname } from "node:os";
 import { WebSocketServer, type WebSocket } from "ws";
 
+import type { DocumentSession } from "../documents/document-session.ts";
 import type { DocumentStore } from "../documents/document-store.ts";
 import {
   decodePacket,
@@ -61,7 +62,7 @@ export class OscServer {
   readonly #listeners = new Set<(state: OscLive) => void>();
   readonly #unsubscribeStore: () => void;
   #unsubscribeDeltas: (() => void) | undefined;
-  #attachedDocumentId: string | undefined;
+  #attachedSession: DocumentSession | undefined;
   #leaves: Map<string, OscLeaf>;
   #flushScheduled = false;
   #http: Server | undefined;
@@ -219,7 +220,8 @@ export class OscServer {
 
   #attach(): void {
     const session = this.#options.store.currentSession();
-    if (session?.id === this.#attachedDocumentId) return;
+    // By identity: a copy of the open file is another session with the same id.
+    if (session === this.#attachedSession) return;
     this.#unsubscribeDeltas?.();
     this.#unsubscribeDeltas = session?.onDelta((delta) => {
       if (
@@ -230,7 +232,7 @@ export class OscServer {
       )
         this.#scheduleFlush();
     });
-    this.#attachedDocumentId = session?.id;
+    this.#attachedSession = session;
   }
 
   #scheduleFlush(): void {

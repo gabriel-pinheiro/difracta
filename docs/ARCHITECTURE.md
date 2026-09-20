@@ -428,7 +428,9 @@ carries the connection's document mode (`documents: "pinned" | "free"`, see
 Files), and the open document's summary (or null), and sends the summary again
 on every change. Documents are still addressed by id, so a client can tell a
 replaced document from the one it subscribed to; the client drops views of a
-replaced one.
+replaced one. A copy of the open file (Save As) holds the same Installation id:
+opening it puts another document under an id clients are subscribed to, which
+they could not notice, so the runtime sends each of them a new `snapshot`.
 
 - `subscribe` the document → one `snapshot`, then `delta` messages carrying
   `fromRevision`, `revision` and per-path patches. Deltas produced within one
@@ -520,6 +522,29 @@ Macros only:** the case for driving a Layer Parameter directly is convenience,
 and the case against is a value that changes with nothing in Studio saying who
 moved it. A Controller made from the row's own link menu is one click, and it
 leaves the mark.
+
+## Discovery
+
+The runtime announces itself with Zeroconf as `_difracta._tcp` on its HTTP port
+(`difracta-runtime/src/discovery/`), whether or not the OSC door is open;
+`--no-discovery` keeps it quiet. The instance is "Difracta on <hostname>", with
+the port added when it is not the default, so two runtimes on one machine do not
+claim one name. Its TXT record carries `version` and `document`, the open
+Installation's name, left out when nothing is open. The record follows the
+document: a different one is announced once the changes have been quiet for
+`settings.discovery.txtUpdateDelayMs`. `bonjour-service` cannot change the
+record of a published service, so that is an unpublish and a publish, and a
+browser sees the runtime leave and come back at once. `difracta runtimes`
+browses the service for `settings.discovery.browseMs` and lists who answered,
+this machine included, with the `address:port` that `--url` takes. Zeroconf
+errors are logged and never stop the runtime.
+
+**Why a service of its own:** the OSC services sit on the OSC port and say
+nothing about where Studio and the live socket are, and a runtime started with
+`--no-osc` would not be found at all. **Why the name and not the path in TXT:**
+the name is what tells two mini-PCs apart in a list; the path would tell the
+whole network how the machine's folders are laid out. A network that isolates
+its clients blocks multicast, so an address typed by hand always works too.
 
 ## Undo
 
@@ -615,8 +640,8 @@ show it holds should not depend on what any of them does in a File menu.
 
 `difracta-core/src/settings.ts` holds every tunable in one object: history
 coalesce window and limit, autosave delay, default host, port and document mode,
-client reconnect backoff, CLI connect timeout. Packages import from there
-instead of carrying their own literals.
+the discovery service and its delays, client reconnect backoff, CLI connect
+timeout. Packages import from there instead of carrying their own literals.
 
 ## Rendering
 

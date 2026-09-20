@@ -158,6 +158,7 @@ describe("document modes", () => {
       outputDist: undefined,
       autosaveIntervalMs: 60_000,
       oscPort: undefined,
+      discovery: false,
     });
     const address = await runtime.listen();
     expect(runtime.store.current()).toMatchObject({
@@ -197,6 +198,7 @@ describe("document modes", () => {
       outputDist: undefined,
       autosaveIntervalMs: 60_000,
       oscPort: undefined,
+      discovery: false,
     });
     await expect(runtime.listen()).rejects.toThrow(/broken\.difracta/);
     await runtime.close();

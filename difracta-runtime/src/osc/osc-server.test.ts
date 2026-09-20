@@ -252,4 +252,43 @@ describe("OSC server", () => {
     await wait(30);
     expect(server.state().listeners).toBe(0);
   });
+
+  it("keeps streaming after a copy of the file, with the same Installation id, is opened", async () => {
+    const id = store.current()?.id ?? "";
+    await store.save(id, path.join(dir, "a.difracta"));
+    await store.save(id, path.join(dir, "b.difracta"));
+    await store.open(path.join(dir, "a.difracta"));
+    const session = store.currentSession();
+    expect(session?.id).toBe(id);
+
+    const socket = new WebSocket(`ws://127.0.0.1:${String(port)}`);
+    const received: unknown[] = [];
+    socket.on("message", (raw, isBinary) => {
+      if (isBinary) received.push(decodePacket(new Uint8Array(raw as Buffer)));
+    });
+    await new Promise((resolve) => socket.once("open", resolve));
+    socket.send(
+      JSON.stringify({ COMMAND: "LISTEN", DATA: "/controller/energy" }),
+    );
+    await wait(30);
+    // The first change also makes the document dirty, which the store reports;
+    // the second reaches the door through the session's deltas alone.
+    for (const value of [0.5, 0.75]) {
+      session?.execute(
+        "address.set",
+        { address: "controller/energy/value", value },
+        "studio",
+      );
+      await wait(60);
+    }
+    expect(received).toEqual(
+      [0.5, 0.75].map((value) => ({
+        address: "/controller/energy",
+        args: [{ type: "float32", value }],
+      })),
+    );
+    socket.close();
+    // Dirty with a path: settle the autosave before the folder goes.
+    await store.flush();
+  });
 });

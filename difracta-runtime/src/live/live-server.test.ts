@@ -50,6 +50,7 @@ beforeEach(async () => {
     outputDist: undefined,
     autosaveIntervalMs: 60_000,
     oscPort: undefined,
+    discovery: false,
   });
   const address = await runtime.listen();
   url = `${address.replace("http", "ws")}/live`;

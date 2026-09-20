@@ -9,8 +9,10 @@ Working from a shell
 
   Connect    The runtime serves its live socket at ws://<host>:${String(settings.runtime.port)}${settings.runtime.livePath}.
              --url takes that, http://<host>:${String(settings.runtime.port)} or <host>:${String(settings.runtime.port)};
-             DIFRACTA_URL sets the default. DIFRACTA_ACTOR names the owner of
-             this shell's undo history (default: user@host).
+             DIFRACTA_URL sets the default. "runtimes" lists the ones
+             announcing themselves on the local network, each with the
+             address:port to pass. DIFRACTA_ACTOR names the owner of this
+             shell's undo history (default: user@host).
 
   Read       health, outputs, scenes, scene <Scene>, controllers, macros,
              osc, get [path|Address], addresses, catalog [id], commands,

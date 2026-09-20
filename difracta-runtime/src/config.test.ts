@@ -38,6 +38,21 @@ describe("runtime config", () => {
     ).toBe("/shows/a.difracta");
   });
 
+  it("announces itself unless --no-discovery or DIFRACTA_NO_DISCOVERY=1", () => {
+    expect(configFromEnvironment(["show.difracta"], {}).discovery).toBe(true);
+    expect(
+      configFromEnvironment(["show.difracta", "--no-discovery"], {}).discovery,
+    ).toBe(false);
+    expect(
+      configFromEnvironment(["show.difracta"], { DIFRACTA_NO_DISCOVERY: "1" })
+        .discovery,
+    ).toBe(false);
+    // Independent of the OSC door.
+    expect(
+      configFromEnvironment(["show.difracta", "--no-osc"], {}),
+    ).toMatchObject({ oscPort: undefined, discovery: true });
+  });
+
   it("rejects an unknown mode and a second file", () => {
     expect(() => configFromEnvironment(["--documents", "open"], {})).toThrow(
       /pinned.*free/,

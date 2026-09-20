@@ -27,6 +27,7 @@ import type {
   SessionCommandResult,
 } from "../documents/document-session.ts";
 import type { DocumentStore } from "../documents/document-store.ts";
+import { AttachedSession } from "./attached-session.ts";
 import { documentsModeFor, pinnedRefusal } from "./documents-mode.ts";
 import { OutputPresence } from "./output-presence.ts";
 
@@ -87,16 +88,22 @@ export class LiveServer {
   readonly #unsubscribeStore: () => void;
   readonly #unsubscribePresence: () => void;
   readonly #unsubscribeOsc: (() => void) | undefined;
-  #unsubscribeDeltas: (() => void) | undefined;
-  #unsubscribeEvents: (() => void) | undefined;
-  #attachedDocumentId: string | undefined;
+  readonly #attached: AttachedSession;
 
   constructor(options: LiveServerOptions) {
     this.#options = options;
+    this.#attached = new AttachedSession({
+      onEvent: (event) => this.#fanOutEvent(event),
+      onDelta: (delta) => {
+        this.#fanOut(delta);
+        this.#reconcilePresence();
+      },
+    });
     this.#unsubscribeStore = options.store.onChange(() => {
-      this.#attachSession();
+      const swapped = this.#attached.follow(options.store.currentSession());
       this.#reconcilePresence();
       this.#broadcast({ type: "document", summary: options.store.current() });
+      if (swapped) this.#resnapshot();
     });
     this.#unsubscribePresence = this.#presence.onChange((patches) =>
       this.#fanOutLive(patches),
@@ -104,7 +111,7 @@ export class LiveServer {
     this.#unsubscribeOsc = options.osc?.onChange((state) =>
       this.#fanOutLive([{ op: "set", path: ["osc"], value: state }]),
     );
-    this.#attachSession();
+    this.#attached.follow(options.store.currentSession());
   }
 
   /** The whole live state, for a snapshot. */
@@ -119,8 +126,7 @@ export class LiveServer {
     this.#unsubscribeStore();
     this.#unsubscribePresence();
     this.#unsubscribeOsc?.();
-    this.#unsubscribeDeltas?.();
-    this.#unsubscribeEvents?.();
+    this.#attached.close();
     this.#presence.close();
     for (const session of this.#sessions) session.socket.close();
   }
@@ -182,20 +188,18 @@ export class LiveServer {
     }
   }
 
-  /** Follows the store's current document; presence belongs to it. */
-  #attachSession(): void {
-    const documentSession = this.#options.store.currentSession();
-    if (documentSession?.id === this.#attachedDocumentId) return;
-    this.#unsubscribeDeltas?.();
-    this.#unsubscribeEvents?.();
-    this.#unsubscribeEvents = documentSession?.onEvent((event) => {
-      this.#fanOutEvent(event);
-    });
-    this.#unsubscribeDeltas = documentSession?.onDelta((delta) => {
-      this.#fanOut(delta);
-      this.#reconcilePresence();
-    });
-    this.#attachedDocumentId = documentSession?.id;
+  /**
+   * Another session took over under the id clients are subscribed to: their
+   * replicas hold the old one's state and revision, so each gets a snapshot.
+   */
+  #resnapshot(): void {
+    const documentId = this.#attached.id;
+    if (documentId === undefined) return;
+    for (const session of this.#sessions) {
+      const subscription = session.subscriptions.get(documentId);
+      if (subscription !== undefined)
+        this.#subscribe(session, documentId, subscription.live);
+    }
   }
 
   #reconcilePresence(): void {
@@ -220,7 +224,7 @@ export class LiveServer {
   }
 
   #fanOutLive(patches: readonly Patch[]): void {
-    const documentId = this.#attachedDocumentId;
+    const documentId = this.#attached.id;
     if (documentId === undefined) return;
     for (const session of this.#sessions) {
       if (session.subscriptions.get(documentId)?.live !== true) continue;
@@ -263,10 +267,11 @@ export class LiveServer {
     }
     const live = session.pendingLive;
     session.pendingLive = [];
-    if (live.length > 0 && this.#attachedDocumentId !== undefined) {
+    const attachedId = this.#attached.id;
+    if (live.length > 0 && attachedId !== undefined) {
       this.#send(session, {
         type: "live",
-        documentId: this.#attachedDocumentId,
+        documentId: attachedId,
         patches: live.map((patch) => ({ ...patch, path: [...patch.path] })),
       });
     }
