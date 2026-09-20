@@ -1,8 +1,9 @@
+import { browseRuntimes } from "@difracta/client/discovery";
 import { settings } from "@difracta/core";
 import type { Command } from "commander";
 
 import type { Cli } from "../cli.ts";
-import { browseRuntimes, formatRuntimes } from "../discovery.ts";
+import { formatRuntimes } from "../discovery.ts";
 
 export function registerRuntimes(program: Command, cli: Cli): void {
   program

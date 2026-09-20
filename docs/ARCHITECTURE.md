@@ -42,13 +42,13 @@ consistent.
 | `difracta-core`     | Document model (normalized tables), patches, Addresses, Catalog and Parameter types, command registry, pure command reducers, undo history, settings | zod                              |
 | `difracta-visuals`  | The built-in Catalog: Visual and Filter definitions, their implementations and thumbnails                                                            | core, render                     |
 | `difracta-protocol` | Wire schemas for the live socket and runtime requests                                                                                                | core                             |
-| `difracta-client`   | Connection, snapshot plus delta replica (`DocumentView`), acknowledged commands, coalesced inputs                                                    | core, protocol                   |
+| `difracta-client`   | Connection, snapshot plus delta replica (`DocumentView`), acknowledged commands, coalesced inputs; Zeroconf browsing under `/discovery` (Node only)  | core, protocol, bonjour-service  |
 | `difracta-runtime`  | Node host: document sessions, files and autosave, live server, static serving                                                                        | core, protocol, visuals, fastify |
 | `difracta-render`   | Visual SDK (instances, player, helpers) and the WebGL2 compositor: homographies, Mask textures, calibration patterns                                 | core                             |
 | `difracta-output`   | One display's page; no React                                                                                                                         | client, render                   |
 | `difracta-studio`   | React authoring and performance UI                                                                                                                   | client, visuals                  |
 | `difracta-cli`      | `difracta` command for shells and agents                                                                                                             | client                           |
-| `difracta-desktop`  | Electron application: forks a bundled runtime, shows its Studio, native file dialogs and OS file opening                                             | client, runtime (bundled)        |
+| `difracta-desktop`  | Electron application: a bundled runtime of its own or a runtime elsewhere, its Studio in a window, native file dialogs and OS file opening           | client, runtime (bundled)        |
 
 **Why:** Studio and Output are separate packages because an Output page runs in
 smart-TV browsers and must stay tiny. Everything that can be pure lives in
@@ -542,10 +542,18 @@ and `document`, the open Installation's name, left out when nothing is open. The
 record follows the document: a different one is announced once the changes have
 been quiet for `settings.discovery.txtUpdateDelayMs`. `bonjour-service` cannot
 change the record of a published service, so that is an unpublish and a publish,
-and a browser sees the runtime leave and come back at once. `difracta runtimes`
-browses the service for `settings.discovery.browseMs` and lists who answered,
-this machine included, with the `address:port` that `--url` takes. Zeroconf
-errors are logged and never stop the runtime.
+and a browser sees the runtime leave and come back at once. Zeroconf errors are
+logged and never stop the runtime.
+
+Browsing is `@difracta/client/discovery`, a subpath of the client package that
+only Node programs import (Zeroconf needs UDP sockets; the package's main entry,
+which Studio and the Output page bundle, never touches it). It turns a browsed
+service into a `DiscoveredRuntime` (the address the answer came from wins, then
+an IPv4 one), keeps a list through up, down and record changes keyed by instance
+name, and browses either once or until stopped. `difracta runtimes` browses for
+`settings.discovery.browseMs` and lists who answered, this machine included,
+with the `address:port` that `--url` takes. Desktop browses for as long as its
+launch page is open.
 
 **Why a service of its own:** the OSC services sit on the OSC port and say
 nothing about where Studio and the live socket are, and a runtime started with
@@ -659,19 +667,68 @@ Studio, Output page and Catalog thumbnails next to the bundle, and main names
 them to the runtime through `DIFRACTA_STUDIO_DIST`, `DIFRACTA_OUTPUT_DIST` and
 `DIFRACTA_THUMBNAILS_DIR`, so `dist/` runs without the repository or `tsx`.
 
-Start-up: take the single-instance lock; pick the file (the one on the command
-line, else the last one opened if it still exists, else none); check the port is
-free and fork the runtime; ask `/health` with a backoff until it answers, or
-show a native error when the port is taken, the child exits or
-`settings.desktop.runtimeStartTimeoutMs` passes; connect to it; open the Studio
-window. Main's connection is a `@difracta/client` of kind `desktop`
-(`runtime-link.ts`). From the document summary every client receives it learns
-the open file's path, which it remembers in its user data folder and gives to
-the OS's recent documents, and whether there are unsaved changes. A runtime that
-started with nothing open is sent `documents.new`, so Desktop lands in a working
-Studio; an untouched Installation is not dirty, so that never causes a question
-later. The runtime's output goes to `runtime.log` under Electron's logs folder
-(Help ▸ Show Runtime Log), the previous launch's kept beside it.
+Desktop shows one runtime at a time, in one of two modes. **Local mode** forks
+the runtime described above. **Remote mode** forks nothing: it asks the runtime
+at an address for `/health`, which must name a Difracta Runtime, and loads that
+runtime's own `http://<host>:<port>/studio/`. The **launch page** is where a
+person chooses: "Run on this computer", a live list of the runtimes discovered
+on the network, the ones connected to before (kept when they are not on the
+network now, and forgettable), and an address typed by hand (`host`, `host:port`
+or a URL; the default port fills in). Runtime ▸ Switch… in the native menu,
+which also says where Studio is coming from, goes back to it: the session is
+left first (in local mode through the same unsaved-changes question as closing
+the window, then the runtime child is stopped and waited for), so nothing starts
+while something is still stopping. `desktop-modes.ts` holds these moves;
+`local-session.ts` and `remote-session.ts` are what each mode starts and ends.
+
+Start-up: take the single-instance lock, then decide what to start with
+(`start-up-mode.ts`). A file from the OS (command line, second launch,
+`open-file`) always means local mode; otherwise the mode of the last launch is
+resumed from `desktop-state.json` in the user data folder, which also holds the
+last file and the remembered runtimes; the first launch ever shows the launch
+page. A start that fails (the port is taken, the remembered runtime does not
+answer within `settings.desktop.remoteCheckTimeoutMs`) lands on the launch page
+with the reason, where a runtime already holding the port can be connected to
+instead. A file arriving while Desktop is in remote mode asks natively whether
+to switch to this computer and open it; Cancel keeps the remote session.
+
+Local mode: pick the file (the one asked for, else the last one opened if it
+still exists, else none); check the port is free and fork the runtime; ask
+`/health` with a backoff until it answers, or give up when the port is taken,
+the child exits or `settings.desktop.runtimeStartTimeoutMs` passes; connect to
+it; open the Studio window. Main's connection is a `@difracta/client` of kind
+`desktop` (`runtime-link.ts`), in both modes. From the document summary every
+client receives it learns the open file's path, which it remembers and gives to
+the OS's recent documents, and whether there are unsaved changes. A local
+runtime that started with nothing open is sent `documents.new`, so Desktop lands
+in a working Studio; an untouched Installation is not dirty, so that never
+causes a question later. The runtime's output goes to `runtime.log` under
+Electron's logs folder (Help ▸ Show Runtime Log), the previous launch's kept
+beside it. In remote mode the link only reads: the window's title is written
+from its summary with the runtime's name and address, and a connection that
+drops is retried quietly by the client while Studio's own page shows the
+reconnect.
+
+The launch page is a second entry of `difracta-studio` (`launch.html`,
+`src/launch/`): it shares Studio's components and theme and imports no client,
+no app shell and no Visuals, so its script is a few kilobytes on top of React.
+No runtime serves it to Desktop; main serves it from the copy of the built
+Studio in `dist/` over a scheme of its own, `app://desktop/studio/launch.html`,
+registered as standard and secure before the app is ready. The handler answers
+the launch page and `assets/` only, and resolves every path inside that folder
+whatever the URL spells. The page talks to main through a bridge of its own,
+`window.difractaLaunch` (`launch-contract.ts`, from a separate preload given
+only to the launch window): `runLocal()`, `connect(address)`, `runtimes()` with
+`onRuntimesChanged`, `remembered()`, `forget(address)` and `problem()`. The two
+promises resolve with the reason when a start fails, so the port being taken or
+an address not answering shows on the page. Main checks that each message comes
+from the launch page's own URL. While the page is open main browses
+`_difracta._tcp` and pushes every change. One runtime is left out of the list:
+the one Desktop itself is starting or running, recognised as this computer (its
+hostname, or an address of its own) on the local runtime's port. Any other
+runtime on this computer, a `difracta-runtime` service for one, is a target like
+the rest. In a browser the page has no bridge and says only that it belongs to
+Desktop.
 
 Studio in Desktop gets `window.difractaDesktop` from the preload script:
 `pickOpenPath()`, `pickSavePath(suggestedName)` and `onOpenRequest(callback)`.
@@ -683,19 +740,24 @@ second launch, which the lock turns into a message to the first; `open-file` on
 macOS) is handed to Studio through `onOpenRequest` and goes through Studio's own
 open, unsaved-changes question included. The preload exposes the bridge only to
 the local runtime's origin, main answers only IPC whose sender frame is from
-that origin, windows refuse to navigate away from it, other links open in the
-person's browser, and every window runs with `contextIsolation`, `sandbox` and
-no `nodeIntegration`.
+that origin, and only while a local session exists. A remote runtime's window is
+created without any preload, so nothing of Desktop is in it. In both modes
+windows refuse to navigate away from their runtime's origin, an Output page
+opened from Studio gets an unthrottled window of its own, other links open in
+the person's browser, and every window runs with `contextIsolation`, `sandbox`
+and no `nodeIntegration`.
 
-Closing the Studio window with unsaved changes asks Save, Don't Save or Cancel
-natively; Save without a file goes through the Save dialog, Don't Save closes
-the document as discarded so its autosave does not return as a recovery. Closing
-Studio quits Desktop, and quitting stops the runtime: main posts `shutdown` on
-the child's parent port, the runtime flushes its autosave, closes and exits, and
-is killed only after `settings.desktop.runtimeStopTimeoutMs`. The native menu is
-Electron's roles (Edit, View, Window, Help with Developer Tools) and hides
-behind Alt on Windows and Linux; New, Open and Save stay in Studio's menu bar,
-so each shortcut has one handler.
+Closing the Studio window in local mode with unsaved changes asks Save, Don't
+Save or Cancel natively (remote mode asks nothing: the Installation lives in
+that runtime and stays open there); Save without a file goes through the Save
+dialog, Don't Save closes the document as discarded so its autosave does not
+return as a recovery. Closing Studio quits Desktop, and quitting stops the
+runtime: main posts `shutdown` on the child's parent port, the runtime flushes
+its autosave, closes and exits, and is killed only after
+`settings.desktop.runtimeStopTimeoutMs`. The native menu is Electron's roles
+(Edit, View, Window, Help with Developer Tools) plus Runtime, and hides behind
+Alt on Windows and Linux; New, Open and Save stay in Studio's menu bar, so each
+shortcut has one handler.
 
 **Why the runtime is a child process:** it is the same program a mini-PC runs
 standalone, so Desktop adds no second way of holding an Installation, a busy
@@ -708,18 +770,28 @@ inside the app: Studio bundles `@difracta/visuals`, so the Studio a runtime
 serves always matches that runtime's Catalog, and `location.host` is the
 runtime, exactly as in a browser; Desktop's Studio and a laptop's browser tab
 are the same client. Loopback is also what makes the free runtime accept its
-paths. **Why the bridge is three functions:** anything a page can call in main
-is attack surface and is out of the CLI's reach; a file dialog is the one thing
-that needs the OS, and what it returns is only a path for a request the CLI can
-send too.
+paths. **Why remote mode loads the remote runtime's Studio** rather than
+pointing Desktop's own at it: the two machines may run different versions, and a
+Studio whose Catalog differs from its runtime's breaks previews and Parameter
+controls; every use of `location.host` would need a parameter and the runtime
+CORS. **Why remote content gets no bridge:** a path picked on this disk means
+nothing to a runtime elsewhere, and a page from another machine, possibly
+another version, is not one to hand native dialogs to. **Why the launch page has
+a bridge of its own:** choosing where Desktop goes and starting runtimes is
+something Studio must never be able to do, and the launch page has no use for
+file pickers; two preloads keep each page to its own few functions. **Why the
+bridge is three functions:** anything a page can call in main is attack surface
+and is out of the CLI's reach; a file dialog is the one thing that needs the OS,
+and what it returns is only a path for a request the CLI can send too.
 
 ## Settings
 
 `difracta-core/src/settings.ts` holds every tunable in one object: history
 coalesce window and limit, autosave delay, default host, port and document mode,
 the discovery service and its delays, client reconnect backoff, CLI connect
-timeout, Desktop's waits for its runtime to start and stop. Packages import from
-there instead of carrying their own literals.
+timeout, Desktop's waits for its runtime to start and stop and for a runtime
+elsewhere to answer, its window sizes and how many runtimes it remembers.
+Packages import from there instead of carrying their own literals.
 
 ## Rendering
 

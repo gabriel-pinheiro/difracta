@@ -4,13 +4,15 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./discovery": "./src/discovery/index.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@difracta/core": "0.0.0",
-    "@difracta/protocol": "0.0.0"
+    "@difracta/protocol": "0.0.0",
+    "bonjour-service": "^1.4.4"
   }
 }

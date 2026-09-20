@@ -26,19 +26,35 @@ mini-PC and the projector's browser can sit on one LAN.
 ## Desktop
 
 ```sh
-npm run desktop                      # reopens the last Installation, or starts an untitled one
-npm run desktop -- show.difracta     # opens that file
+npm run desktop                      # the launch page first, then whatever was chosen last time
+npm run desktop -- show.difracta     # opens that file on this computer
 ```
 
-Difracta Desktop is the Electron application (`difracta-desktop`): it starts a
-runtime of its own on port 4800 with `--documents free`, shows its Studio in a
-window, and opens and saves Installations with the operating system's file
-dialogs. The script builds the Output page, Studio and Desktop, then launches
-the build; stop `npm run dev` first, since both want port 4800, or move Desktop
-with `DIFRACTA_PORT`. The runtime's log is under Help ▸ Show Runtime Log. On a
-Linux that restricts unprivileged user namespaces (Ubuntu 23.10 and later) the
-script explains how to give Electron its sandbox helper, or to run this
-development build with `-- --no-sandbox`.
+Difracta Desktop is the Electron application (`difracta-desktop`). Its launch
+page asks once where Studio should come from, and later launches resume that
+choice; Runtime ▸ Switch… in the native menu (Alt shows it on Windows and Linux)
+brings the page back.
+
+- **Run on this computer** starts a runtime of Desktop's own on port 4800 with
+  `--documents free`, shows its Studio in a window, and opens and saves
+  Installations with the operating system's file dialogs. Opening a `.difracta`
+  file always does this.
+- **Connect to a Runtime** shows the Studio of a runtime that is already
+  running, such as the mini-PC's: pick it from the list of runtimes found on the
+  network, or type `host`, `host:port` or a URL when the network hides them.
+  Runtimes connected to before stay listed. The Installation stays on that
+  machine, so there are no file dialogs and closing the window asks nothing.
+
+The script builds the Output page, Studio and Desktop, then launches the build;
+stop `npm run dev` first, since both want port 4800, or move Desktop with
+`DIFRACTA_PORT` (or connect Desktop to the dev runtime instead of running one).
+To work on Studio inside Desktop with hot reload, keep `npm run dev` running and
+start `npm run desktop -- --studio-url http://127.0.0.1:4802/studio/`: Desktop
+forks no runtime and treats that dev server as this computer's Studio. The
+runtime's log is under Help ▸ Show Runtime Log. On a Linux that restricts
+unprivileged user namespaces (Ubuntu 23.10 and later) the script explains how to
+give Electron its sandbox helper, or to run this development build with
+`-- --no-sandbox`.
 
 ## Production
 

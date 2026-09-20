@@ -11,9 +11,18 @@ import { Menu, shell, type MenuItemConstructorOptions } from "electron";
  * Ctrl+S can never save twice. A page sees a key before the menu does, so
  * Studio's Ctrl+Z still undoes in the Installation and Edit ▸ Undo's only
  * acts in a text field.
+ *
+ * The Runtime menu is Desktop's own: where Studio is coming from, and the way
+ * back to the launch page. It is here and not in Studio because it is about
+ * the app, not the Installation, and has to work whichever runtime's Studio
+ * is showing. A menu cannot be edited once set, so this is called again
+ * whenever `where` changes.
  */
 export function installApplicationMenu(options: {
   readonly runtimeLog: string;
+  /** "This computer", "stage-pc — 10.0.0.5:4800"; undefined on the launch page. */
+  readonly where: string | undefined;
+  readonly onSwitch: () => void;
 }): void {
   const template: MenuItemConstructorOptions[] = [
     ...(process.platform === "darwin" ? [{ role: "appMenu" as const }] : []),
@@ -33,6 +42,18 @@ export function installApplicationMenu(options: {
         { role: "zoomOut" },
         { type: "separator" },
         { role: "togglefullscreen" },
+      ],
+    },
+    {
+      label: "Runtime",
+      submenu: [
+        { label: options.where ?? "Not connected", enabled: false },
+        { type: "separator" },
+        {
+          label: "Switch…",
+          enabled: options.where !== undefined,
+          click: options.onSwitch,
+        },
       ],
     },
     { role: "windowMenu" },

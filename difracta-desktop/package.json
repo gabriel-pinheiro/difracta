@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Difracta Desktop: an Electron shell that runs a Runtime on this machine and shows its Studio.",
+  "description": "Difracta Desktop: an Electron shell that shows Studio, from a Runtime it runs on this machine or from one elsewhere.",
   "main": "dist/main.js",
   "scripts": {
     "build": "node scripts/build.mjs",

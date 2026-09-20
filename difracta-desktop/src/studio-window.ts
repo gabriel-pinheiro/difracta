@@ -11,14 +11,14 @@ import { linkTarget, isFromOrigin } from "./local-origin.ts";
  * (`sandbox`), and the preload script lives in a JavaScript world of its own
  * (`contextIsolation`), so a page cannot reach into it.
  */
-const pageSecurity = {
+export const pageSecurity = {
   nodeIntegration: false,
   sandbox: true,
   contextIsolation: true,
 } as const;
 
 /** Matches Studio's dark background, so a window does not flash white while loading. */
-const BACKGROUND = "#0a0a0a";
+export const BACKGROUND = "#0a0a0a";
 
 /**
  * Keeps a window on the runtime's pages. Following a link elsewhere would
@@ -58,16 +58,21 @@ function openPageWindow(url: string, origin: string): void {
 }
 
 export interface StudioWindowOptions {
-  /** The local runtime's origin; Studio is its `/studio/`. */
+  /** The runtime's origin; Studio is its `/studio/`. */
   readonly origin: string;
-  readonly preload: string;
+  /**
+   * The preload script that hands Studio the document bridge, for the runtime
+   * on this computer only. A runtime elsewhere gets none: no preload runs in
+   * its window at all, so there is nothing in it for a page to find.
+   */
+  readonly preload: string | undefined;
   /** Asked before the window closes; false keeps it open. */
   readonly mayClose: (window: BrowserWindow) => Promise<boolean>;
 }
 
 /**
  * The window showing Studio, loaded from the runtime's own URL like any
- * browser tab would. Only this window gets the preload script, and the
+ * browser tab would. Only this window can get the preload script, and the
  * preload is told the one origin it may hand the bridge to.
  */
 export function createStudioWindow(
@@ -81,11 +86,14 @@ export function createStudioWindow(
     // Studio has its own menu bar; the native one shows while Alt is held
     // (Windows and Linux) and its shortcuts work either way.
     autoHideMenuBar: true,
-    webPreferences: {
-      ...pageSecurity,
-      preload: options.preload,
-      additionalArguments: [`${BRIDGE_ORIGIN_ARGUMENT}${options.origin}`],
-    },
+    webPreferences:
+      options.preload === undefined
+        ? pageSecurity
+        : {
+            ...pageSecurity,
+            preload: options.preload,
+            additionalArguments: [`${BRIDGE_ORIGIN_ARGUMENT}${options.origin}`],
+          },
   });
   confine(window.webContents, options.origin);
 

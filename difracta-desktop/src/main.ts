@@ -4,101 +4,96 @@
  * and the app's life cycle. Each concern has its own file; this one is the
  * order things happen in.
  *
- *   launch → single-instance lock → pick the start-up file → fork the runtime
- *   → wait for /health → connect as a client → Studio window
+ *   launch → single-instance lock → what to start with (`start-up-mode.ts`)
+ *     a file, or local last time → fork the runtime → wait for /health
+ *                                  → connect as a client → Studio window
+ *     remote last time           → ask its /health → connect → its Studio
+ *     first launch, or a failure → the launch page, which starts one of those
  *   quit   → unsaved-changes prompt → windows close → runtime stops → exit
+ *
+ * `desktop-modes.ts` holds the moves between those; Runtime ▸ Switch… goes
+ * back to the launch page.
  */
-import { app, dialog, type BrowserWindow } from "electron";
-import { access } from "node:fs/promises";
-import path from "node:path";
+import { watchRuntimes } from "@difracta/client/discovery";
+import { app } from "electron";
+import { hostname, networkInterfaces } from "node:os";
 
-import { installApplicationMenu } from "./application-menu.ts";
-import { mayClose } from "./close-prompt.ts";
-import { registerFileDialogs } from "./file-dialogs.ts";
-import { LastFileStore } from "./last-file.ts";
+import { DesktopModes } from "./desktop-modes.ts";
+import { DesktopStateStore } from "./desktop-state.ts";
+import { LaunchRuntimes } from "./launch-runtimes.ts";
+import { registerLaunchScheme, serveLaunchScheme } from "./launch-window.ts";
 import { runtimeLocations, runtimePort } from "./runtime-launch.ts";
-import { RuntimeLink } from "./runtime-link.ts";
 import { RuntimeProcess } from "./runtime-process.ts";
-import { documentFileFromArgv, startUpFile } from "./start-up-file.ts";
-import { createStudioWindow, requestOpen } from "./studio-window.ts";
+import { documentFileFromArgv } from "./start-up-file.ts";
+import { startUpMode, studioUrlFromArgv } from "./start-up-mode.ts";
 
 // `scripts/build.mjs` puts everything the app runs from next to this file.
 const distDir = import.meta.dirname;
 
-let studio: BrowserWindow | undefined;
-/** A file the OS asked for before there was a window to hand it to. */
+let modes: DesktopModes | undefined;
+/** A file the OS asked for before main was ready to open anything. */
 let requestedFile = documentFileFromArgv(process.argv, process.cwd());
 
-/** A file the OS wants open: Studio's own Open when it is up, else the start-up file. */
 function openFromOs(file: string): void {
-  if (studio === undefined) requestedFile = file;
-  else requestOpen(studio, file);
-}
-
-async function exists(file: string): Promise<boolean> {
-  return access(file).then(
-    () => true,
-    () => false,
-  );
+  if (modes === undefined) requestedFile = file;
+  else modes.openFromOs(file);
 }
 
 async function start(): Promise<void> {
-  const lastFile = new LastFileStore(app.getPath("userData"));
+  const locations = runtimeLocations(distDir);
+  serveLaunchScheme(locations.studioDist);
+  const state = new DesktopStateStore(app.getPath("userData"));
   const runtime = new RuntimeProcess({
     port: runtimePort(process.env),
-    locations: runtimeLocations(distDir),
+    locations,
   });
-  installApplicationMenu({ runtimeLog: runtime.logFile });
-
-  let remembered = await lastFile.read();
-  const started = await runtime.start(
-    await startUpFile({ requested: requestedFile, last: remembered, exists }),
-  );
-  if (!started.ok) {
-    dialog.showErrorBox("Difracta could not start", started.reason);
-    await runtime.stop();
-    app.exit(1);
-    return;
-  }
-
-  const link = new RuntimeLink(runtime.port);
-  await link.ensureDocument();
-  link.onPathChange((file) => {
-    remembered = file;
-    app.addRecentDocument(file);
-    void lastFile.write(file);
+  const runtimes = new LaunchRuntimes({
+    // `DIFRACTA_NO_DISCOVERY` keeps Desktop off multicast as it does the runtime.
+    watch:
+      process.env.DIFRACTA_NO_DISCOVERY === "1"
+        ? () => () => undefined
+        : watchRuntimes,
+    machine: () => ({
+      hostname: hostname(),
+      addresses: Object.values(networkInterfaces()).flatMap((addresses) =>
+        (addresses ?? []).map((entry) => entry.address),
+      ),
+    }),
   });
-
-  registerFileDialogs({
-    origin: runtime.origin,
-    window: () => studio,
-    currentFile: () => link.document()?.path ?? remembered,
-  });
-  studio = createStudioWindow({
-    origin: runtime.origin,
-    preload: path.join(distDir, "preload.cjs"),
-    mayClose: (window) => mayClose(window, link),
-  });
-  // Without its Studio window the runtime would keep serving with nothing to
-  // show for it, so closing Studio quits, on macOS too.
-  studio.on("closed", () => {
-    studio = undefined;
-    app.quit();
-  });
+  modes = new DesktopModes({ distDir, runtime, state, runtimes });
 
   // The last thing before exit, after every window has closed: stop the
-  // runtime and wait for it, then quit for real.
-  let runtimeStopped = false;
+  // runtime and wait for it, then quit for real. With no runtime to stop
+  // (the launch page, remote mode) that wait is over at once, still inside
+  // the quit being cancelled, where Electron ignores a new one; hence
+  // `setImmediate`.
+  let ended = false;
   app.on("will-quit", (event) => {
-    if (runtimeStopped) return;
+    if (ended) return;
     event.preventDefault();
-    link.close();
-    void runtime.stop().finally(() => {
-      runtimeStopped = true;
-      app.quit();
+    void modes?.end().finally(() => {
+      ended = true;
+      setImmediate(() => app.quit());
     });
   });
+  // Quitting is decided where windows close (`desktop-modes.ts`): between a
+  // session and the launch page there is a moment with no window at all, and
+  // Electron's default would take it for the end.
+  app.on("window-all-closed", () => undefined);
+
+  const file = requestedFile;
+  requestedFile = undefined;
+  await modes.startUp(
+    startUpMode({
+      requestedFile: file,
+      studioUrl: studioUrlFromArgv(process.argv),
+      lastMode: (await state.read()).lastMode,
+    }),
+  );
 }
+
+// A custom scheme has to be declared before the app is ready.
+registerLaunchScheme();
 
 // One Desktop per machine: the runtime's port is fixed, so a second launch
 // could not start one. The second instance gets no lock and quits, and
@@ -109,10 +104,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on("second-instance", (_event, argv, workingDirectory) => {
     const file = documentFileFromArgv(argv, workingDirectory);
     if (file !== undefined) openFromOs(file);
-    else if (studio !== undefined) {
-      if (studio.isMinimized()) studio.restore();
-      studio.focus();
-    }
+    else modes?.focus();
   });
   // macOS opens a document with this event instead of a command line.
   app.on("open-file", (event, file) => {

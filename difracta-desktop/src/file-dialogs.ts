@@ -53,19 +53,24 @@ export async function pickSavePath(
 
 /**
  * The main side of the bridge's two pickers. `ipcMain.handle` answers the
- * preload's `ipcRenderer.invoke`. Every call is checked for where it came
- * from: only a frame showing the local runtime's pages is answered.
+ * preload's `ipcRenderer.invoke`, and a channel takes one handler for the
+ * app's whole life, so this is registered once and asks what is current.
+ * Every call is checked for where it came from: only a frame showing the
+ * local runtime's pages is answered, and nobody is while there is none.
  */
 export function registerFileDialogs(options: {
-  readonly origin: string;
+  /** The local runtime's origin; undefined while Desktop shows no local runtime. */
+  readonly origin: () => string | undefined;
   readonly window: () => BrowserWindow | undefined;
   /** The open file, else the last one: where a dialog starts. */
   readonly currentFile: () => string | undefined;
 }): void {
-  const trusted = (event: IpcMainInvokeEvent): BrowserWindow | undefined =>
-    isFromOrigin(event.senderFrame?.url, options.origin)
+  const trusted = (event: IpcMainInvokeEvent): BrowserWindow | undefined => {
+    const origin = options.origin();
+    return origin !== undefined && isFromOrigin(event.senderFrame?.url, origin)
       ? options.window()
       : undefined;
+  };
 
   ipcMain.handle(channels.pickOpenPath, (event) => {
     const window = trusted(event);

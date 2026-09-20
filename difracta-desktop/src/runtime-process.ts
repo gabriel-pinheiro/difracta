@@ -66,6 +66,8 @@ export class RuntimeProcess {
         reason: `Port ${String(this.port)} is already in use, probably by another Difracta runtime on this machine. Stop it, then start Difracta again.`,
       };
 
+    // A runtime is started again after a switch away and back.
+    this.#exitCode = undefined;
     const log = await this.#openLog();
     const child = utilityProcess.fork(
       this.#locations.script,

@@ -50,7 +50,11 @@ near-synonyms.
   shortcut and check `difracta --help` reads well to an agent.
 - Desktop's preload bridge (`difracta-desktop/src/bridge-contract.ts`) carries
   only what needs the operating system, such as a file dialog. Anything else
-  goes through the runtime as a command or request, so the CLI can do it too. In
+  goes through the runtime as a command or request, so the CLI can do it too.
+  That bridge is for the local runtime's Studio only: a runtime elsewhere gets a
+  window with no preload. Desktop's launch page (`difracta-studio/src/launch/`)
+  has a bridge of its own (`launch-contract.ts`); it imports no client, app
+  shell or Visuals, and neither bridge grows to serve the other's page. In
   `difracta-desktop`, keep what is pure apart from what needs Electron: the
   `electron` module only exists inside the app, so a file with unit tests does
   not import it.

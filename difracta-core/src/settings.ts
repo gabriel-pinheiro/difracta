@@ -106,5 +106,12 @@ export const settings = {
     /** The Studio window's size on first show. */
     windowWidth: 1440,
     windowHeight: 900,
+    /** The launch page's window: a chooser, so smaller than Studio's. */
+    launchWindowWidth: 760,
+    launchWindowHeight: 680,
+    /** How long a runtime somewhere else gets to answer `/health` before Desktop says it cannot be reached. */
+    remoteCheckTimeoutMs: 4_000,
+    /** Runtimes connected to before that the launch page keeps; the oldest drop off. */
+    rememberedRuntimesLimit: 12,
   },
 } as const;

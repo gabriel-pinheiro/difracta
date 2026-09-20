@@ -1,5 +1,7 @@
 import { settings } from "@difracta/core";
 
+import { readHealth } from "./runtime-health.ts";
+
 export interface HealthWaitOptions {
   /** The runtime's `/health` URL. */
   readonly url: string;
@@ -14,18 +16,6 @@ export interface HealthWaitOptions {
 
 export type HealthWaitResult =
   { readonly ok: true } | { readonly ok: false; readonly reason: string };
-
-/** Whether a `/health` answer is a Difracta runtime's, not some other server's on the port. */
-async function isRuntime(response: Response): Promise<boolean> {
-  if (!response.ok) return false;
-  const body = (await response.json()) as unknown;
-  return (
-    typeof body === "object" &&
-    body !== null &&
-    "name" in body &&
-    body.name === "Difracta Runtime"
-  );
-}
 
 /**
  * Asks `/health` until the runtime answers: a forked runtime takes a moment to
@@ -49,7 +39,8 @@ export async function waitForHealth(
     const reason = options.givenUp?.();
     if (reason !== undefined) return { ok: false, reason };
     try {
-      if (await isRuntime(await fetchHealth(options.url))) return { ok: true };
+      if ((await readHealth(await fetchHealth(options.url))) !== undefined)
+        return { ok: true };
     } catch {
       // Not listening yet.
     }

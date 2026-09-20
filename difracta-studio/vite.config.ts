@@ -13,6 +13,16 @@ export default defineConfig({
   resolve: {
     alias: { "@": path.resolve(import.meta.dirname, "src") },
   },
+  build: {
+    // Two pages: Studio, and Difracta Desktop's launch page, which shares
+    // Studio's components and none of its application code.
+    rollupOptions: {
+      input: {
+        index: path.resolve(import.meta.dirname, "index.html"),
+        launch: path.resolve(import.meta.dirname, "launch.html"),
+      },
+    },
+  },
   server: {
     proxy: {
       "/live": { target: runtime, ws: true },
