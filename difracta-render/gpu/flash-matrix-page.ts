@@ -21,7 +21,7 @@ function sampleFlashMatrix(
     gl.STATIC_DRAW,
   );
   gl.enableVertexAttribArray(0);
-  const programs = new ShaderVisualPrograms(gl, quad);
+  const programs = new ShaderVisualPrograms(gl, quad, quad);
   const params = {
     ...defaultParameterValues(flashMatrix.parameters),
     columns: 10,

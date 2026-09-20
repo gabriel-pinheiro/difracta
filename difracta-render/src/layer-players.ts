@@ -13,6 +13,12 @@ import { createShaderPlayer, type ShaderPlayer } from "./sdk/shader-player.ts";
 import { isShaderVisual, type ShaderVisual } from "./sdk/shader-visual.ts";
 import type { Uniforms } from "./sdk/uniforms.ts";
 import { isCanvasVisual, type CanvasVisual } from "./sdk/visual.ts";
+import {
+  deleteShaderBuffer,
+  fitShaderBuffer,
+  shaderBufferSize,
+  type ShaderBuffer,
+} from "./shader-buffers.ts";
 
 /** A Layer with something to composite this frame: a canvas texture or a shader to run. */
 export type LayerFrame = {
@@ -26,8 +32,12 @@ export type LayerFrame = {
       readonly visual: ShaderVisual;
       readonly params: ParameterValues;
       readonly uniforms: Uniforms;
+      /** What `u_resolution` reports: the Surface's pixels, or its buffer's. */
       readonly width: number;
       readonly height: number;
+      /** Set below full resolution; `redraw` when the fragment must fill it this frame. */
+      readonly buffer:
+        (ShaderBuffer & { readonly redraw: boolean }) | undefined;
     }
 );
 
@@ -70,6 +80,7 @@ interface ShaderEntry {
   readonly kind: "shader";
   readonly visual: string;
   readonly player: ShaderPlayer;
+  buffer: ShaderBuffer | undefined;
   issue: RenderIssue | undefined;
 }
 
@@ -182,6 +193,15 @@ export class LayerPlayers {
           this.#fail(entry, draw, result.failure, issues);
         if (result.blank) return;
         counter.rendered += 1;
+        const buffer = fitShaderBuffer(
+          this.#gl,
+          entry.buffer,
+          shaderBufferSize(width, height, result.resolution),
+        );
+        // A new buffer, or a switch to or from one, has nothing drawn yet.
+        const fresh = buffer !== entry.buffer;
+        if (fresh) changed = true;
+        entry.buffer = buffer;
         frames.push({
           kind: "shader",
           draw,
@@ -192,8 +212,12 @@ export class LayerPlayers {
             draw.layer.parameters,
           ),
           uniforms: result.uniforms,
-          width,
-          height,
+          width: buffer?.width ?? width,
+          height: buffer?.height ?? height,
+          buffer:
+            buffer === undefined
+              ? undefined
+              : { ...buffer, redraw: fresh || result.changed },
         });
       }
     });
@@ -275,6 +299,7 @@ export class LayerPlayers {
         height: 1,
         seed: draw.layer.id,
       }),
+      buffer: undefined,
       issue: undefined,
     };
     this.#entries.set(draw.layer.id, entry);
@@ -299,5 +324,7 @@ export class LayerPlayers {
   #dispose(entry: Entry): void {
     entry.player.dispose();
     if (entry.kind === "canvas") this.#gl.deleteTexture(entry.texture);
+    else if (entry.buffer !== undefined)
+      deleteShaderBuffer(this.#gl, entry.buffer);
   }
 }

@@ -44,6 +44,7 @@ export {
 } from "./helpers.ts";
 export {
   automaticRate,
+  renderResolution,
   resolveParameters,
   type ParameterValueOf,
   type ParameterValuesOf,

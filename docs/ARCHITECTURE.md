@@ -592,20 +592,27 @@ draws on its own canvas, sized by `surfaceCanvasSize` and capped at the GPU's
 texture limit, with a texture uploaded on the frames the instance drew; a shader
 Visual's yields uniforms, and its program (`shader-visuals.ts`, one per Visual,
 kept once compiled) runs over the Surface's quad straight into the frame at
-frame resolution, so Render Scale does not apply to it. An instance exists
-exactly while its Layer is planned: playing another Scene, disabling the Layer
-or a Group above it, or clearing its Target disposes it, and a change of Visual
-or canvas size replaces it, so a Scene starts fresh every time it plays. A Layer
-at opacity zero is planned hidden: its instance is kept but not stepped, nothing
-is drawn or uploaded for it, and it resumes where it stopped when the fader
-comes back up. The frame is then composited in plan order: every Layer's texture
-is drawn through its Surface's homography with the Surface's Masks, the Layer's
-opacity, and its blend mode (normal is premultiplied over, additive adds), so
-Layers stack as the navigator shows and overlapping Surfaces combine as their
-light would in the room. The frame is recomposited only when the document, the
-Output, the size, or any Layer's picture changed, or any Filter reports that its
-picture would; a Scene of Layers and Filters that report no change costs the
-Output only the instances' updates, and a hidden Layer not even that.
+frame resolution, so Render Scale does not apply to it. A shader Visual whose
+update asks for a `resolution` below 1 renders instead into a buffer of that
+share of the Surface's canvas size (`shader-buffers.ts`), only on the frames it
+reports a change, and the buffer is composited like a canvas texture. **Why the
+Visual asks rather than Render Scale deciding:** the cost is the fragment's, not
+the Surface's, so a costly Visual exposes it as a Parameter a Controller can
+ride mid-set, and every other shader keeps drawing straight into the frame with
+no extra pass. An instance exists exactly while its Layer is planned: playing
+another Scene, disabling the Layer or a Group above it, or clearing its Target
+disposes it, and a change of Visual or canvas size replaces it, so a Scene
+starts fresh every time it plays. A Layer at opacity zero is planned hidden: its
+instance is kept but not stepped, nothing is drawn or uploaded for it, and it
+resumes where it stopped when the fader comes back up. The frame is then
+composited in plan order: every Layer's texture is drawn through its Surface's
+homography with the Surface's Masks, the Layer's opacity, and its blend mode
+(normal is premultiplied over, additive adds), so Layers stack as the navigator
+shows and overlapping Surfaces combine as their light would in the room. The
+frame is recomposited only when the document, the Output, the size, or any
+Layer's picture changed, or any Filter reports that its picture would; a Scene
+of Layers and Filters that report no change costs the Output only the instances'
+updates, and a hidden Layer not even that.
 
 The plan also places the Scene's Filter Layers: each one enabled with its
 Groups, holding a Filter, with a mix above zero and at least one planned Layer
@@ -769,7 +776,11 @@ blend mode and Masks and premultiplies the result. An instance may return
 uniform arrays (`Float32Array`, `vec2s`, `vec3s`, `vec4s` in `sdk/uniforms.ts`)
 for a fragment that reads several live events through a fixed-size array; that
 size is the only limit on how many a shader can show at once, and it is the
-Visual's to choose.
+Visual's to choose. An update may also return `resolution`, from 0.1 to 1, to
+render below the Surface's resolution, with `renderResolution()` as the
+Parameter that goes with it, keyed `renderResolution` since `defineShaderVisual`
+refuses a Parameter named like an engine uniform; `u_resolution` is then the
+buffer's size.
 
 Cues reach the instance, canvas or shader, as `cue(key)` before its next
 `update`, and the instance keeps whatever it needs: a list of live envelopes, a

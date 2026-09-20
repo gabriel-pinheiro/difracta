@@ -22,6 +22,15 @@ export interface ShaderUpdate {
   readonly blank?: boolean;
   /** Kept from one frame to the next until returned again. */
   readonly uniforms?: Uniforms;
+  /**
+   * The share of the Surface's pixels, along each side, the fragment renders
+   * at. At 1, the default, it draws straight into the frame; below 1, down
+   * to 0.1, it fills a smaller buffer that is stretched over the Surface and
+   * redrawn only on frames reporting `changed`, so a costly fragment trades
+   * sharpness for speed, and `u_resolution` is that buffer's size. Kept
+   * from one frame to the next until returned again.
+   */
+  readonly resolution?: number;
 }
 
 export interface ShaderVisualInstance<
@@ -47,11 +56,31 @@ export interface ShaderVisual<
   create?(context: VisualContext<S, P>): ShaderVisualInstance<S, P>;
 }
 
+/**
+ * Uniform names the engine declares around every shader Visual's fragment,
+ * without their `u_`; a Parameter keyed like one would redeclare it, which
+ * only a compile in a browser would catch.
+ */
+const ENGINE_UNIFORMS: readonly string[] = [
+  "homography",
+  "rect",
+  "mask",
+  "mask_enabled",
+  "opacity",
+  "resolution",
+  "texel",
+];
+
 /** Declares a shader Visual; the Parameter schema types `params` and the Paths type `paths` everywhere. */
 export function defineShaderVisual<
   const S extends ParameterSchema,
   const P extends PathRequirements = readonly [],
 >(visual: Omit<ShaderVisual<S, P>, "kind" | "backend">): ShaderVisual<S, P> {
+  for (const name of Object.keys(visual.parameters))
+    if (ENGINE_UNIFORMS.includes(name) || name.startsWith("path_"))
+      throw new Error(
+        `Shader Visual “${visual.id}”: Parameter “${name}” is named like the engine's uniform u_${name}.`,
+      );
   return { ...visual, kind: "visual", backend: "shader" };
 }
 

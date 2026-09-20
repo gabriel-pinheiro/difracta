@@ -34,6 +34,7 @@ describe("createShaderPlayer", () => {
       blank: false,
       changed: true,
       uniforms: { phase: 1 },
+      resolution: 1,
     });
     const failed = player.frame(0.01, {}, 1, 1);
     // The Layer going blank changes the picture once.
@@ -45,5 +46,25 @@ describe("createShaderPlayer", () => {
     expect(later).toMatchObject({ blank: true, changed: false });
     expect(later.failure).toBe(failed.failure);
     expect(updates).toBe(2);
+  });
+
+  it("carries the resolution an update asks for until it asks again", () => {
+    let asked: number | undefined = 0.5;
+    const scaled = defineShaderVisual({
+      id: "scaled",
+      name: "Scaled",
+      description: "Asks for a resolution when told to.",
+      parameters: {},
+      fragment: "vec4 render_visual(vec2 uv) { return vec4(1.0); }",
+      create: () => ({
+        update: () => (asked === undefined ? {} : { resolution: asked }),
+      }),
+    });
+    const player = createShaderPlayer(scaled, { width: 1, height: 1, seed: 1 });
+    expect(player.frame(0.01, {}, 1, 1).resolution).toBe(0.5);
+    asked = undefined;
+    expect(player.frame(0.01, {}, 1, 1).resolution).toBe(0.5);
+    asked = 1;
+    expect(player.frame(0.01, {}, 1, 1).resolution).toBe(1);
   });
 });

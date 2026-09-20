@@ -6,6 +6,7 @@ import {
   defineFilter,
   defineShaderVisual,
   defineVisual,
+  renderResolution,
 } from "../src/sdk/index.ts";
 
 /**
@@ -25,6 +26,26 @@ export const flatShader = defineShaderVisual({
   description: "One flat color from a fragment.",
   parameters: color,
   fragment: `vec4 render_visual(vec2 uv) { return u_color; }`,
+});
+
+/** A shader Visual at its Resolution Parameter: the top half in its colour, the bottom half blue. */
+export const scaledShader = defineShaderVisual({
+  id: "test-scaled-shader",
+  name: "Scaled shader",
+  description: "Two halves, rendered at a Resolution.",
+  parameters: {
+    ...color,
+    renderResolution: renderResolution({ default: 0.5 }),
+  },
+  fragment: `vec4 render_visual(vec2 uv) {
+  return uv.y < 0.5 ? u_color : vec4(0.0, 0.0, 1.0, 1.0);
+}`,
+  create: () => ({
+    update: ({ params, changed }) => ({
+      changed,
+      resolution: params.renderResolution,
+    }),
+  }),
 });
 
 /** A canvas Visual that redraws its colour on every frame. */
@@ -100,6 +121,7 @@ export const testCatalog = new Catalog({
   visuals: [
     ...builtInCatalog.visuals(),
     flatShader,
+    scaledShader,
     alwaysRedraws,
     throwsOnSecondFrame,
   ],

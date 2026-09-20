@@ -9,6 +9,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { LayerPlayers } from "./layer-players.ts";
 import { planFrame } from "./plan.ts";
+import { renderResolution } from "./sdk/parameters.ts";
+import { defineShaderVisual } from "./sdk/shader-visual.ts";
 import { defineVisual } from "./sdk/visual.ts";
 
 // No browser here: the scratch canvas records instead of drawing and the
@@ -45,7 +47,22 @@ const probe = defineVisual({
   },
 });
 
-const catalog = new Catalog({ visuals: [probe], filters: [] });
+/** A shader Visual rendering at its Resolution Parameter. */
+const scaled = defineShaderVisual({
+  id: "scaled",
+  name: "Scaled",
+  description: "Renders at the Resolution it is given.",
+  parameters: { renderResolution: renderResolution({ default: 0.5 }) },
+  fragment: "vec4 render_visual(vec2 uv) { return vec4(1.0); }",
+  create: () => ({
+    update: ({ params, changed }) => ({
+      changed,
+      resolution: params.renderResolution,
+    }),
+  }),
+});
+
+const catalog = new Catalog({ visuals: [probe, scaled], filters: [] });
 const registry = createBuiltInRegistry(catalog);
 const gl = new Proxy({}, { get: () => () => 4096 }) as WebGL2RenderingContext;
 
@@ -109,6 +126,44 @@ describe("LayerPlayers", () => {
     step(run(faded, "layer.update", { layerId: "A", target: null }));
     step(shown);
     expect(created).toBe(2);
+    players.dispose();
+  });
+
+  it("gives a shader Layer below full resolution a buffer, redrawn only on a change", () => {
+    const players = new LayerPlayers(gl, catalog);
+    const step = (document: Document) =>
+      players.step(planFrame(document, "out_a", catalog).layers, 0.016, 64, 64);
+    const shader = (report: ReturnType<typeof step>) => {
+      const frame = report.frames[0];
+      if (frame?.kind !== "shader") throw new Error("No shader frame.");
+      return frame;
+    };
+    const half = run(staged(), "layer.visual", {
+      layerId: "A",
+      visual: "scaled",
+    });
+    const first = step(half);
+    expect(first.changed).toBe(true);
+    expect(shader(first).buffer?.redraw).toBe(true);
+    const still = step(half);
+    expect(still.changed).toBe(false);
+    expect(shader(still).buffer?.redraw).toBe(false);
+    const full = step(
+      run(half, "address.set", {
+        address: "layer/A/param/renderResolution",
+        value: 1,
+      }),
+    );
+    // Back at full resolution the buffer goes and the fragment draws the frame.
+    expect(full.changed).toBe(true);
+    expect(shader(full).buffer).toBeUndefined();
+    const buffer = shader(first).buffer;
+    expect(buffer?.width).toBe(Math.round(shader(full).width * 0.5));
+    expect(buffer?.height).toBe(Math.round(shader(full).height * 0.5));
+    expect(shader(first)).toMatchObject({
+      width: buffer?.width,
+      height: buffer?.height,
+    });
     players.dispose();
   });
 });

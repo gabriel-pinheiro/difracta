@@ -9,6 +9,7 @@ import {
   type PathShapes,
 } from "./sdk/path.ts";
 import type { ShaderVisual } from "./sdk/shader-visual.ts";
+import type { ShaderBuffer } from "./shader-buffers.ts";
 import type { Uniforms } from "./sdk/uniforms.ts";
 import { EDGE_COVERAGE_SOURCE, VERTEX_SOURCE } from "./shaders.ts";
 
@@ -27,6 +28,19 @@ export interface ShaderDrawInput {
   readonly homography: Float32Array;
   readonly maskTexture: WebGLTexture | undefined;
 }
+
+/** What a draw into a Layer's buffer needs; the buffer decides the rest. */
+export type BufferDrawInput = Pick<
+  ShaderDrawInput,
+  "visual" | "params" | "uniforms" | "paths"
+>;
+
+/**
+ * Surface Space straight onto a whole buffer, rows top first like an
+ * uploaded canvas, so the buffer composites exactly as a canvas Layer's
+ * texture does.
+ */
+const BUFFER_HOMOGRAPHY = new Float32Array([1, 0, 0, 0, -1, 0, 0, 1, 1]);
 
 interface ProgramEntry {
   readonly program: WebGLProgram;
@@ -85,17 +99,54 @@ export function visualFragmentSource(visual: ShaderVisual): string {
 export class ShaderVisualPrograms {
   readonly #gl: WebGL2RenderingContext;
   readonly #quad: WebGLBuffer;
+  readonly #unit: WebGLBuffer;
   readonly #programs = new Map<string, ProgramEntry | undefined>();
   readonly #failures = new Map<string, string>();
 
-  /** `quad` is the Surface program's current Surface quad, set before each draw. */
-  constructor(gl: WebGL2RenderingContext, quad: WebGLBuffer) {
+  /**
+   * `quad` is the Surface program's current Surface quad, set before each
+   * draw; `unit` its unit quad, which a buffer is filled with.
+   */
+  constructor(
+    gl: WebGL2RenderingContext,
+    quad: WebGLBuffer,
+    unit: WebGLBuffer,
+  ) {
     this.#gl = gl;
     this.#quad = quad;
+    this.#unit = unit;
   }
 
   /** Draws with the current blend function; the mask goes on texture unit 0. */
   draw(input: ShaderDrawInput): void {
+    this.#run(input, this.#quad);
+  }
+
+  /**
+   * Renders into a Layer's buffer at the buffer's size, unmasked and at full
+   * opacity, and leaves it bound; the compositor then draws the buffer over
+   * the Surface with the Layer's opacity, blend mode and Masks.
+   */
+  render(buffer: ShaderBuffer, input: BufferDrawInput): void {
+    const gl = this.#gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, buffer.framebuffer);
+    gl.viewport(0, 0, buffer.width, buffer.height);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    this.#run(
+      {
+        ...input,
+        width: buffer.width,
+        height: buffer.height,
+        opacity: 1,
+        homography: BUFFER_HOMOGRAPHY,
+        maskTexture: undefined,
+      },
+      this.#unit,
+    );
+  }
+
+  #run(input: ShaderDrawInput, quad: WebGLBuffer): void {
     const entry = this.#program(input.visual);
     if (entry === undefined) return;
     const gl = this.#gl;
@@ -116,7 +167,7 @@ export class ShaderVisualPrograms {
       const location = this.#location(entry, name);
       if (location !== null) setUniform(gl, location, value);
     }
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.#quad);
+    gl.bindBuffer(gl.ARRAY_BUFFER, quad);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }

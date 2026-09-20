@@ -35,6 +35,8 @@ export interface ShaderFrameResult {
   /** The picture differs from last frame's, so the frame must be recomposited. */
   readonly changed: boolean;
   readonly uniforms: Uniforms;
+  /** The resolution the instance last asked for (see `ShaderUpdate`), 1 until it asks. */
+  readonly resolution: number;
   /** The error that stopped the instance; set on every frame from then on. */
   readonly failure?: Error;
 }
@@ -56,6 +58,7 @@ export function createShaderPlayer(
   let instance: ShaderVisualInstance<typeof visual.parameters> | undefined;
   let previous: ParameterValues | undefined;
   let uniforms = NO_UNIFORMS;
+  let resolution = 1;
   let wasBlank: boolean | undefined;
   let failure: Error | undefined;
   const tracker = pathTracker();
@@ -66,12 +69,12 @@ export function createShaderPlayer(
     // The Layer goes blank now; the frames after this one are unchanged.
     const changed = wasBlank !== true;
     wasBlank = true;
-    return { blank: true, changed, uniforms, failure };
+    return { blank: true, changed, uniforms, resolution, failure };
   };
   return {
     frame(dt, values, frameWidth, frameHeight, shapes = {}) {
       if (failure !== undefined)
-        return { blank: true, changed: false, uniforms, failure };
+        return { blank: true, changed: false, uniforms, resolution, failure };
       const params = resolveParameters(visual.parameters, values);
       const { paths, changed: pathsChanged } = tracker.resolve(
         shapes,
@@ -94,7 +97,8 @@ export function createShaderPlayer(
           random: createRandom(seed),
         });
         const current = instance;
-        if (current === undefined) return { blank: false, changed, uniforms };
+        if (current === undefined)
+          return { blank: false, changed, uniforms, resolution };
         const report =
           current.update({
             dt: Math.min(MAX_FRAME_SECONDS, Math.max(0, dt)),
@@ -106,6 +110,7 @@ export function createShaderPlayer(
           }) ?? {};
         if (report.uniforms !== undefined)
           uniforms = { ...uniforms, ...report.uniforms };
+        if (report.resolution !== undefined) resolution = report.resolution;
         const blank = report.blank ?? false;
         const flipped = wasBlank !== undefined && blank !== wasBlank;
         wasBlank = blank;
@@ -113,6 +118,7 @@ export function createShaderPlayer(
           blank,
           changed: (report.changed ?? true) || flipped,
           uniforms,
+          resolution,
         };
       } catch (error: unknown) {
         return fail(error);

@@ -61,3 +61,26 @@ export function automaticRate(
     ...overrides,
   };
 }
+
+/**
+ * The Parameter a costly shader Visual declares to render below its
+ * Surface's resolution, always with the same label and range; its update
+ * returns the value as `resolution`. Key it `renderResolution`: a Parameter
+ * keyed `resolution` would clash with the engine's `u_resolution`.
+ */
+export function renderResolution(
+  overrides: Partial<Pick<NumberParameter, "default" | "description">> = {},
+): NumberParameter {
+  return {
+    kind: "number",
+    label: "Resolution",
+    default: 1,
+    min: 0.25,
+    max: 1,
+    step: 0.05,
+    percent: true,
+    description:
+      "The share of the Surface's pixels it renders at; lower is faster and softer.",
+    ...overrides,
+  };
+}

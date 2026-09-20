@@ -10,7 +10,7 @@ import {
 import { frameIssues, type RenderIssue } from "./issues.ts";
 import { LayerPlayers, type LayerFrame } from "./layer-players.ts";
 import { MaskTextures } from "./masks.ts";
-import { planFrame, plannedSurfaces } from "./plan.ts";
+import { planFrame, plannedSurfaces, type LayerDraw } from "./plan.ts";
 import { MAX_FRAME_SECONDS } from "./sdk/visual.ts";
 import { ShaderVisualPrograms } from "./shader-visuals.ts";
 import { SurfaceGeometries } from "./surface-geometry.ts";
@@ -188,6 +188,16 @@ class WebGLCompositor implements Compositor {
         issues,
       };
     this.#last = { document, outputId, width, height };
+    // Shader Layers below full resolution render into their buffers first,
+    // on the frames they changed, and are composited like canvases below.
+    for (const frame of step.frames)
+      if (frame.kind === "shader" && frame.buffer?.redraw === true)
+        resources.shaderPrograms.render(frame.buffer, {
+          visual: frame.visual,
+          params: frame.params,
+          uniforms: frame.uniforms,
+          paths: frame.draw.paths,
+        });
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, width, height);
     gl.clearColor(0, 0, 0, 1);
@@ -217,7 +227,14 @@ class WebGLCompositor implements Compositor {
       program.setSurface(geometry);
       const maskTexture = resources.masks.get(frame.draw, width, height);
       if (frame.kind === "canvas")
-        this.#drawLayer(resources, frame, maskTexture);
+        this.#drawTexture(resources, frame.draw, frame.texture, maskTexture);
+      else if (frame.buffer !== undefined)
+        this.#drawTexture(
+          resources,
+          frame.draw,
+          frame.buffer.texture,
+          maskTexture,
+        );
       else this.#drawShader(resources, frame, geometry.matrix, maskTexture);
     }
     passesBelow(plan.layers.length);
@@ -289,7 +306,11 @@ class WebGLCompositor implements Compositor {
       players: new LayerPlayers(gl, this.#catalog),
       filters: new FilterPlayers(this.#catalog),
       chain: new FilterChain(gl, program.quad),
-      shaderPrograms: new ShaderVisualPrograms(gl, program.surface),
+      shaderPrograms: new ShaderVisualPrograms(
+        gl,
+        program.surface,
+        program.quad,
+      ),
       geometries: new SurfaceGeometries(),
     };
   }
@@ -320,18 +341,19 @@ class WebGLCompositor implements Compositor {
     resources.program.use();
   }
 
-  /** A Layer's canvas over its Surface, with opacity, blend mode and the Surface's Masks. */
-  #drawLayer(
+  /** A Layer's canvas or shader buffer over its Surface, with opacity, blend mode and the Surface's Masks. */
+  #drawTexture(
     resources: Resources,
-    frame: LayerFrame & { kind: "canvas" },
+    draw: LayerDraw,
+    texture: WebGLTexture,
     maskTexture: WebGLTexture | undefined,
   ): void {
     const { gl, program } = resources;
     const { uniforms } = program;
-    const { layer } = frame.draw;
+    const { layer } = draw;
     program.setMask(maskTexture);
     gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, frame.texture);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.uniform1i(uniforms.mode, MODE.layer);
     gl.uniform4f(uniforms.color, 1, 1, 1, layer.opacity);
     gl.uniform4f(uniforms.rect, ...WHOLE);
