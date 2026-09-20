@@ -27,6 +27,9 @@ export function installApplicationMenu(options: {
         { type: "separator" },
         { role: "resetZoom" },
         { role: "zoomIn" },
+        // The role's shortcut is Ctrl+Plus, which is Ctrl+Shift+= on most
+        // layouts; browsers also take the bare Ctrl+=, so a hidden twin does.
+        { role: "zoomIn", accelerator: "CommandOrControl+=", visible: false },
         { role: "zoomOut" },
         { type: "separator" },
         { role: "togglefullscreen" },
