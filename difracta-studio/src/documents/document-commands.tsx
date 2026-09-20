@@ -1,5 +1,5 @@
 import type { DocumentView } from "@difracta/client";
-import type { DocumentSummary, FileEntry } from "@difracta/protocol";
+import type { DocumentSummary } from "@difracta/protocol";
 import {
   createContext,
   useContext,
@@ -13,7 +13,7 @@ import { useClient, useSignal } from "@/lib/client";
 
 import { ConfirmDialog, type ConfirmRequest } from "./confirm-dialog";
 import { NameDialog, type NameRequest } from "@/components/name-dialog";
-import { OpenFileDialog } from "./open-file-dialog";
+import { filePathRequest } from "./file-path-request";
 
 /**
  * Every document-level action Studio exposes (menu items, shortcuts): new,
@@ -21,8 +21,13 @@ import { OpenFileDialog } from "./open-file-dialog";
  * actions need and reports failures as toasts. The runtime holds one
  * Installation; `selected` is its summary and `view` its live document,
  * opened with live state so the Outputs monitor sees sessions.
+ *
+ * `free` is whether the runtime lets this connection replace the document:
+ * on a pinned one new, open, save as and close do nothing, and the menu
+ * leaves them out.
  */
 export interface DocumentCommands {
+  readonly free: boolean;
   readonly selected: DocumentSummary | undefined;
   readonly view: DocumentView | undefined;
   readonly create: () => void;
@@ -39,8 +44,7 @@ const Context = createContext<DocumentCommands | undefined>(undefined);
 
 type Dialog =
   | { kind: "name"; request: NameRequest }
-  | { kind: "confirm"; request: ConfirmRequest }
-  | { kind: "open" };
+  | { kind: "confirm"; request: ConfirmRequest };
 
 export function DocumentCommandsProvider({
   children,
@@ -49,6 +53,7 @@ export function DocumentCommandsProvider({
 }) {
   const client = useClient();
   const selected = useSignal(client.document) ?? undefined;
+  const free = useSignal(client.documents) === "free";
   const [dialog, setDialog] = useState<Dialog | undefined>(undefined);
 
   const commands = useMemo<DocumentCommands>(() => {
@@ -93,12 +98,14 @@ export function DocumentCommandsProvider({
     };
 
     return {
+      free,
       selected,
       view:
         selected === undefined
           ? undefined
           : client.openDocument(selected.id, { live: true }),
-      create: () =>
+      create: () => {
+        if (!free) return;
         afterDiscardCheck("A new Installation", (discard) =>
           setDialog({
             kind: "name",
@@ -111,27 +118,31 @@ export function DocumentCommandsProvider({
                 run(() => client.request("documents.new", { name, discard })),
             },
           }),
-        ),
-      open: () =>
-        afterDiscardCheck("Opening another Installation", () =>
-          setDialog({ kind: "open" }),
-        ),
+        );
+      },
+      open: () => {
+        if (!free) return;
+        afterDiscardCheck("Opening another Installation", (discard) =>
+          setDialog({
+            kind: "name",
+            request: filePathRequest("open", selected?.path ?? null, (path) =>
+              run(() => client.request("documents.open", { path, discard })),
+            ),
+          }),
+        );
+      },
       save: () => {
         if (selected === undefined) return;
-        if (selected.path === null) commands.saveAs();
+        if (selected.path === null && free) commands.saveAs();
         else saveTo(selected.id);
       },
       saveAs: () => {
-        if (selected === undefined) return;
+        if (selected === undefined || !free) return;
         setDialog({
           kind: "name",
-          request: {
-            title: "Save Installation As",
-            label: "File name, inside the runtime's projects folder",
-            initial: selected.name,
-            submitLabel: "Save",
-            onSubmit: (path) => saveTo(selected.id, path),
-          },
+          request: filePathRequest("save", selected.path, (path) =>
+            saveTo(selected.id, path),
+          ),
         });
       },
       revert: () => {
@@ -152,7 +163,7 @@ export function DocumentCommandsProvider({
         });
       },
       close: () => {
-        if (selected === undefined) return;
+        if (selected === undefined || !free) return;
         if (!selected.dirty) {
           closeDocument(selected.id, false);
           return;
@@ -170,22 +181,7 @@ export function DocumentCommandsProvider({
       undo: () => history("history.undo"),
       redo: () => history("history.redo"),
     };
-  }, [client, selected]);
-
-  function openFile(entry: FileEntry): void {
-    setDialog(undefined);
-    // The discard check ran before the dialog opened.
-    void client
-      .request("documents.open", {
-        path: entry.path,
-        discard: selected?.dirty === true,
-      })
-      .catch((failure: unknown) => {
-        toast.error(
-          failure instanceof Error ? failure.message : String(failure),
-        );
-      });
-  }
+  }, [client, selected, free]);
 
   const closeDialog = (): void => setDialog(undefined);
   return (
@@ -197,12 +193,6 @@ export function DocumentCommandsProvider({
       />
       <ConfirmDialog
         request={dialog?.kind === "confirm" ? dialog.request : undefined}
-        onClose={closeDialog}
-      />
-      <OpenFileDialog
-        open={dialog?.kind === "open"}
-        currentPath={selected?.path ?? null}
-        onOpen={openFile}
         onClose={closeDialog}
       />
     </Context.Provider>

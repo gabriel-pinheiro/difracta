@@ -5,12 +5,7 @@ import {
   emptyCatalog,
   type CommandDefinition,
 } from "@difracta/core";
-import {
-  PROTOCOL_VERSION,
-  type ClientMessage,
-  type ServerMessage,
-} from "@difracta/protocol";
-import { EventEmitter } from "node:events";
+import { PROTOCOL_VERSION } from "@difracta/protocol";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -20,35 +15,8 @@ import { z } from "zod";
 
 import { DocumentStore } from "../documents/document-store.ts";
 import { buildRuntime, type Runtime } from "../server.ts";
+import { FakeSocket } from "./fake-socket.ts";
 import { LiveServer } from "./live-server.ts";
-
-/** A `ws` socket as the LiveServer sees it, driven from the test. */
-class FakeSocket extends EventEmitter {
-  readonly OPEN = 1;
-  readyState = this.OPEN;
-  readonly sent: ServerMessage[] = [];
-
-  send(data: string): void {
-    this.sent.push(JSON.parse(data) as ServerMessage);
-  }
-
-  close(): void {
-    this.readyState = 3;
-    this.emit("close");
-  }
-
-  receive(message: ClientMessage): void {
-    this.emit("message", Buffer.from(JSON.stringify(message)));
-  }
-
-  reply(requestId: string): Extract<ServerMessage, { type: "reply" }> {
-    const found = this.sent.find(
-      (message) => message.type === "reply" && message.requestId === requestId,
-    );
-    if (found?.type !== "reply") throw new Error(`No reply to ${requestId}.`);
-    return found;
-  }
-}
 
 let dir: string;
 let runtime: Runtime;
@@ -76,7 +44,7 @@ beforeEach(async () => {
   runtime = await buildRuntime({
     host: "127.0.0.1",
     port: 0,
-    projectsDir: dir,
+    documents: "free",
     openPath: undefined,
     studioDist: undefined,
     outputDist: undefined,
@@ -309,6 +277,11 @@ describe("live protocol", () => {
     const first = await studio.request<{ id: string }>("documents.new", {
       name: "First",
     });
+    // An untouched new Installation has nothing to lose; a changed one does.
+    await studio.command(first.id, "output.create", {
+      id: "out_a",
+      name: "TV",
+    });
     await expect(
       studio.request("documents.new", { name: "Second" }),
     ).rejects.toThrow("unsaved changes");
@@ -383,19 +356,20 @@ describe("live protocol", () => {
         },
       }) as unknown as CommandDefinition<never>,
     );
-    const store = new DocumentStore({ projectsDir: dir, registry });
+    const store = new DocumentStore({ registry });
     const logged: string[] = [];
     const live = new LiveServer({
       store,
       catalog: emptyCatalog,
       runtimeName: "test",
       runtimeVersion: "0",
+      documents: "free",
       log: (message) => logged.push(message),
     });
     const created = await store.create("Living");
     const documentId = created.ok ? created.result.id : "";
     const socket = new FakeSocket();
-    live.accept(socket as unknown as WebSocket);
+    live.accept(socket as unknown as WebSocket, "127.0.0.1");
     socket.receive({
       type: "hello",
       protocolVersion: PROTOCOL_VERSION,
@@ -436,21 +410,19 @@ describe("live protocol", () => {
   });
 
   it("replies with every payload issue, for commands and requests alike", async () => {
-    const store = new DocumentStore({
-      projectsDir: dir,
-      registry: createBuiltInRegistry(),
-    });
+    const store = new DocumentStore({ registry: createBuiltInRegistry() });
     const live = new LiveServer({
       store,
       catalog: emptyCatalog,
       runtimeName: "test",
       runtimeVersion: "0",
+      documents: "free",
       log: () => undefined,
     });
     const created = await store.create("Living");
     const documentId = created.ok ? created.result.id : "";
     const socket = new FakeSocket();
-    live.accept(socket as unknown as WebSocket);
+    live.accept(socket as unknown as WebSocket, "127.0.0.1");
     socket.receive({
       type: "hello",
       protocolVersion: PROTOCOL_VERSION,

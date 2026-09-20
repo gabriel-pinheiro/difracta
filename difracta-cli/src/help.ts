@@ -25,6 +25,9 @@ Working from a shell
   Save       Authoring (run, edit, link, undo) changes the open Installation
              in memory; "documents save" writes it, and "health" says
              "unsaved changes" until then. set and trigger are never saved.
+             "health" also says "documents pinned" or "documents free": a
+             pinned runtime keeps its one file and refuses documents new,
+             open, close and save <other path>.
 
   Order      A create lands first in its Group (a Layer: on top). Pass
              "after": <sibling id|name> to place it below that sibling, or

@@ -3,7 +3,15 @@ import {
   defaultOperational,
   type Document,
 } from "@difracta/core";
-import { mkdir, open, readdir, rename, stat, unlink } from "node:fs/promises";
+import {
+  mkdir,
+  open,
+  readdir,
+  readFile,
+  rename,
+  stat,
+  unlink,
+} from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 
@@ -105,8 +113,23 @@ export function parseDocumentFile(text: string): ParsedDocumentFile {
   };
 }
 
-export function isAutosavePath(filePath: string): boolean {
-  return filePath.endsWith(AUTOSAVE_EXTENSION);
+/** Reads and parses one file; the error names it. */
+export async function readDocumentFile(
+  source: string,
+): Promise<ParsedDocumentFile> {
+  let text: string;
+  try {
+    text = await readFile(source, "utf8");
+  } catch (error) {
+    return {
+      ok: false,
+      error: `Cannot read ${source}: ${(error as Error).message}`,
+    };
+  }
+  const parsed = parseDocumentFile(text);
+  return parsed.ok
+    ? parsed
+    : { ok: false, error: `${source}: ${parsed.error}` };
 }
 
 export function ensureExtension(filePath: string): string {
@@ -223,9 +246,4 @@ export async function newerAutosave(
   return sidecar !== undefined && (file === undefined || sidecar > file)
     ? newest
     : undefined;
-}
-
-/** True when an autosave sidecar exists and is newer than the file. */
-export async function recoveryAvailable(filePath: string): Promise<boolean> {
-  return (await newerAutosave(filePath)) !== undefined;
 }

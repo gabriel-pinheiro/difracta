@@ -1,21 +1,14 @@
-import {
-  emptyDocument,
-  settings,
-  type CommandRegistry,
-  type Document,
-} from "@difracta/core";
-import type { DocumentSummary, FileEntry } from "@difracta/protocol";
-import { mkdir, readdir, readFile, stat } from "node:fs/promises";
+import { emptyDocument, settings, type CommandRegistry } from "@difracta/core";
+import type { DocumentSummary } from "@difracta/protocol";
 import path from "node:path";
 
 import {
   autosavePathFor,
   DOCUMENT_FILE_EXTENSION,
   ensureExtension,
-  isAutosavePath,
+  modifiedAt,
   newerAutosave,
-  parseDocumentFile,
-  recoveryAvailable,
+  readDocumentFile,
   removeAutosaves,
   serializeDocument,
   writeFileAtomically,
@@ -24,7 +17,6 @@ import { Autosave } from "./autosave.ts";
 import { DocumentSession } from "./document-session.ts";
 
 export interface DocumentStoreOptions {
-  readonly projectsDir: string;
   readonly registry: CommandRegistry;
   /** Overrides `settings.autosave.delayMs`. */
   readonly autosaveIntervalMs?: number;
@@ -42,12 +34,13 @@ const UNSAVED_CHANGES =
 
 /**
  * The one Document this runtime has open, or none. Owns new/open/save/
- * revert/close, the projects directory listing, and the autosave sidecar
- * while the document is dirty.
+ * revert/close and the autosave sidecar while the document is dirty. Files
+ * are named by absolute path; who may name one is the live server's call.
  *
  * New and open replace the current document. They refuse while it has
  * unsaved changes unless told to discard, in which case its autosaves go
- * too, so a discarded state does not resurface as a recovery.
+ * too, so a discarded state does not resurface as a recovery. A new
+ * document starts clean: it is dirty once something changes it.
  *
  * Opening a file whose newest autosave is younger than the file loads the
  * autosave: the document starts dirty and `recovered`, so nothing is lost by
@@ -71,10 +64,6 @@ export class DocumentStore {
     this.#options = options;
   }
 
-  get projectsDir(): string {
-    return this.#options.projectsDir;
-  }
-
   current(): DocumentSummary | null {
     return this.#session?.summary() ?? null;
   }
@@ -94,8 +83,14 @@ export class DocumentStore {
     return () => this.#listeners.delete(listener);
   }
 
-  resolvePath(candidate: string): string {
-    return ensureExtension(path.resolve(this.#options.projectsDir, candidate));
+  /** The `.difracta` file a request names; clients send absolute paths. */
+  resolvePath(candidate: string): StoreResult<string> {
+    if (!path.isAbsolute(candidate))
+      return {
+        ok: false,
+        error: `“${candidate}” is not an absolute path; the runtime has no folder to resolve it in.`,
+      };
+    return { ok: true, result: ensureExtension(path.normalize(candidate)) };
   }
 
   async create(
@@ -107,29 +102,63 @@ export class DocumentStore {
     const session = new DocumentSession(
       emptyDocument(name),
       this.#options.registry,
-      { dirty: true },
     );
     await this.#replace(session);
     return { ok: true, result: session.summary() };
+  }
+
+  /**
+   * Opens the file, first writing a new Installation named after it when it
+   * does not exist, parent folders included. A missing file that left an
+   * autosave behind is recovered from it instead.
+   */
+  async openOrCreate(candidate: string): Promise<StoreResult<DocumentSummary>> {
+    const resolved = this.resolvePath(candidate);
+    if (!resolved.ok) return resolved;
+    const filePath = resolved.result;
+    const missing =
+      (await modifiedAt(filePath)) === undefined &&
+      (await newerAutosave(filePath)) === undefined;
+    if (missing) {
+      const name = path.basename(filePath, DOCUMENT_FILE_EXTENSION);
+      try {
+        await writeFileAtomically(
+          filePath,
+          serializeDocument(emptyDocument(name)),
+        );
+      } catch (error) {
+        return {
+          ok: false,
+          error: `Cannot create ${filePath}: ${(error as Error).message}`,
+        };
+      }
+    }
+    return this.open(filePath);
   }
 
   async open(
     candidate: string,
     discard = false,
   ): Promise<StoreResult<DocumentSummary>> {
-    const filePath = this.resolvePath(candidate);
+    const resolved = this.resolvePath(candidate);
+    if (!resolved.ok) return resolved;
+    const filePath = resolved.result;
     if (this.#session?.path === filePath)
       return { ok: true, result: this.#session.summary() };
     if (this.#session?.dirty === true && !discard)
       return { ok: false, error: UNSAVED_CHANGES };
 
     const sidecar = await newerAutosave(filePath);
-    const loaded = await this.#load(sidecar ?? filePath);
+    const loaded = await readDocumentFile(sidecar ?? filePath);
     if (!loaded.ok) return loaded;
-    const session = new DocumentSession(loaded.result, this.#options.registry, {
-      path: filePath,
-      recovered: sidecar !== undefined,
-    });
+    const session = new DocumentSession(
+      loaded.document,
+      this.#options.registry,
+      {
+        path: filePath,
+        recovered: sidecar !== undefined,
+      },
+    );
     await this.#replace(session);
     return { ok: true, result: session.summary() };
   }
@@ -144,32 +173,17 @@ export class DocumentStore {
         ok: false,
         error: "This Installation has no file to revert to.",
       };
-    const loaded = await this.#load(session.path);
+    const loaded = await readDocumentFile(session.path);
     if (!loaded.ok) return loaded;
-    if (loaded.result.installation.id !== session.id)
+    if (loaded.document.installation.id !== session.id)
       return {
         ok: false,
         error: "The file on disk is a different Installation.",
       };
     await this.#settleAutosave();
     await removeAutosaves(session.path);
-    session.replaceDocument(loaded.result, "runtime");
+    session.replaceDocument(loaded.document, "runtime");
     return { ok: true, result: session.summary() };
-  }
-
-  async #load(source: string): Promise<StoreResult<Document>> {
-    let text: string;
-    try {
-      text = await readFile(source, "utf8");
-    } catch (error) {
-      return {
-        ok: false,
-        error: `Cannot read ${source}: ${(error as Error).message}`,
-      };
-    }
-    const parsed = parseDocumentFile(text);
-    if (!parsed.ok) return { ok: false, error: `${source}: ${parsed.error}` };
-    return { ok: true, result: parsed.document };
   }
 
   async save(
@@ -179,8 +193,10 @@ export class DocumentStore {
     const session = this.session(documentId);
     if (session === undefined)
       return { ok: false, error: `Document “${documentId}” is not open.` };
-    const filePath =
-      candidate === undefined ? session.path : this.resolvePath(candidate);
+    const resolved =
+      candidate === undefined ? undefined : this.resolvePath(candidate);
+    if (resolved?.ok === false) return resolved;
+    const filePath = resolved === undefined ? session.path : resolved.result;
     if (filePath === null)
       return {
         ok: false,
@@ -211,30 +227,6 @@ export class DocumentStore {
     if (session.dirty && !discard) return { ok: false, error: UNSAVED_CHANGES };
     await this.#replace(undefined);
     return { ok: true, result: { closed: true } };
-  }
-
-  async listFiles(): Promise<readonly FileEntry[]> {
-    const dir = this.#options.projectsDir;
-    await mkdir(dir, { recursive: true });
-    const names = (await readdir(dir)).filter(
-      (name) => name.endsWith(DOCUMENT_FILE_EXTENSION) && !isAutosavePath(name),
-    );
-    const entries = await Promise.all(
-      names.map(async (name): Promise<FileEntry> => {
-        const filePath = path.join(dir, name);
-        const [info, recovery] = await Promise.all([
-          stat(filePath),
-          recoveryAvailable(filePath),
-        ]);
-        return {
-          path: filePath,
-          name: name.slice(0, -DOCUMENT_FILE_EXTENSION.length),
-          modifiedAt: info.mtimeMs,
-          recoveryAvailable: recovery,
-        };
-      }),
-    );
-    return entries.sort((a, b) => b.modifiedAt - a.modifiedAt);
   }
 
   /** Writes the sidecar if the document changed since the newest one; call before process exit. */

@@ -1,5 +1,5 @@
 import { settings } from "@difracta/core";
-import { homedir } from "node:os";
+import { DocumentsModeSchema, type DocumentsMode } from "@difracta/protocol";
 import { parseArgs } from "node:util";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,9 +7,13 @@ import { fileURLToPath } from "node:url";
 export interface RuntimeConfig {
   readonly host: string;
   readonly port: number;
-  /** Where `.difracta` files live; relative paths in requests resolve here. */
-  readonly projectsDir: string;
-  /** The file to open at startup, if any. The runtime opens nothing else. */
+  /**
+   * `pinned`: the runtime keeps `openPath` open and refuses new, open, close
+   * and save to another path. `free`: loopback clients may do all of those;
+   * any other peer is still treated as pinned.
+   */
+  readonly documents: DocumentsMode;
+  /** The file to open at startup; a pinned runtime always has one and creates it when missing. */
   readonly openPath: string | undefined;
   readonly studioDist: string | undefined;
   readonly outputDist: string | undefined;
@@ -18,10 +22,15 @@ export interface RuntimeConfig {
   readonly oscPort: number | undefined;
 }
 
+function nonEmpty(value: string | undefined): string | undefined {
+  return value === undefined || value === "" ? undefined : value;
+}
+
 const packageRoot = fileURLToPath(new URL("../..", import.meta.url));
 
 export function configFromEnvironment(
   argv: readonly string[] = process.argv.slice(2),
+  env: NodeJS.ProcessEnv = process.env,
 ): RuntimeConfig {
   const { values, positionals } = parseArgs({
     args: [...argv],
@@ -29,7 +38,7 @@ export function configFromEnvironment(
     options: {
       host: { type: "string" },
       port: { type: "string" },
-      "projects-dir": { type: "string" },
+      documents: { type: "string" },
       "osc-port": { type: "string" },
       "no-osc": { type: "boolean" },
     },
@@ -38,20 +47,26 @@ export function configFromEnvironment(
     throw new Error(
       "A runtime holds one Installation; pass at most one .difracta file.",
     );
-  const env = process.env;
+  const documents = DocumentsModeSchema.safeParse(
+    values.documents ?? settings.runtime.documents,
+  );
+  if (!documents.success)
+    throw new Error(
+      `--documents takes "pinned" or "free", not “${String(values.documents)}”.`,
+    );
+  const file = positionals[0] ?? nonEmpty(env.DIFRACTA_FILE);
+  if (documents.data === "pinned" && file === undefined)
+    throw new Error(
+      "Name the .difracta file to hold: difracta-runtime <file.difracta>, or set DIFRACTA_FILE. It is created when missing. Pass --documents free to start without one.",
+    );
   return {
     host: values.host ?? env.DIFRACTA_HOST ?? settings.runtime.host,
     port: Number.parseInt(
       values.port ?? env.DIFRACTA_PORT ?? String(settings.runtime.port),
       10,
     ),
-    projectsDir: path.resolve(
-      values["projects-dir"] ??
-        env.DIFRACTA_PROJECTS_DIR ??
-        path.join(homedir(), "Difracta"),
-    ),
-    openPath:
-      positionals[0] === undefined ? undefined : path.resolve(positionals[0]),
+    documents: documents.data,
+    openPath: file === undefined ? undefined : path.resolve(file),
     studioDist:
       env.DIFRACTA_STUDIO_DIST ??
       path.join(packageRoot, "difracta-studio", "dist"),

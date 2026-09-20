@@ -47,14 +47,18 @@ export function MenuBar() {
           <MenubarMenu>
             <MenubarTrigger>File</MenubarTrigger>
             <MenubarContent align="start" className={menuClass}>
-              <MenubarItem disabled={!connected} onClick={commands.create}>
-                New Installation…
-              </MenubarItem>
-              <MenubarItem disabled={!connected} onClick={commands.open}>
-                Open Installation…
-                <MenubarShortcut>{shortcuts.open.label}</MenubarShortcut>
-              </MenubarItem>
-              <MenubarSeparator />
+              {commands.free && (
+                <>
+                  <MenubarItem disabled={!connected} onClick={commands.create}>
+                    New Installation…
+                  </MenubarItem>
+                  <MenubarItem disabled={!connected} onClick={commands.open}>
+                    Open Installation…
+                    <MenubarShortcut>{shortcuts.open.label}</MenubarShortcut>
+                  </MenubarItem>
+                  <MenubarSeparator />
+                </>
+              )}
               <MenubarItem
                 disabled={selected === undefined}
                 onClick={commands.save}
@@ -62,23 +66,29 @@ export function MenuBar() {
                 Save
                 <MenubarShortcut>{shortcuts.save.label}</MenubarShortcut>
               </MenubarItem>
-              <MenubarItem
-                disabled={selected === undefined}
-                onClick={commands.saveAs}
-              >
-                Save As…
-                <MenubarShortcut>{shortcuts.saveAs.label}</MenubarShortcut>
-              </MenubarItem>
+              {commands.free && (
+                <MenubarItem
+                  disabled={selected === undefined}
+                  onClick={commands.saveAs}
+                >
+                  Save As…
+                  <MenubarShortcut>{shortcuts.saveAs.label}</MenubarShortcut>
+                </MenubarItem>
+              )}
               <MenubarItem disabled={!canRevert} onClick={commands.revert}>
                 Revert to Saved
               </MenubarItem>
-              <MenubarSeparator />
-              <MenubarItem
-                disabled={selected === undefined}
-                onClick={commands.close}
-              >
-                Close Installation
-              </MenubarItem>
+              {commands.free && (
+                <>
+                  <MenubarSeparator />
+                  <MenubarItem
+                    disabled={selected === undefined}
+                    onClick={commands.close}
+                  >
+                    Close Installation
+                  </MenubarItem>
+                </>
+              )}
             </MenubarContent>
           </MenubarMenu>
           <MenubarMenu>

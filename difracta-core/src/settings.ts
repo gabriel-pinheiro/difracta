@@ -10,6 +10,12 @@ export const settings = {
     port: 4800,
     /** Where the live websocket is served. */
     livePath: "/live",
+    /**
+     * Document mode when `--documents` is not given. `pinned` keeps the file
+     * the runtime was started with; `free` lets loopback clients create, open
+     * and close Installations and save them elsewhere.
+     */
+    documents: "pinned",
   },
   osc: {
     /** UDP for OSC input, HTTP and WebSocket for OSCQuery, all on this port. */

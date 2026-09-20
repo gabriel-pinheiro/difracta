@@ -41,7 +41,6 @@ export async function buildRuntime(
     app.log.warn(message);
   };
   const store = new DocumentStore({
-    projectsDir: config.projectsDir,
     registry: createBuiltInRegistry(builtInCatalog),
     autosaveIntervalMs: config.autosaveIntervalMs,
     log,
@@ -55,6 +54,7 @@ export async function buildRuntime(
     catalog: builtInCatalog,
     runtimeName: "Difracta Runtime",
     runtimeVersion: RUNTIME_VERSION,
+    documents: config.documents,
     log,
     osc,
   });
@@ -66,8 +66,9 @@ export async function buildRuntime(
     document: store.current()?.name ?? null,
     osc: osc?.state() ?? { port: null, listeners: 0 },
   }));
-  app.get(settings.runtime.livePath, { websocket: true }, (socket) => {
-    live.accept(socket);
+  app.get(settings.runtime.livePath, { websocket: true }, (socket, request) => {
+    // The socket's own peer, not `request.ip`, which a proxy header can set.
+    live.accept(socket, request.socket.remoteAddress);
   });
 
   // Thumbnails of the Catalog, one per definition, for Studio's browser.
@@ -100,7 +101,13 @@ export async function buildRuntime(
     store,
     async listen() {
       if (config.openPath !== undefined) {
-        const opened = await store.open(config.openPath);
+        const opened =
+          config.documents === "pinned"
+            ? await store.openOrCreate(config.openPath)
+            : await store.open(config.openPath);
+        // A pinned runtime with no document could never get one.
+        if (!opened.ok && config.documents === "pinned")
+          throw new Error(opened.error);
         if (!opened.ok) log(`Skipping ${config.openPath}: ${opened.error}`);
         else if (opened.result.recovered)
           log(

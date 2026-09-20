@@ -20,7 +20,7 @@ import { LiveStateSchema, OutputTelemetrySchema } from "./live.ts";
  *   `telemetry`; both are unacknowledged.
  *
  * `command` is a document-scoped acknowledged operation (registry commands,
- * undo, redo). `request` is a runtime-scoped one (documents, files).
+ * undo, redo). `request` is a runtime-scoped one (documents, the Catalog).
  *
  * A runtime holds one document at a time. It is still addressed by id so a
  * client can tell a replaced document from the one it subscribed to.
@@ -125,6 +125,14 @@ export const DocumentSummarySchema = z
   .strict();
 export type DocumentSummary = z.infer<typeof DocumentSummarySchema>;
 
+/**
+ * What a connection may do with the runtime's document. `free`: new, open,
+ * close and save to another path are allowed. `pinned`: the runtime keeps the
+ * file it was started with and refuses those.
+ */
+export const DocumentsModeSchema = z.enum(["pinned", "free"]);
+export type DocumentsMode = z.infer<typeof DocumentsModeSchema>;
+
 /** An entity a command added: the table it went into and its id. */
 export const CreatedEntitySchema = z
   .object({ table: z.string(), id: z.string() })
@@ -152,6 +160,8 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
       protocolVersion: z.number().int(),
       sessionId: z.string(),
       runtime: z.object({ name: z.string(), version: z.string() }).strict(),
+      /** This connection's document mode; a runtime may answer peers differently. */
+      documents: DocumentsModeSchema,
     })
     .strict(),
   /** The open document, or null; sent after welcome and on every change. */

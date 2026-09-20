@@ -22,7 +22,6 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 beforeEach(async () => {
   dir = await mkdtemp(path.join(tmpdir(), "difracta-osc-"));
   store = new DocumentStore({
-    projectsDir: dir,
     registry: createBuiltInRegistry(builtInCatalog),
     autosaveIntervalMs: 60_000,
     log: () => undefined,

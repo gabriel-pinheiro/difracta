@@ -489,6 +489,14 @@ a dirty Installation File on a short debounce. Opening an Installation File
 whose Autosave is newer loads the Autosave, and Studio offers to save it or
 revert to the file. A successful save or a revert removes it.
 
+### Document Mode
+
+What a connection may do with the Runtime's Installation File, decided by how
+the Runtime was started. **Pinned**: the Runtime holds the one file it was
+started with; clients save and revert it, and cannot create, open or close an
+Installation nor save it to another path. **Free**: clients on the Runtime's own
+machine can do all of those; a client on another machine is still pinned.
+
 ## Deferred terminology
 
 Effect, Overlay, and Transition are intentionally not part of the current domain

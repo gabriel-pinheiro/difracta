@@ -6,6 +6,7 @@ import {
   type ClientKind,
   type ClientMessage,
   type DocumentSummary,
+  type DocumentsMode,
   type OutputTelemetry,
   type RuntimeRequestName,
   type RuntimeRequestPayload,
@@ -55,6 +56,12 @@ export class CommandError extends Error {
 export class DifractaClient {
   readonly phase = new Signal<ConnectionPhase>("connecting");
   readonly sessionId = new Signal<string | undefined>(undefined);
+  /**
+   * What the runtime lets this connection do with its document: `pinned`
+   * refuses new, open, close and save to another path. Undefined until
+   * `welcome`.
+   */
+  readonly documents = new Signal<DocumentsMode | undefined>(undefined);
   /** The runtime's open document, or null. */
   readonly document = new Signal<DocumentSummary | null>(null);
   readonly lastError = new Signal<string | undefined>(undefined);
@@ -267,6 +274,7 @@ export class DifractaClient {
     switch (parsed.type) {
       case "welcome":
         this.sessionId.set(parsed.sessionId);
+        this.documents.set(parsed.documents);
         this.phase.set("connected");
         for (const view of this.#views.values()) this.#subscribe(view);
         if (this.#attachedOutput !== null)

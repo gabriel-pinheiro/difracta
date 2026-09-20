@@ -26,13 +26,15 @@ export function App() {
 function Main() {
   const client = useClient();
   const phase = useSignal(client.phase);
-  const { view } = useDocumentCommands();
+  const { view, free } = useDocumentCommands();
   if (view === undefined) {
     return (
       <main className="grid flex-1 place-items-center text-muted-foreground">
-        {phase === "connected"
-          ? "Open or create an Installation from the File menu."
-          : "Connecting to the runtime…"}
+        {phase !== "connected"
+          ? "Connecting to the runtime…"
+          : free
+            ? "Open or create an Installation from the File menu."
+            : "The runtime has no Installation open."}
       </main>
     );
   }

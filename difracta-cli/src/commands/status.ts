@@ -7,25 +7,26 @@ export function registerStatus(program: Command, cli: Cli): void {
   program
     .command("health")
     .description(
-      "Show the runtime, its open Installation (and whether it has unsaved changes), every Output's Sessions and the OSC door.",
+      "Show the runtime, its document mode (pinned or free), its open Installation (and whether it has unsaved changes), every Output's Sessions and the OSC door.",
     )
     .action(() =>
       cli.withClient(async (client) => {
         const sessionId = client.sessionId.get();
+        const documents = client.documents.get();
+        const connected = `Connected as ${sessionId ?? "?"}  documents ${documents ?? "?"}`;
         const summary = client.document.get();
         if (summary === null) {
           cli.print(
-            { sessionId, document: null, live: null },
-            () =>
-              `Connected as ${sessionId ?? "?"}\n  No Installation is open.`,
+            { sessionId, documents, document: null, live: null },
+            () => `${connected}\n  No Installation is open.`,
           );
           return;
         }
         const { document, view } = await cli.replica(client, summary.id);
         const live = liveStatus(document, view.liveState.get());
-        cli.print({ sessionId, document: summary, live }, () =>
+        cli.print({ sessionId, documents, document: summary, live }, () =>
           [
-            `Connected as ${sessionId ?? "?"}`,
+            connected,
             `  ${summary.name}  ${summary.id}  ${summary.path ?? "(unsaved)"}${summary.dirty ? "  unsaved changes" : ""}  revision ${String(summary.revision)}`,
             ...formatLiveStatus(live).map((line) => `  ${line}`),
           ].join("\n"),

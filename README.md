@@ -16,11 +16,12 @@ npm run dev
 ```
 
 `npm run dev` starts the runtime on port 4800, the Output dev server on 4801 and
-Studio on 4802. Open Studio at http://localhost:4802/. To put a picture on a
-projector, create an Output in Studio and open the URL its inspector shows in a
-browser on the machine driving that projector. All three servers listen on every
-interface, so a laptop, the mini-PC and the projector's browser can sit on one
-LAN.
+Studio on 4802. The runtime holds `research/dev.difracta`, created on first run;
+`DIFRACTA_FILE=<path> npm run dev` holds another file. Open Studio at
+http://localhost:4802/. To put a picture on a projector, create an Output in
+Studio and open the URL its inspector shows in a browser on the machine driving
+that projector. All three servers listen on every interface, so a laptop, the
+mini-PC and the projector's browser can sit on one LAN.
 
 ## Production
 
@@ -31,23 +32,31 @@ node difracta-runtime/bin/difracta-runtime.mjs <file.difracta>
 
 The runtime serves the built Studio at `/studio/` (the root redirects there),
 the Output page at `/output/`, thumbnails at `/catalog/`, a `/health` JSON
-endpoint and the live WebSocket at `/live`. It opens the file given on the
-command line, at most one, and holds one Installation at a time. Autosaves land
-next to the file and are recovered on the next open.
+endpoint and the live WebSocket at `/live`. It holds the file given on the
+command line or in `DIFRACTA_FILE`, creating it when it does not exist, and
+refuses to start without one. Autosaves land next to the file and are recovered
+on the next open.
+
+Started like this the runtime is **pinned**: clients save and revert its
+Installation but cannot create, open or close one, nor save it to another path.
+`--documents free` lifts that for clients on the runtime's own machine, and
+makes the file optional; clients elsewhere on the network stay pinned.
 
 Flags and their environment variables (`difracta-runtime/src/config.ts`):
 
-| Flag                   | Variable                | Default                |
-| ---------------------- | ----------------------- | ---------------------- |
-| `--host <address>`     | `DIFRACTA_HOST`         | `0.0.0.0`              |
-| `--port <number>`      | `DIFRACTA_PORT`         | `4800`                 |
-| `--projects-dir <dir>` | `DIFRACTA_PROJECTS_DIR` | `~/Difracta`           |
-| `--osc-port <number>`  | `DIFRACTA_OSC_PORT`     | `9000`                 |
-| `--no-osc`             | `DIFRACTA_NO_OSC=1`     | OSC on                 |
-|                        | `DIFRACTA_STUDIO_DIST`  | `difracta-studio/dist` |
-|                        | `DIFRACTA_OUTPUT_DIST`  | `difracta-output/dist` |
+| Flag                  | Variable               | Default                |
+| --------------------- | ---------------------- | ---------------------- |
+| `--host <address>`    | `DIFRACTA_HOST`        | `0.0.0.0`              |
+| `--port <number>`     | `DIFRACTA_PORT`        | `4800`                 |
+| `<file.difracta>`     | `DIFRACTA_FILE`        | required when pinned   |
+| `--documents <mode>`  |                        | `pinned`               |
+| `--osc-port <number>` | `DIFRACTA_OSC_PORT`    | `9000`                 |
+| `--no-osc`            | `DIFRACTA_NO_OSC=1`    | OSC on                 |
+|                       | `DIFRACTA_STUDIO_DIST` | `difracta-studio/dist` |
+|                       | `DIFRACTA_OUTPUT_DIST` | `difracta-output/dist` |
 
-Relative file paths in requests resolve inside the projects directory.
+File paths in requests are absolute paths on the runtime's machine; the CLI
+resolves a relative one against the shell's directory first.
 
 ## Show control
 

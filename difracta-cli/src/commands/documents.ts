@@ -1,5 +1,6 @@
-import type { DocumentSummary, FileEntry } from "@difracta/protocol";
+import type { DocumentSummary } from "@difracta/protocol";
 import type { Command } from "commander";
+import { resolve } from "node:path";
 
 import type { Cli } from "../cli.ts";
 
@@ -7,28 +8,7 @@ export function registerDocuments(program: Command, cli: Cli): void {
   const documents = program
     .command("documents")
     .description(
-      "Open, create, save and close the Installation on the runtime (one at a time).",
-    );
-
-  documents
-    .command("files")
-    .description("List .difracta files in the runtime's projects folder.")
-    .action(() =>
-      cli.withClient(async (client) => {
-        const result = await client.request<{
-          items: FileEntry[];
-          projectsDir: string;
-        }>("files.list", {});
-        cli.print(result, () =>
-          [
-            result.projectsDir,
-            ...result.items.map(
-              (f) =>
-                `  ${f.name}${f.recoveryAvailable ? "  (unsaved autosave)" : ""}`,
-            ),
-          ].join("\n"),
-        );
-      }),
+      "Save and revert the Installation on the runtime. new, open, close and save to another path need a runtime started with --documents free, on this machine; a pinned runtime refuses them.",
     );
 
   documents
@@ -48,14 +28,14 @@ export function registerDocuments(program: Command, cli: Cli): void {
   documents
     .command("open <path>")
     .description(
-      "Open a .difracta file (relative to the projects folder or absolute), replacing the current Installation.",
+      "Open a .difracta file on the runtime's machine, replacing the current Installation. A relative path resolves against this shell's directory.",
     )
     .option("--discard", "drop unsaved changes of the current one", false)
     .action((path: string, local: { discard: boolean }) =>
       cli.withClient(async (client) => {
         const summary = await client.request<DocumentSummary>(
           "documents.open",
-          { path, discard: local.discard },
+          { path: resolve(path), discard: local.discard },
         );
         cli.print(
           summary,
@@ -87,14 +67,16 @@ export function registerDocuments(program: Command, cli: Cli): void {
 
   documents
     .command("save [path]")
-    .description("Save the Installation, optionally to a new path.")
+    .description(
+      "Save the Installation, optionally to a new path (relative to this shell's directory).",
+    )
     .action((path: string | undefined) =>
       cli.withDocument(async (client, summary) => {
         const saved = await client.request<DocumentSummary>(
           "documents.save",
           path === undefined
             ? { documentId: summary.id }
-            : { documentId: summary.id, path },
+            : { documentId: summary.id, path: resolve(path) },
         );
         cli.print(saved, () => `Saved ${saved.name} to ${saved.path ?? "?"}.`);
       }),

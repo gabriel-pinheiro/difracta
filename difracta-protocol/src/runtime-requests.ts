@@ -1,10 +1,14 @@
 import { z } from "zod";
 
 /**
- * Runtime-scoped requests: the document, files and the Catalog. These are
- * not Document commands; they manage which Document the runtime has open,
- * or read what the runtime is built with. Names and payload schemas live
- * here so the runtime, Studio and CLI agree.
+ * Runtime-scoped requests: the document and the Catalog. These are not
+ * Document commands; they manage which Document the runtime has open, or
+ * read what the runtime is built with. Names and payload schemas live here
+ * so the runtime, Studio and CLI agree.
+ *
+ * A connection whose `welcome` said `documents: "pinned"` is refused
+ * `documents.new`, `documents.open`, `documents.close` and a
+ * `documents.save` to another path.
  */
 export const RuntimeRequestSchemas = {
   /** Replaces the open document with a new, unsaved one. */
@@ -19,9 +23,9 @@ export const RuntimeRequestSchemas = {
   "documents.open": z
     .object({
       /**
-       * Path relative to the runtime's projects directory, or absolute. When
-       * an autosave newer than the file exists it is loaded instead and the
-       * document opens dirty and `recovered`.
+       * Absolute path on the runtime's machine. When an autosave newer than
+       * the file exists it is loaded instead and the document opens dirty
+       * and `recovered`.
        */
       path: z.string().min(1),
       discard: z.boolean().optional(),
@@ -30,7 +34,7 @@ export const RuntimeRequestSchemas = {
   "documents.save": z
     .object({
       documentId: z.string().min(1),
-      /** Save As: a new path relative to the projects directory, or absolute. */
+      /** Save As: a new absolute path on the runtime's machine. */
       path: z.string().min(1).optional(),
     })
     .strict(),
@@ -39,7 +43,6 @@ export const RuntimeRequestSchemas = {
   "documents.close": z
     .object({ documentId: z.string().min(1), discard: z.boolean().optional() })
     .strict(),
-  "files.list": z.object({}).strict(),
   /** The Visual and Filter definitions this runtime renders, metadata only. */
   "catalog.list": z.object({}).strict(),
 } as const;
@@ -48,17 +51,6 @@ export type RuntimeRequestName = keyof typeof RuntimeRequestSchemas;
 export type RuntimeRequestPayload<TName extends RuntimeRequestName> = z.infer<
   (typeof RuntimeRequestSchemas)[TName]
 >;
-
-export const FileEntrySchema = z
-  .object({
-    path: z.string(),
-    name: z.string(),
-    modifiedAt: z.number(),
-    /** True when an autosave sidecar newer than the file exists next to it. */
-    recoveryAvailable: z.boolean(),
-  })
-  .strict();
-export type FileEntry = z.infer<typeof FileEntrySchema>;
 
 /** Undo and redo are document commands handled by the session, not the registry. */
 export const HISTORY_COMMANDS = {

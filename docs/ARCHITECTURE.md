@@ -374,11 +374,11 @@ authoring gestures a person wants to take back.
 
 Commands are registered by one import line in `commands/index.ts`. The registry
 is the only source for the runtime handler and the CLI's `commands`, `describe`
-and `run`. Runtime-scoped operations (documents, files, the Catalog) are not
-commands; they are `request` messages defined in `difracta-protocol`. Together
-they are the whole of what Studio does, so the CLI can do everything Studio can:
-`run` for any command, `documents` for the requests, and shortcuts for the
-everyday ones (`get`, `addresses`, `edit`, `set`, `catalog`, `undo`).
+and `run`. Runtime-scoped operations (documents, the Catalog) are not commands;
+they are `request` messages defined in `difracta-protocol`. Together they are
+the whole of what Studio does, so the CLI can do everything Studio can: `run`
+for any command, `documents` for the requests, and shortcuts for the everyday
+ones (`get`, `addresses`, `edit`, `set`, `catalog`, `undo`).
 
 **Why:** with one definition per command there is nothing central to edit when a
 feature is added, and the reducer is pure and shared, so any client can run it
@@ -423,10 +423,12 @@ and a Link's mapping and an OSCQuery range come from the same place.
 
 ## Live protocol
 
-One websocket per client. After `hello` the runtime sends `welcome` and the open
-document's summary (or null), and sends it again on every change. Documents are
-still addressed by id, so a client can tell a replaced document from the one it
-subscribed to; the client drops views of a replaced one.
+One websocket per client. After `hello` the runtime sends `welcome`, which
+carries the connection's document mode (`documents: "pinned" | "free"`, see
+Files), and the open document's summary (or null), and sends the summary again
+on every change. Documents are still addressed by id, so a client can tell a
+replaced document from the one it subscribed to; the client drops views of a
+replaced one.
 
 - `subscribe` the document → one `snapshot`, then `delta` messages carrying
   `fromRevision`, `revision` and per-path patches. Deltas produced within one
@@ -453,7 +455,9 @@ subscribed to; the client drops views of a replaced one.
   frame on the client; the runtime applies it as `address.set`.
 - `request` covers runtime-scoped operations: `documents.new/open` (replace the
   document; refused while it has unsaved changes unless `discard`),
-  `documents.save/revert/close`, `files.list` and `catalog.list`.
+  `documents.save/revert/close` and `catalog.list`. Paths in them are absolute
+  paths on the runtime's machine. A pinned connection is refused `new`, `open`,
+  `close` and a `save` to another path.
 
 **Why a live root instead of a second channel:** telemetry, calibration state
 and playback all need per-path subscriptions exactly like document values, so
@@ -533,11 +537,31 @@ gives agents `difracta undo`.
 ## Files
 
 One Installation per `.difracta` file: JSON with sorted keys, a `kind` and
-`formatVersion`. The runtime opens the one file named on its command line, if
-any, and nothing else; Studio and the CLI replace it through `documents.open` or
-`documents.new`. Replacing a document with unsaved changes needs an explicit
-discard, which also removes that file's autosaves so the discarded state does
-not come back as a recovery.
+`formatVersion`.
+
+How the runtime was started decides its **document mode**, which the runtime
+enforces for every client and tells each connection in `welcome`:
+
+- **pinned** (the default): the runtime holds the file named on its command line
+  or in `DIFRACTA_FILE` for as long as it runs. A missing file is created, named
+  after the file, with its parent folders; without a file, or with one it cannot
+  read, the runtime refuses to start. `documents.new`, `documents.open`,
+  `documents.close` and `documents.save` to another path are refused. Save,
+  revert and autosave recovery work as usual.
+- **free** (`--documents free`): the file is optional, and clients replace the
+  document through `documents.open` or `documents.new`, close it, and save it to
+  another path. Only loopback peers get this; a connection from another machine
+  is told `pinned` and held to it, so nobody names paths on a disk that is not
+  theirs.
+
+Requests name files by absolute path and the runtime never lists a folder; the
+CLI resolves a relative path against its own working directory before sending
+it. Studio shows New, Open, Save As and Close only to a free connection.
+
+A new Installation starts clean and becomes dirty with its first change.
+Replacing a document with unsaved changes needs an explicit discard, which also
+removes that file's autosaves so the discarded state does not come back as a
+recovery.
 
 Save is explicit and atomic: the content is written to a sibling temporary file,
 flushed to disk, then renamed over the target, so a crash leaves either the old
@@ -553,14 +577,16 @@ save also removes them.
 
 **Why:** users of DAWs and Chataigne expect one document per file that can be
 versioned next to the rest of a show and moved between machines. Explicit save
-with an autosave sidecar is the recovery model those tools use.
+with an autosave sidecar is the recovery model those tools use. Pinned is the
+default because a runtime driving a show is reached from other machines, and the
+show it holds should not depend on what any of them does in a File menu.
 
 ## Settings
 
 `difracta-core/src/settings.ts` holds every tunable in one object: history
-coalesce window and limit, autosave delay, default host and port, client
-reconnect backoff, CLI connect timeout. Packages import from there instead of
-carrying their own literals.
+coalesce window and limit, autosave delay, default host, port and document mode,
+client reconnect backoff, CLI connect timeout. Packages import from there
+instead of carrying their own literals.
 
 ## Rendering
 

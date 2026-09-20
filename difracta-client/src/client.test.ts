@@ -56,6 +56,7 @@ function connectedClient() {
       protocolVersion: 1,
       sessionId: "s1",
       runtime: { name: "test", version: "0" },
+      documents: "free",
     });
   };
   welcome(sockets[0]!);
