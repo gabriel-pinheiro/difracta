@@ -121,5 +121,15 @@ export const settings = {
     /** The most items per menu, and the longest label, Desktop takes from a page for the native menu. */
     pageMenuItemsLimit: 40,
     pageMenuLabelLimit: 80,
+    /**
+     * A runtime child that exits by itself is started again after this wait,
+     * doubled for every restart still inside the window below.
+     */
+    runtimeRestartInitialDelayMs: 500,
+    /** This many restarts within the window and Desktop stops trying. */
+    runtimeRestartLimit: 3,
+    runtimeRestartWindowMs: 60_000,
+    /** How long the runtime gets to say which Output Sessions are attached before Desktop leaves without the warning. */
+    outputSessionsTimeoutMs: 1_500,
   },
 } as const;

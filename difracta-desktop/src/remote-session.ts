@@ -2,7 +2,7 @@ import { remoteLabel } from "./runtime-address.ts";
 import { checkRuntime } from "./runtime-health.ts";
 import { RuntimeLink } from "./runtime-link.ts";
 import type { SessionStart } from "./session.ts";
-import { createStudioWindow, followTitle } from "./studio-window.ts";
+import { SessionStudio } from "./studio-window.ts";
 
 /**
  * Remote mode: no runtime of Desktop's own. The runtime at `origin` is asked
@@ -10,8 +10,8 @@ import { createStudioWindow, followTitle } from "./studio-window.ts";
  * computer would. Its window gets the menu preload, so that Studio can show
  * its menu in the native bar, and nothing else: no document bridge, because a
  * path on this disk means nothing over there, and that Studio may be another
- * version than this Desktop. Closing asks nothing, because the Installation
- * lives in that runtime and stays open there.
+ * version than this Desktop. Leaving asks nothing, because the Installation
+ * lives in that runtime and stays open there, as do the Outputs it shows.
  */
 export async function startRemoteSession(options: {
   readonly origin: string;
@@ -26,12 +26,12 @@ export async function startRemoteSession(options: {
 
   const where = remoteLabel(origin, name);
   const link = new RuntimeLink(origin);
-  const window = createStudioWindow({
+  const studio = new SessionStudio({
     origin,
     preload: options.preload,
-    mayClose: () => Promise.resolve(true),
+    link,
+    title: { kind: "remote", label: where },
   });
-  followTitle(window, link, { kind: "remote", label: where });
 
   return {
     ok: true,
@@ -39,9 +39,16 @@ export async function startRemoteSession(options: {
       where,
       origin,
       resume: { kind: "remote", origin, name },
-      window,
+      // A runtime elsewhere is there to be looked at, so always with Studio.
+      withoutStudio: false,
+      get window() {
+        return studio.window;
+      },
+      showWindow: (mayClose) => studio.show(mayClose),
       bridgeOrigin: undefined,
       currentFile: () => undefined,
+      openWithoutStudio: () => Promise.resolve(false),
+      // Leaving stops nothing over there, so there is nothing to ask.
       mayLeave: () => Promise.resolve(true),
       end: async () => link.close(),
     },

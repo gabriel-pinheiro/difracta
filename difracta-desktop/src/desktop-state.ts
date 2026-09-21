@@ -1,6 +1,9 @@
+import { settings } from "@difracta/core";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
+
+import { rememberRuntime } from "./remembered-runtimes.ts";
 
 const RememberedSchema = z.object({
   origin: z.string().min(1),
@@ -18,10 +21,34 @@ const StateSchema = z.object({
     ])
     .optional(),
   remembered: z.array(RememberedSchema).default([]),
+  /**
+   * Local mode starts without the Studio window (File ▸ Startup). What
+   * `--no-studio` says for one launch, kept for every launch.
+   */
+  startWithoutStudio: z.boolean().optional(),
 });
 
 export type DesktopState = z.infer<typeof StateSchema>;
 export type LastMode = NonNullable<DesktopState["lastMode"]>;
+
+/** The state once a session has started that the next launch is to resume; a runtime elsewhere is remembered for the launch page too. */
+export function withLastMode(
+  state: DesktopState,
+  lastMode: LastMode,
+): DesktopState {
+  return {
+    ...state,
+    lastMode,
+    remembered:
+      lastMode.kind === "remote"
+        ? rememberRuntime(
+            state.remembered,
+            { origin: lastMode.origin, name: lastMode.name },
+            settings.desktop.rememberedRuntimesLimit,
+          )
+        : state.remembered,
+  };
+}
 
 const EMPTY: DesktopState = { remembered: [] };
 

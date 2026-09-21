@@ -1,24 +1,29 @@
-import { settings } from "@difracta/core";
 import { app, BrowserWindow } from "electron";
 import path from "node:path";
 
 import { ApplicationMenu } from "./application-menu.ts";
 import { switchSession } from "./connect-to.ts";
-import type { DesktopStateStore } from "./desktop-state.ts";
+import { withLastMode, type DesktopStateStore } from "./desktop-state.ts";
 import { registerFileDialogs } from "./file-dialogs.ts";
-import { mayLeaveRemoteFor } from "./file-from-os-prompt.ts";
-import type { LaunchCurrent, LaunchResult } from "./launch-contract.ts";
+import { FilesFromOs } from "./files-from-os.ts";
+import type { LaunchResult } from "./launch-contract.ts";
 import { LaunchPage } from "./launch-page.ts";
 import type { LaunchRuntimes } from "./launch-runtimes.ts";
+import {
+  checkTarget,
+  isCurrentTarget,
+  launchCurrent,
+  type LaunchTarget,
+} from "./launch-target.ts";
 import { startLocalSession } from "./local-session.ts";
-import { rememberRuntime } from "./remembered-runtimes.ts";
+import { QuitGate } from "./quit-gate.ts";
 import { startRemoteSession } from "./remote-session.ts";
-import { addressLabel, parseRuntimeAddress } from "./runtime-address.ts";
-import { checkRuntime } from "./runtime-health.ts";
+import { parseRuntimeAddress } from "./runtime-address.ts";
 import type { RuntimeProcess } from "./runtime-process.ts";
 import type { Session, SessionStart } from "./session.ts";
 import type { StartUpMode } from "./start-up-mode.ts";
-import { requestOpen } from "./studio-window.ts";
+import { StartupSettings } from "./startup-settings.ts";
+import { openStudioWindow } from "./studio-visit.ts";
 
 export interface DesktopModesOptions {
   readonly distDir: string;
@@ -26,15 +31,6 @@ export interface DesktopModesOptions {
   readonly state: DesktopStateStore;
   readonly runtimes: LaunchRuntimes;
 }
-
-/** What a person chose on the launch page. */
-type Target =
-  | { readonly kind: "local" }
-  | {
-      readonly kind: "remote";
-      readonly origin: string;
-      readonly name: string | null;
-    };
 
 const BUSY = "Difracta is already starting a Runtime.";
 
@@ -49,6 +45,11 @@ const BUSY = "Difracta is already starting a Runtime.";
  * there is; from File ▸ Connect to... it opens over the running session,
  * which goes on until another target is chosen there (`connect-to.ts` has the
  * order of that), so a runtime is never started while another is stopping.
+ *
+ * A session is left in one way, whoever asks: `Session.mayLeave` first (the
+ * questions of `leave-checks.ts`), by a quit through the quit gate and by a
+ * switch through `#leave`. Its Studio window is `studio-visit.ts`'s, and a
+ * file from the OS is `files-from-os.ts`'s.
  */
 export class DesktopModes {
   readonly #options: DesktopModesOptions;
@@ -57,8 +58,8 @@ export class DesktopModes {
   #session: Session | undefined;
   /** A session is starting or being left; whatever else is asked waits or is refused. */
   #busy = false;
-  /** A file the OS asked for while busy. */
-  #pendingFile: string | undefined;
+  readonly #files: FilesFromOs;
+  readonly #quit = new QuitGate(() => this.#mayQuit());
 
   constructor(options: DesktopModesOptions) {
     this.#options = options;
@@ -68,40 +69,57 @@ export class DesktopModes {
       currentFile: () => this.#session?.currentFile(),
     });
     this.#launchPage = new LaunchPage(options, {
-      current: () => this.#current(),
+      current: () => launchCurrent(this.#session),
       runLocal: () => this.#choose({ kind: "local" }),
       connect: (address) => this.#connect(address),
     });
     this.#menu = new ApplicationMenu({
       runtimeLog: options.runtime.logFile,
       onConnectTo: () => this.connectTo(),
+      startup: new StartupSettings(options.state),
+    });
+    this.#files = new FilesFromOs({
+      busy: () => this.#busy,
+      session: () => this.#session,
+      runLocal: (file) => void this.#runLocal(file),
+      showStudio: (session) => this.#showStudio(session),
+      switchToLocal: (file) => this.#switchToLocal(file),
     });
   }
 
   async startUp(mode: StartUpMode): Promise<void> {
     if (mode.kind === "launch-page") this.#showLaunchPage(null);
-    else if (mode.kind === "local") await this.#runLocal(mode.file);
+    else if (mode.kind === "local")
+      await this.#runLocal(mode.file, { studioWindow: mode.studioWindow });
     else if (mode.kind === "remote") await this.#enter(this.#remote(mode));
-    else await this.#runLocal(mode.file, mode.url);
+    else await this.#runLocal(mode.file, { studioUrl: mode.url });
   }
 
   /** A file the OS wants open: always on this computer. */
   openFromOs(file: string): void {
-    const session = this.#session;
-    if (this.#busy) this.#pendingFile = file;
-    else if (session === undefined) void this.#runLocal(file);
-    else if (session.bridgeOrigin !== undefined)
-      // Studio's own Open, unsaved-changes question included.
-      requestOpen(session.window, file);
-    else void this.#leaveRemoteFor(file, session);
+    this.#files.open(file);
   }
 
+  /**
+   * Brings Desktop to the front: a second launch, a click on the macOS Dock.
+   * For a session running without its Studio window this is the way back to
+   * one: the window is opened.
+   */
   focus(): void {
+    const session = this.#session;
     // The launch page, when open, is in front of Studio.
-    const window = this.#launchPage.window ?? this.#session?.window;
+    const window =
+      this.#launchPage.window ??
+      (session === undefined ? undefined : this.#showStudio(session));
     if (window === undefined) return;
     if (window.isMinimized()) window.restore();
     window.focus();
+  }
+
+  /** The app's `before-quit`: every quit passes the gate, whatever asked for it. */
+  beforeQuit(event: { preventDefault(): void }): void {
+    // `setImmediate`: Electron ignores a quit asked for inside the one being cancelled.
+    this.#quit.beforeQuit(event, () => setImmediate(() => app.quit()));
   }
 
   /** File ▸ Connect to...: the launch page, over the session, which goes on. */
@@ -119,9 +137,10 @@ export class DesktopModes {
 
   async #runLocal(
     file: string | undefined,
-    studioUrl?: string,
+    how: { readonly studioUrl?: string; readonly studioWindow?: boolean } = {},
   ): Promise<LaunchResult> {
     const { runtime, state, runtimes, distDir } = this.#options;
+    const { studioUrl } = how;
     const dev =
       studioUrl === undefined ? undefined : parseRuntimeAddress(studioUrl);
     if (dev?.ok === false) return this.#enter(() => Promise.resolve(dev));
@@ -132,6 +151,7 @@ export class DesktopModes {
         runtime,
         state,
         file,
+        studioWindow: how.studioWindow ?? true,
         preload: path.join(distDir, "preload.cjs"),
         ...(dev === undefined ? {} : { devOrigin: dev.origin }),
       }),
@@ -156,21 +176,13 @@ export class DesktopModes {
     return () => startRemoteSession({ ...target, preload });
   }
 
-  #current(): LaunchCurrent | null {
-    const session = this.#session;
-    if (session === undefined) return null;
-    return session.bridgeOrigin === undefined
-      ? { kind: "remote", address: addressLabel(session.origin) }
-      : { kind: "local" };
-  }
-
   /**
    * A choice on the launch page. With no session it simply starts. Over a
    * session it is a switch: checked first, then the session is left, its
    * question asked, then the new one starts. Choosing what is in use, or
    * cancelling that question, closes the launch page and changes nothing.
    */
-  async #choose(target: Target): Promise<LaunchResult> {
+  async #choose(target: LaunchTarget): Promise<LaunchResult> {
     const start = (): Promise<LaunchResult> =>
       target.kind === "local"
         ? this.#runLocal(undefined)
@@ -181,14 +193,8 @@ export class DesktopModes {
 
     this.#busy = true;
     const outcome = await switchSession({
-      isCurrent:
-        target.kind === "local"
-          ? session.bridgeOrigin !== undefined
-          : session.origin === target.origin,
-      check: () =>
-        target.kind === "local"
-          ? this.#options.runtime.checkPort()
-          : checkRuntime(target.origin),
+      isCurrent: isCurrentTarget(session, target),
+      check: () => checkTarget(target, this.#options.runtime),
       leave: () => this.#leave(),
       start: () => {
         this.#busy = false;
@@ -200,7 +206,7 @@ export class DesktopModes {
     if (outcome.kind === "current" || outcome.kind === "stayed")
       this.#launchPage.close();
     // A switch that started something has passed the file on already (`#enter`).
-    this.#openPendingFile();
+    this.#files.openPending();
     return outcome.kind === "refused" || outcome.kind === "failed"
       ? { ok: false, reason: outcome.reason }
       : { ok: true };
@@ -231,54 +237,43 @@ export class DesktopModes {
     if (!result.ok && this.#launchPage.window === undefined)
       this.#showLaunchPage(result.reason);
 
-    this.#openPendingFile();
+    this.#files.openPending();
     return result;
   }
 
-  /** A file the OS asked for while Desktop was busy gets its turn. */
-  #openPendingFile(): void {
-    const file = this.#pendingFile;
-    this.#pendingFile = undefined;
-    if (file !== undefined) this.openFromOs(file);
+  #showStudio(session: Session): BrowserWindow {
+    return openStudioWindow(session, {
+      menu: this.#menu,
+      quit: this.#quit,
+      isCurrent: () => this.#session === session,
+    });
   }
 
   #adopt(session: Session): void {
     this.#session = session;
-    // Without its Studio window Desktop has nothing to show for itself, so
-    // closing Studio quits, on macOS too. Switching ends the session first.
-    session.window.on("closed", () => {
-      if (this.#session === session) app.quit();
-    });
-    this.#menu.setStudio({
-      window: session.window,
-      origin: session.origin,
-      local: session.bridgeOrigin !== undefined,
-    });
+    if (!session.withoutStudio) this.#showStudio(session);
     this.#launchPage.close();
 
     const { resume } = session;
     if (resume !== undefined)
-      void this.#options.state.update((state) => ({
-        ...state,
-        lastMode: resume,
-        remembered:
-          resume.kind === "remote"
-            ? rememberRuntime(
-                state.remembered,
-                { origin: resume.origin, name: resume.name },
-                settings.desktop.rememberedRuntimesLimit,
-              )
-            : state.remembered,
-      }));
+      void this.#options.state.update((state) => withLastMode(state, resume));
   }
 
-  /** False when the person chose to stay (Cancel on unsaved changes). */
+  /** Whether Desktop may quit: the session's questions, asked of whoever is in front of it. */
+  async #mayQuit(): Promise<boolean> {
+    const session = this.#session;
+    // Mid-switch the questions were asked already, or there is nothing yet to ask about.
+    if (session === undefined || this.#busy) return true;
+    return session.mayLeave(this.#launchPage.window ?? session.window, "quit");
+  }
+
+  /** False when the person chose to stay (Cancel on either question). */
   async #leave(): Promise<boolean> {
     const session = this.#session;
     if (session === undefined) return true;
-    // The question belongs to the window in front.
-    if (!(await session.mayLeave(this.#launchPage.window ?? session.window)))
-      return false;
+    // The questions belong to the window in front.
+    const over = this.#launchPage.window ?? session.window;
+    if (!(await session.mayLeave(over, "switch"))) return false;
     this.#session = undefined;
     // The launch page outlives the Studio window it was opened over.
     this.#launchPage.window?.setParentWindow(null);
@@ -292,10 +287,7 @@ export class DesktopModes {
     return true;
   }
 
-  async #leaveRemoteFor(file: string, session: Session): Promise<void> {
-    this.focus();
-    const yes = await mayLeaveRemoteFor(session.window, file, session.where);
-    if (!yes || this.#session !== session || this.#busy) return;
+  async #switchToLocal(file: string): Promise<void> {
     this.#busy = true;
     await this.#leave().finally(() => {
       this.#busy = false;

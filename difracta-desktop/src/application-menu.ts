@@ -3,6 +3,7 @@ import { BrowserWindow, Menu, shell, type BaseWindow } from "electron";
 
 import { nativeMenuTemplate, type NativeMenuActions } from "./native-menu.ts";
 import { emptyPageMenu, type PageMenu } from "./page-menu.ts";
+import type { StartupSettings } from "./startup-settings.ts";
 import {
   followMenuWindow,
   registerMenuBridge,
@@ -16,6 +17,13 @@ export interface MenuStudio extends MenuWindow {
   readonly local: boolean;
 }
 
+export interface ApplicationMenuOptions {
+  readonly runtimeLog: string;
+  readonly onConnectTo: () => void;
+  /** File ▸ Startup's two checkboxes, and what changes them. */
+  readonly startup: StartupSettings;
+}
+
 /**
  * Keeps the native menu bar in step with what Desktop shows. `native-menu.ts`
  * says what is in the menu; this file is the Electron around it: whose menu
@@ -23,24 +31,20 @@ export interface MenuStudio extends MenuWindow {
  *
  * A native menu cannot be edited once set, so every change means a new one:
  * the page describing its items (`setMenu`, on every dirty flip), another
- * session, the launch window coming or going. Changes arrive in bursts, so
+ * session, the Studio or the launch window coming or going, a checkbox of
+ * File ▸ Startup. Changes arrive in bursts, so
  * the rebuild waits `settings.desktop.menuRebuildDelayMs` for the last.
  */
 export class ApplicationMenu {
-  readonly #options: {
-    readonly runtimeLog: string;
-    readonly onConnectTo: () => void;
-  };
+  readonly #options: ApplicationMenuOptions;
   #studio: MenuStudio | undefined;
   #launchWindow: BrowserWindow | undefined;
   #page: PageMenu = emptyPageMenu;
   #timer: NodeJS.Timeout | undefined;
 
-  constructor(options: {
-    readonly runtimeLog: string;
-    readonly onConnectTo: () => void;
-  }) {
+  constructor(options: ApplicationMenuOptions) {
     this.#options = options;
+    options.startup.onChange(() => this.#changed());
     registerMenuBridge({
       studio: () => this.#studio,
       onMenu: (menu) => {
@@ -98,6 +102,7 @@ export class ApplicationMenu {
           kind,
           page: this.#page,
           local: studio?.local ?? false,
+          startup: this.#options.startup.choices,
           actions: this.#actions,
         }),
       );
@@ -130,6 +135,9 @@ export class ApplicationMenu {
       else if (id === "redo") window.webContents.redo();
     },
     connectTo: () => this.#options.onConnectTo(),
+    setStartAtLogin: (on) => void this.#options.startup.setStartAtLogin(on),
+    setStartWithoutStudio: (on) =>
+      void this.#options.startup.setStartWithoutStudio(on),
     zoom: (focused, change) => {
       const contents = this.#ownWindow(focused)?.webContents;
       if (contents === undefined) return;

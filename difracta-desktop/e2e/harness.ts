@@ -45,16 +45,35 @@ export let env: Record<string, string>;
 export let app: ElectronApplication | undefined;
 export let standalone: ChildProcess | undefined;
 
-/** The app's arguments: its folder, a user data folder of its own, maybe a file. */
-export const launchArguments = (file?: string): string[] => [
+/** The app's arguments: its folder, a user data folder of its own, maybe a file, maybe switches. */
+export const launchArguments = (
+  file?: string,
+  switches: readonly string[] = [],
+): string[] => [
   packageDir,
   `--user-data-dir=${userData}`,
+  ...switches,
   ...(file === undefined ? [] : [file]),
 ];
 
-export async function launch(file?: string): Promise<Page> {
-  app = await electron.launch({ args: launchArguments(file), env });
+export async function launch(
+  file?: string,
+  switches: readonly string[] = [],
+): Promise<Page> {
+  app = await electron.launch({ args: launchArguments(file, switches), env });
   return app.firstWindow();
+}
+
+/** A launch that shows nothing, so there is no first window to wait for: `/health` says when it is up. */
+export async function launchWithoutStudio(file: string): Promise<void> {
+  app = await electron.launch({
+    args: launchArguments(file, ["--no-studio"]),
+    env,
+  });
+  await eventually(
+    () => fetch(`http://127.0.0.1:${env.DIFRACTA_PORT ?? ""}/health`),
+    (response) => response.ok,
+  );
 }
 
 export const LAUNCH_PAGE = "app://desktop/studio/launch.html";
@@ -150,22 +169,34 @@ export async function studioTitle(): Promise<string | undefined> {
   );
 }
 
-/** Renames the Installation from another client, as the CLI would: an unsaved change. */
-export async function renameFromElsewhere(
+/** A command sent from another client, as the CLI would; its result. */
+export async function commandFromElsewhere<TResult>(
   port: string | undefined,
   name: string,
-): Promise<void> {
+  payload: unknown,
+): Promise<TResult> {
   const client = new DifractaClient({
     url: `ws://127.0.0.1:${port ?? ""}/live`,
     kind: "cli",
     reconnect: false,
   });
-  const summary = await eventually(
-    () => Promise.resolve(client.document.get()),
-    (document) => document !== null,
-  );
-  await client.command(summary?.id ?? "", "installation.rename", { name });
-  client.close();
+  try {
+    const summary = await eventually(
+      () => Promise.resolve(client.document.get()),
+      (document) => document !== null,
+    );
+    return await client.command<TResult>(summary?.id ?? "", name, payload);
+  } finally {
+    client.close();
+  }
+}
+
+/** Renames the Installation from another client: an unsaved change. */
+export async function renameFromElsewhere(
+  port: string | undefined,
+  name: string,
+): Promise<void> {
+  await commandFromElsewhere(port, "installation.rename", { name });
 }
 
 /**
@@ -173,7 +204,7 @@ export async function renameFromElsewhere(
  * Playwright starts Electron with --no-sandbox on Linux, where a checkout's
  * Electron often cannot use Chromium's sandbox; this launch does the same.
  */
-export async function secondLaunch(file: string): Promise<void> {
+export async function secondLaunch(file?: string): Promise<void> {
   const other = spawn(
     (await import("electron")).default as unknown as string,
     [
@@ -216,6 +247,8 @@ export function useDesktop(): void {
       // Nothing of a test run belongs on the network.
       DIFRACTA_NO_OSC: "1",
       DIFRACTA_NO_DISCOVERY: "1",
+      // Nor in the person's own autostart folder: Start at Login writes under here.
+      XDG_CONFIG_HOME: path.join(dir, "config"),
     };
   });
 

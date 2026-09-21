@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { DesktopStateStore } from "./desktop-state.ts";
+import { DesktopStateStore, withLastMode } from "./desktop-state.ts";
 
 let dir: string;
 
@@ -58,5 +58,31 @@ describe("desktop state store", () => {
       JSON.stringify({ lastMode: { kind: "remote", origin: "" } }),
     );
     expect(await new DesktopStateStore(dir).read()).toEqual({ remembered: [] });
+  });
+
+  it("keeps whether local mode starts without the Studio window", async () => {
+    const store = new DesktopStateStore(dir);
+    await store.update((state) => ({ ...state, startWithoutStudio: true }));
+    expect(await new DesktopStateStore(dir).read()).toEqual({
+      remembered: [],
+      startWithoutStudio: true,
+    });
+  });
+
+  it("notes the mode to resume, and remembers a runtime elsewhere", () => {
+    const stage = {
+      origin: "http://10.0.0.5:4800",
+      name: "Difracta on stage-pc",
+    };
+    const before = { remembered: [], startWithoutStudio: true };
+    expect(withLastMode(before, { kind: "local" })).toEqual({
+      ...before,
+      lastMode: { kind: "local" },
+    });
+    expect(withLastMode(before, { kind: "remote", ...stage })).toEqual({
+      ...before,
+      lastMode: { kind: "remote", ...stage },
+      remembered: [stage],
+    });
   });
 });

@@ -13,6 +13,8 @@ type Item = MenuItemConstructorOptions;
 const actions = () => ({
   pageCommand: vi.fn<NativeMenuActions["pageCommand"]>(),
   connectTo: vi.fn(),
+  setStartAtLogin: vi.fn(),
+  setStartWithoutStudio: vi.fn(),
   zoom: vi.fn(),
   toggleDevTools: vi.fn(),
   reloadStudio: vi.fn(),
@@ -48,6 +50,7 @@ function template(options: Partial<NativeMenuOptions> = {}): Item[] {
     kind: "studio",
     page,
     local: true,
+    startup: { startAtLogin: false, startWithoutStudio: false },
     actions: actions(),
     ...options,
   });
@@ -81,6 +84,7 @@ describe("the native menu", () => {
       "Revert to Saved",
       "-",
       "Connect to...",
+      "Startup",
       "-",
       "quit",
     ]);
@@ -187,8 +191,9 @@ describe("the native menu", () => {
       "help",
     ]);
     // Quit is in the application menu there.
-    expect(shape(menus, "file").slice(-3)).toEqual([
+    expect(shape(menus, "file").slice(-4)).toEqual([
       "Connect to...",
+      "Startup",
       "-",
       "close",
     ]);
@@ -201,9 +206,54 @@ describe("the native menu", () => {
     ]);
   });
 
+  it("has the two checkboxes of the next start, as they are now", () => {
+    const startupItems = (options: Partial<NativeMenuOptions>): Item[] => {
+      const startup = all(template(options)).find(
+        (item) => item.id === "desktop:startup",
+      )?.submenu;
+      return Array.isArray(startup) ? startup : [];
+    };
+    const facts = (items: Item[]) =>
+      items.map((item) => [item.label, item.type, item.checked, item.enabled]);
+
+    expect(facts(startupItems({}))).toEqual([
+      ["Start at Login", "checkbox", false, undefined],
+      ["Start Without Studio Window", "checkbox", false, true],
+    ]);
+    // Only a runtime on this computer can run without the Studio window.
+    expect(
+      facts(
+        startupItems({
+          local: false,
+          startup: { startAtLogin: true, startWithoutStudio: true },
+        }),
+      ),
+    ).toEqual([
+      ["Start at Login", "checkbox", true, undefined],
+      ["Start Without Studio Window", "checkbox", true, false],
+    ]);
+
+    // A click hands on what the checkbox became.
+    const given = actions();
+    const [login, withoutStudio] = startupItems({ actions: given });
+    const click = (item: Item | undefined, checked: boolean): void =>
+      (item?.click as unknown as (item: { checked: boolean }) => void)({
+        checked,
+      });
+    click(login, true);
+    click(withoutStudio, false);
+    expect(given.setStartAtLogin).toHaveBeenCalledWith(true);
+    expect(given.setStartWithoutStudio).toHaveBeenCalledWith(false);
+  });
+
   it("works before the page has described anything, or when it never does", () => {
     const menus = template({ page: { file: [], edit: [] } });
-    expect(shape(menus, "file")).toEqual(["Connect to...", "-", "quit"]);
+    expect(shape(menus, "file")).toEqual([
+      "Connect to...",
+      "Startup",
+      "-",
+      "quit",
+    ]);
     expect(shape(menus, "edit")).toEqual(["cut", "copy", "paste", "selectAll"]);
   });
 

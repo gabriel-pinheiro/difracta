@@ -79,9 +79,16 @@ export interface StudioWindowOptions {
    * elsewhere (the native menu only).
    */
   readonly preload: string;
-  /** Asked before the window closes; false keeps it open. */
-  readonly mayClose: (window: BrowserWindow) => Promise<boolean>;
+  readonly mayClose: MayClose;
 }
+
+/**
+ * Asked before the window closes; false keeps it open. A plain `true` lets
+ * the close through as it happens, which a quit already agreed to needs: a
+ * close that is cancelled, even to be repeated a moment later, stops the quit
+ * it was part of.
+ */
+export type MayClose = (window: BrowserWindow) => boolean | Promise<boolean>;
 
 /**
  * The window showing Studio, loaded from the runtime's own URL like any
@@ -108,17 +115,18 @@ export function createStudioWindow(
   });
   confine(window.webContents, options.origin);
 
-  // "close" can be cancelled, and the answer needs a dialog, so the first
-  // attempt is always cancelled and repeated once the answer is yes.
+  // "close" can be cancelled, and an answer that needs a dialog comes later,
+  // so that attempt is cancelled and repeated once the answer is yes.
   let asking = false;
   let confirmed = false;
   window.on("close", (event) => {
     if (confirmed) return;
+    const answer = asking ? false : options.mayClose(window);
+    if (answer === true) return;
     event.preventDefault();
-    if (asking) return;
+    if (asking || answer === false) return;
     asking = true;
-    void options
-      .mayClose(window)
+    void answer
       .then((yes) => {
         confirmed = yes;
         if (yes) window.close();
@@ -144,9 +152,50 @@ export function followTitle(
   where: TitleWhere,
 ): void {
   window.on("page-title-updated", (event) => event.preventDefault());
-  link.onDocumentChange((summary) => {
+  const unfollow = link.onDocumentChange((summary) => {
     if (!window.isDestroyed()) window.setTitle(windowTitle(summary, where));
   });
+  window.on("closed", unfollow);
+}
+
+export interface SessionStudioOptions extends Omit<
+  StudioWindowOptions,
+  "mayClose"
+> {
+  /** Main's link to the session's runtime, which the title is written from. */
+  readonly link: RuntimeLink;
+  readonly title: TitleWhere;
+}
+
+/**
+ * A session's Studio window, which may come and go while the session goes
+ * on: a local session started with `--no-studio` has none until a person
+ * asks for it, and closing it there leaves the runtime running.
+ */
+export class SessionStudio {
+  readonly #options: SessionStudioOptions;
+  #window: BrowserWindow | undefined;
+
+  constructor(options: SessionStudioOptions) {
+    this.#options = options;
+  }
+
+  get window(): BrowserWindow | undefined {
+    return this.#window;
+  }
+
+  /** Opens the window unless it is open. */
+  show(mayClose: MayClose): BrowserWindow {
+    if (this.#window !== undefined) return this.#window;
+    const { link, title, ...options } = this.#options;
+    const window = createStudioWindow({ ...options, mayClose });
+    followTitle(window, link, title);
+    this.#window = window;
+    window.on("closed", () => {
+      if (this.#window === window) this.#window = undefined;
+    });
+    return window;
+  }
 }
 
 /** Hands Studio a file to open, once its page is there to hear it. */

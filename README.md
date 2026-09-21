@@ -28,6 +28,7 @@ mini-PC and the projector's browser can sit on one LAN.
 ```sh
 npm run desktop                      # the launch page first, then whatever was chosen last time
 npm run desktop -- show.difracta     # opens that file on this computer
+npm run desktop -- --no-studio       # the runtime on this computer, with nothing on screen
 ```
 
 Difracta Desktop is the Electron application (`difracta-desktop`). Its launch
@@ -46,6 +47,29 @@ Installation and its file, or the runtime it is open in.
   network, or type `host`, `host:port` or a URL when the network hides them.
   Runtimes connected to before stay listed. The Installation stays on that
   machine, so there are no file dialogs and closing the window asks nothing.
+
+A venue's mini-PC runs Desktop as an appliance, reached from a laptop whose
+Desktop connects to it. Two checkboxes under File ▸ Startup set that up, and
+both apply from the next start:
+
+| Setting                     | Flag                         | What it does                                                                                                                                                                                                                                                                                      |
+| --------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Start Without Studio Window | `--no-studio` for one launch | Local mode starts the runtime and shows nothing. The runtime listens on every interface and is announced on the network as always. Starting Difracta again while it runs shows Studio; closing that window leaves the runtime running, and File ▸ Quit quits. In remote mode the flag is ignored. |
+| Start at Login              |                              | The operating system starts Desktop at login: a login item on macOS and Windows, `~/.config/autostart/difracta-desktop.desktop` on Linux. The checkbox shows what the operating system has, so it is right after the entry was removed by other means.                                            |
+
+Leaving the runtime on this computer (quitting, closing Studio, choosing another
+target under Connect to...) asks about unsaved changes first, and then warns
+when Outputs are showing from it, on this computer's screens or anywhere else,
+since they go dark: "2 Outputs are showing from this computer. Quitting stops
+them." It only warns. Stopped by SIGTERM or the end of the OS session with no
+window open, Desktop asks nothing and stops the runtime cleanly, unsaved changes
+autosaved.
+
+If the runtime crashes or the OS kills it, Desktop starts it again with the
+Installation that was open; the autosave brings unsaved changes back, and
+Studio, the Output pages and the CLI reconnect by themselves. An Installation
+that was never saved has no autosave to come back from. Three restarts within a
+minute and Desktop stops trying and says where `runtime.log` is.
 
 The script builds the Output page, Studio and Desktop, then launches the build;
 stop `npm run dev` first, since both want port 4800, or move Desktop with

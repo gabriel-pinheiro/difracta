@@ -1,6 +1,7 @@
 import type { BaseWindow, MenuItemConstructorOptions } from "electron";
 
 import type { PageMenu, PageMenuItem } from "./page-menu.ts";
+import type { StartupChoices } from "./startup-settings.ts";
 
 /** What the menu's own items do; `application-menu.ts` fills these in with Electron. */
 export interface NativeMenuActions {
@@ -10,6 +11,8 @@ export interface NativeMenuActions {
    */
   pageCommand(id: string, byKey: boolean): void;
   connectTo(): void;
+  setStartAtLogin(on: boolean): void;
+  setStartWithoutStudio(on: boolean): void;
   /** `window` is the focused one, which the action checks before it acts. */
   zoom(window: BaseWindow | undefined, change: "in" | "out" | "reset"): void;
   toggleDevTools(window: BaseWindow | undefined): void;
@@ -25,6 +28,8 @@ export interface NativeMenuOptions {
   readonly page: PageMenu;
   /** Whether Studio comes from the runtime on this computer, which is the one with a log here. */
   readonly local: boolean;
+  /** The two checkboxes of File ▸ Startup, as they really are now. */
+  readonly startup: StartupChoices;
   readonly actions: NativeMenuActions;
 }
 
@@ -96,7 +101,7 @@ function separated(...groups: Item[][]): Item[] {
  * items around the ones the page described. A native menu cannot be edited
  * once set, so this is built again whenever anything it shows changes.
  *
- *   File   [page's]  ─  Connect to...  ─  Quit
+ *   File   [page's]  ─  Connect to..., Startup ▸  ─  Quit
  *   Edit   [page's: Undo and Redo of the Installation]  ─  cut, copy, paste, select all
  *   View   zoom  ─  full screen
  *   Help   Reload Studio, Developer Tools, Show Runtime Log (local only)
@@ -108,6 +113,10 @@ function separated(...groups: Item[][]): Item[] {
  * Linux (for macOS see `pageCommand` in `application-menu.ts`). The launch
  * window has no page items, so it gets those roles for its address field.
  *
+ * File ▸ Startup holds what applies to the next start, which its name says
+ * for both: Start at Login, and Start Without Studio Window, which only a
+ * runtime on this computer can do, so it is greyed out beside one elsewhere.
+ *
  * Windows and Linux have no Close Window item: closing the Studio window quits
  * Desktop and stops the runtime on this computer, too much for a casual
  * Ctrl+W. macOS keeps its conventions: the application menu first, with Quit
@@ -118,7 +127,7 @@ function separated(...groups: Item[][]): Item[] {
  * on a Studio or launch window only, never on an Output's.
  */
 export function nativeMenuTemplate(options: NativeMenuOptions): Item[] {
-  const { platform, kind, page, local, actions } = options;
+  const { platform, kind, page, local, startup, actions } = options;
   const mac = platform === "darwin";
   const studio = kind === "studio";
 
@@ -130,6 +139,27 @@ export function nativeMenuTemplate(options: NativeMenuOptions): Item[] {
             id: "desktop:connect-to",
             label: "Connect to...",
             click: () => actions.connectTo(),
+          },
+          {
+            id: "desktop:startup",
+            label: "Startup",
+            submenu: [
+              {
+                id: "desktop:start-at-login",
+                label: "Start at Login",
+                type: "checkbox",
+                checked: startup.startAtLogin,
+                click: (item) => actions.setStartAtLogin(item.checked),
+              },
+              {
+                id: "desktop:start-without-studio",
+                label: "Start Without Studio Window",
+                type: "checkbox",
+                checked: startup.startWithoutStudio,
+                enabled: local,
+                click: (item) => actions.setStartWithoutStudio(item.checked),
+              },
+            ],
           },
         ]
       : [],

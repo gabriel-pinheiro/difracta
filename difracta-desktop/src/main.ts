@@ -6,10 +6,12 @@
  *
  *   launch → single-instance lock → what to start with (`start-up-mode.ts`)
  *     a file, or local last time → fork the runtime → wait for /health
- *                                  → connect as a client → Studio window
+ *                                  → connect as a client → Studio window,
+ *                                  unless started without it (`--no-studio`)
  *     remote last time           → ask its /health → connect → its Studio
  *     first launch, or a failure → the launch page, which starts one of those
- *   quit   → unsaved-changes prompt → windows close → runtime stops → exit
+ *   quit   → unsaved changes? → Outputs showing? → windows close
+ *          → runtime stops → exit
  *
  * `desktop-modes.ts` holds the moves between those; File ▸ Connect to... opens
  * the launch page again, over the session. `application-menu.ts` is the native
@@ -26,7 +28,12 @@ import { registerLaunchScheme, serveLaunchScheme } from "./launch-window.ts";
 import { runtimeLocations, runtimePort } from "./runtime-launch.ts";
 import { RuntimeProcess } from "./runtime-process.ts";
 import { documentFileFromArgv } from "./start-up-file.ts";
-import { startUpMode, studioUrlFromArgv } from "./start-up-mode.ts";
+import {
+  ignoredNoStudio,
+  noStudioFromArgv,
+  startUpMode,
+  studioUrlFromArgv,
+} from "./start-up-mode.ts";
 
 // `scripts/build.mjs` puts everything the app runs from next to this file.
 const distDir = import.meta.dirname;
@@ -63,6 +70,9 @@ async function start(): Promise<void> {
   });
   modes = new DesktopModes({ distDir, runtime, state, runtimes });
 
+  // Every quit, whatever asked for it (the menu, the Studio window closing, a
+  // signal, the OS session ending), asks the session's questions first.
+  app.on("before-quit", (event) => modes?.beforeQuit(event));
   // The last thing before exit, after every window has closed: stop the
   // runtime and wait for it, then quit for real. With no runtime to stop
   // (the launch page, remote mode) that wait is over at once, still inside
@@ -77,20 +87,29 @@ async function start(): Promise<void> {
       setImmediate(() => app.quit());
     });
   });
-  // Quitting is decided where windows close (`desktop-modes.ts`): between a
-  // session and the launch page there is a moment with no window at all, and
-  // Electron's default would take it for the end.
+  // Quitting is decided where windows close (`studio-visit.ts`, the launch
+  // page in `desktop-modes.ts`): between a session and the launch page there
+  // is a moment with no window at all, a session started with `--no-studio`
+  // has none for as long as it likes, and Electron's default would take
+  // either for the end.
   app.on("window-all-closed", () => undefined);
 
   const file = requestedFile;
   requestedFile = undefined;
-  await modes.startUp(
-    startUpMode({
-      requestedFile: file,
-      studioUrl: studioUrlFromArgv(process.argv),
-      lastMode: (await state.read()).lastMode,
-    }),
-  );
+  const known = await state.read();
+  const noStudioFlag = noStudioFromArgv(process.argv);
+  const mode = startUpMode({
+    requestedFile: file,
+    studioUrl: studioUrlFromArgv(process.argv),
+    lastMode: known.lastMode,
+    noStudioFlag,
+    startWithoutStudio: known.startWithoutStudio === true,
+  });
+  if (ignoredNoStudio(mode, noStudioFlag))
+    console.log(
+      "[Difracta Desktop] --no-studio ignored: only a Runtime on this computer runs without the Studio window.",
+    );
+  await modes.startUp(mode);
 }
 
 // A custom scheme has to be declared before the app is ready.
@@ -109,8 +128,13 @@ if (!app.requestSingleInstanceLock()) {
   app.on("second-instance", (_event, argv, workingDirectory) => {
     const file = documentFileFromArgv(argv, workingDirectory);
     if (file !== undefined) openFromOs(file);
-    else modes?.focus();
+    // Started again by hand: the way to Studio when Desktop runs without its
+    // window. Started again with `--no-studio` (a login entry firing twice)
+    // there is nobody to show anything to.
+    else if (!noStudioFromArgv(argv)) modes?.focus();
   });
+  // macOS: a click on the Dock icon, which is all a Desktop without windows shows there.
+  app.on("activate", () => modes?.focus());
   // macOS opens a document with this event instead of a command line.
   app.on("open-file", (event, file) => {
     event.preventDefault();

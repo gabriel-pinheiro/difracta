@@ -680,10 +680,10 @@ in use is marked there instead of offered, and closing the window changes
 nothing. Only a chosen target ends the session, in this order (`connect-to.ts`):
 the target is checked (`/health` for a runtime elsewhere, the port being free
 for this computer), then the session is left (in local mode through the same
-unsaved-changes question as closing the window; Cancel closes the launch page
-and stays), the runtime child is stopped and waited for, and the new session
-starts, so nothing starts while something is still stopping. A target that fails
-the check is reported on the page with the session untouched. `desktop-modes.ts`
+questions as quitting, described below; Cancel closes the launch page and
+stays), the runtime child is stopped and waited for, and the new session starts,
+so nothing starts while something is still stopping. A target that fails the
+check is reported on the page with the session untouched. `desktop-modes.ts`
 holds these moves; `local-session.ts` and `remote-session.ts` are what each mode
 starts and ends.
 
@@ -702,16 +702,17 @@ Local mode: pick the file (the one asked for, else the last one opened if it
 still exists, else none); check the port is free and fork the runtime; ask
 `/health` with a backoff until it answers, or give up when the port is taken,
 the child exits or `settings.desktop.runtimeStartTimeoutMs` passes; connect to
-it; open the Studio window. Main's connection is a `@difracta/client` of kind
-`desktop` (`runtime-link.ts`), in both modes. From the document summary every
-client receives it learns the open file's path, which it remembers and gives to
-the OS's recent documents, and whether there are unsaved changes. A local
-runtime that started with nothing open is sent `documents.new`, so Desktop lands
-in a working Studio; an untouched Installation is not dirty, so that never
-causes a question later. The runtime's output goes to `runtime.log` under
-Electron's logs folder (Help ▸ Show Runtime Log), the previous launch's kept
-beside it. In remote mode the link only reads, and a connection that drops is
-retried quietly by the client while Studio's own page shows the reconnect.
+it; open the Studio window, unless this start is without it (below). Main's
+connection is a `@difracta/client` of kind `desktop` (`runtime-link.ts`), in
+both modes. From the document summary every client receives it learns the open
+file's path, which it remembers and gives to the OS's recent documents, and
+whether there are unsaved changes. A local runtime that started with nothing
+open is sent `documents.new`, so Desktop lands in a working Studio; an untouched
+Installation is not dirty, so that never causes a question later. The runtime's
+output goes to `runtime.log` under Electron's logs folder (Help ▸ Show Runtime
+Log), the previous launch's kept beside it. In remote mode the link only reads,
+and a connection that drops is retried quietly by the client while Studio's own
+page shows the reconnect.
 
 In both modes main writes the Studio window's title from that summary
 (`window-title.ts`) and refuses the page's own (`page-title-updated`). It stands
@@ -781,36 +782,93 @@ page opened from Studio gets an unthrottled window of its own, other links open
 in the person's browser, and every window runs with `contextIsolation`,
 `sandbox` and no `nodeIntegration`.
 
-Closing the Studio window in local mode with unsaved changes asks Save, Don't
-Save or Cancel natively (remote mode asks nothing: the Installation lives in
-that runtime and stays open there); Save without a file goes through the Save
-dialog, Don't Save closes the document as discarded so its autosave does not
-return as a recovery. Closing Studio quits Desktop, and quitting stops the
-runtime: main posts `shutdown` on the child's parent port, the runtime flushes
-its autosave, closes and exits, and is killed only after
-`settings.desktop.runtimeStopTimeoutMs`.
+Leaving local mode stops the runtime on this computer, so it is asked about
+first, in one place for every way of leaving. Every quit (File ▸ Quit, a signal,
+the OS session ending) arrives as the app's `before-quit`, which `quit-gate.ts`
+holds until the session agrees; closing the Studio window asks for a quit rather
+than closing; a target chosen under Connect to... asks the same before the
+switch. The questions are `Session.mayLeave`, whose order is `leave-checks.ts`:
+with unsaved changes, Save, Don't Save or Cancel (Save without a file goes
+through the Save dialog, Don't Save closes the document as discarded so its
+autosave does not return as a recovery); then, with Output Sessions attached to
+the runtime, a warning that they stop ("2 Outputs are showing from this
+computer. Quitting stops them.", Quit or Cancel; "Switching" and Switch for
+Connect to...). It warns and never refuses. Cancel on either leaves everything
+as it was, so the acts are ordered apart from the questions: the sessions are
+counted first, while the document they belong to is open; Save happens when
+chosen; Don't Save waits until the second question is answered too. The count
+comes from live state (`["live","outputs",id,"sessions"]`, stale sessions left
+out), which main subscribes to for that one snapshot and lets go again; every
+Output page counts, a window of this Desktop as much as a TV's browser, since
+all go dark. Remote mode asks nothing: the Installation and its Outputs live in
+that runtime and stay. Nothing is asked either when no window of Desktop is
+open, because nobody is there to answer, nor of a runtime that is not answering.
+After the questions the windows close and main posts `shutdown` on the child's
+parent port: the runtime flushes its autosave, closes and exits, and is killed
+only after `settings.desktop.runtimeStopTimeoutMs`.
+
+Local mode can start without the Studio window: `--no-studio` for one launch, or
+File ▸ Startup ▸ Start Without Studio Window, kept in `desktop-state.json`, for
+every launch (the flag only ever says yes; outside local mode it is ignored with
+a log line). The runtime child, main's link and the session are as always, on
+every interface and announced on the network, and nothing is on screen;
+`window-all-closed` never quits Desktop. The way to Studio is to start Difracta
+again: the second launch hands over to the running one, which opens the Studio
+window (so does a click on the macOS Dock icon). In such a session the window is
+a visit: closing it closes it and nothing else, and quitting is File ▸ Quit, a
+signal or the end of the OS session. A file from the OS while there is no window
+is opened by main itself with `documents.open`; with unsaved changes it is not,
+and the Studio window is shown so that Studio's own Open asks.
+
+While a local session runs, a runtime child that exits without having been asked
+to is started again (`runtime-restarts.ts`): after
+`settings.desktop.runtimeRestartInitialDelayMs`, doubled for every restart still
+inside `runtimeRestartWindowMs`, with the path of the Installation that was open
+by the last summary main saw, not the one Desktop started with. The runtime
+loads an autosave newer than the file, so unsaved changes come back; an
+Installation never saved has no path and no autosave, and the runtime comes up
+with a new one. Studio, the Output pages and main's link reconnect by
+themselves, as to any runtime that was away, and no window is reloaded.
+`runtimeRestartLimit` restarts inside the window and Desktop stops trying: a
+native error names `runtime.log`, and Studio keeps showing its own
+"disconnected". Each restart is a line of Desktop's in `runtime.log`, which goes
+on across restarts instead of rotating. An exit Desktop asked for (quit, leaving
+local mode) is never restarted, and neither is a first start that fails, which
+stays the launch page's to report.
+
+File ▸ Startup ▸ Start at Login registers Desktop with the operating system
+(`startup-settings.ts`): `app.setLoginItemSettings` on macOS and Windows. On
+Linux that call does nothing, so Desktop writes and removes an XDG autostart
+entry itself (`xdg-autostart.ts`): `difracta-desktop.desktop` in
+`$XDG_CONFIG_HOME/autostart`, whose `Exec` is what is running now (the
+executable, the app's folder for a build that is not packaged, `--no-sandbox`
+only when this launch has it) plus `--no-studio` when that setting is on, so the
+entry is written again when either checkbox changes. The wish is not stored: the
+checkbox shows what the operating system has.
 
 The native menu bar is always visible and dark (`nativeTheme` is forced dark, as
 Studio is), and one builder (`native-menu.ts`, a pure template;
 `application-menu.ts` sets it) merges Desktop's items with the page's. **File**:
-the page's items, Connect to..., Quit. **Edit**: the page's Undo and Redo, which
-are the Installation's, then the cut, copy, paste and select-all roles; the
-`undo` and `redo` roles are left out beside them, and the keys still undo typing
-inside a text field. **View**: Actual Size, Zoom In (with a hidden `Ctrl+=`
-twin), Zoom Out, Toggle Full Screen. **Help**: Reload Studio, Toggle Developer
-Tools, and Show Runtime Log in local mode. Windows and Linux have no Window menu
-and no Close Window: closing the Studio window quits Desktop and stops the local
-runtime, too much for a casual Ctrl+W; Quit keeps its accelerator and goes
-through the unsaved-changes question. macOS keeps its conventions (the
-application menu with Quit, Close Window in File, a Window menu). Items have
-stable ids (`page:save`, `desktop:connect-to`, `help:reload-studio`), which is
-how the e2e suite clicks them from the main process. A native menu cannot be
-edited once set, so it is built again when the page's model, the session or the
-launch window changes, after `settings.desktop.menuRebuildDelayMs` so a burst
-makes one rebuild. The launch window has a smaller menu of its own (Quit, the
-text roles with undo and redo for its address field, zoom, Developer Tools). An
-Output window has none (`removeMenu`), and so none of the menu's shortcuts; F11
-alone is handled in the window itself, since an Output has to go full screen. On
+the page's items, Connect to..., the Startup submenu with its two checkboxes
+(Start Without Studio Window greyed out in remote mode), Quit. **Edit**: the
+page's Undo and Redo, which are the Installation's, then the cut, copy, paste
+and select-all roles; the `undo` and `redo` roles are left out beside them, and
+the keys still undo typing inside a text field. **View**: Actual Size, Zoom In
+(with a hidden `Ctrl+=` twin), Zoom Out, Toggle Full Screen. **Help**: Reload
+Studio, Toggle Developer Tools, and Show Runtime Log in local mode. Windows and
+Linux have no Window menu and no Close Window: closing the Studio window quits
+Desktop and stops the local runtime, too much for a casual Ctrl+W; Quit keeps
+its accelerator and goes through the questions above. macOS keeps its
+conventions (the application menu with Quit, Close Window in File, a Window
+menu). Items have stable ids (`page:save`, `desktop:connect-to`,
+`help:reload-studio`), which is how the e2e suite clicks them from the main
+process. A native menu cannot be edited once set, so it is built again when the
+page's model, the session, the Studio or launch window or a Startup checkbox
+changes, after `settings.desktop.menuRebuildDelayMs` so a burst makes one
+rebuild. The launch window has a smaller menu of its own (Quit, the text roles
+with undo and redo for its address field, zoom, Developer Tools). An Output
+window has none (`removeMenu`), and so none of the menu's shortcuts; F11 alone
+is handled in the window itself, since an Output has to go full screen. On
 macOS, where one menu serves every window, zoom and Developer Tools act only
 when the focused window is Studio's or the launch page's.
 
@@ -862,7 +920,25 @@ Ctrl+R, Ctrl+Minus or Ctrl+Shift+I must do nothing. **Why Connect to... keeps
 the session until a target is chosen:** leaving local mode stops the runtime and
 turns every Output dark, which looking at a list, a change of mind or a mistyped
 address must never cost; checking the target first keeps a failure from costing
-it either. **Why main writes the title:** only main knows where Studio comes
+it either. **Why Desktop can run without a window:** a venue's mini-PC is an
+appliance that shows Outputs and is operated from a laptop; a Studio nobody
+looks at costs a renderer and invites a stray click. **Why a second launch
+brings Studio back, and no tray icon:** starting the app is what a person does
+anyway when they cannot see it, and it works the same on every desktop, where
+tray icons do not. **Why the quit is gated at `before-quit`:** it is the one
+event every way of quitting passes before any window closes, so the questions
+exist once, and a session without a window (where a window's `close` never
+fires) needs no case of its own. **Why the Outputs warning never refuses:** the
+person at the machine knows whether the show is over; Desktop only knows that
+screens are attached. **Why the runtime is restarted with the current path:**
+the file Desktop started with may be hours stale, and the autosave that holds
+the unsaved work sits next to the file that was open. **Why restarts give up:**
+a runtime that dies on the Installation it reopens would restart for ever,
+hiding the problem and filling the log. **Why Linux needs its own autostart
+file:** Electron's login items exist for macOS and Windows only, and the XDG
+autostart directory is what Linux desktops read. **Why the login setting is not
+stored:** two copies of one fact drift, and the operating system's is the one
+that acts. **Why main writes the title:** only main knows where Studio comes
 from, and a page from another machine does not get to name the window. **Why the
 document bridge is three functions:** anything a page can call in main is attack
 surface and is out of the CLI's reach; a file dialog is the one thing that needs

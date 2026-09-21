@@ -1,7 +1,7 @@
 import { settings } from "@difracta/core";
 import { app, utilityProcess, type UtilityProcess } from "electron";
 import { createWriteStream, type WriteStream } from "node:fs";
-import { mkdir, rename } from "node:fs/promises";
+import { appendFile, mkdir, rename } from "node:fs/promises";
 import { createServer } from "node:net";
 import path from "node:path";
 
@@ -45,6 +45,9 @@ export class RuntimeProcess {
   #child: UtilityProcess | undefined;
   #exit: Promise<void> = Promise.resolve();
   #exitCode: number | undefined;
+  /** Desktop asked the child to stop, so its exit is no accident. */
+  #stopping = false;
+  #exitListener: ((code: number, expected: boolean) => void) | undefined;
 
   constructor(options: {
     readonly port: number;
@@ -66,8 +69,32 @@ export class RuntimeProcess {
         };
   }
 
-  /** Forks the runtime and resolves once it answers `/health`, or says why it will not. */
-  async start(file: string | undefined): Promise<RuntimeStart> {
+  /** Who hears of the child's exits, and whether Desktop had asked for each; one listener, or none. */
+  watchExit(
+    listener: ((code: number, expected: boolean) => void) | undefined,
+  ): void {
+    this.#exitListener = listener;
+  }
+
+  /** A line of Desktop's own among the runtime's in `runtime.log`, and on the terminal. */
+  async note(line: string): Promise<void> {
+    console.log(`[Difracta Desktop] ${line}`);
+    await mkdir(path.dirname(this.logFile), { recursive: true });
+    await appendFile(
+      this.logFile,
+      `[Difracta Desktop ${new Date().toISOString()}] ${line}\n`,
+    ).catch(() => undefined);
+  }
+
+  /**
+   * Forks the runtime and resolves once it answers `/health`, or says why it
+   * will not. `keepLog` is for starting it again after it exited by itself:
+   * the log goes on, so what it said before it died stays readable.
+   */
+  async start(
+    file: string | undefined,
+    options: { readonly keepLog?: boolean } = {},
+  ): Promise<RuntimeStart> {
     // Asked first, because a `/health` answered by some other runtime already
     // on the port would pass for ours.
     const port = await this.checkPort();
@@ -75,7 +102,8 @@ export class RuntimeProcess {
 
     // A runtime is started again after a switch away and back.
     this.#exitCode = undefined;
-    const log = await this.#openLog();
+    this.#stopping = false;
+    const log = await this.#openLog(options.keepLog === true);
     const child = utilityProcess.fork(
       this.#locations.script,
       runtimeArguments({ port: this.port, file }),
@@ -99,6 +127,7 @@ export class RuntimeProcess {
         this.#child = undefined;
         log.end();
         resolve();
+        this.#exitListener?.(code, this.#stopping);
       });
     });
 
@@ -120,6 +149,7 @@ export class RuntimeProcess {
   async stop(): Promise<void> {
     const child = this.#child;
     if (child === undefined) return;
+    this.#stopping = true;
     child.postMessage("shutdown");
     const timer = setTimeout(
       () => child.kill(),
@@ -130,8 +160,9 @@ export class RuntimeProcess {
   }
 
   /** A fresh log per launch; the launch before it stays as `runtime.previous.log`. */
-  async #openLog(): Promise<WriteStream> {
+  async #openLog(keep: boolean): Promise<WriteStream> {
     await mkdir(path.dirname(this.logFile), { recursive: true });
+    if (keep) return createWriteStream(this.logFile, { flags: "a" });
     await rename(
       this.logFile,
       this.logFile.replace(/\.log$/, ".previous.log"),

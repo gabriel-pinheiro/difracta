@@ -1,20 +1,18 @@
-import { app } from "electron";
+import { settings } from "@difracta/core";
+import { app, dialog, type BrowserWindow } from "electron";
 import { access } from "node:fs/promises";
 import { homedir } from "node:os";
 
-import { mayClose } from "./close-prompt.ts";
+import { mayLeaveLocal } from "./close-prompt.ts";
 import type { DesktopStateStore } from "./desktop-state.ts";
 import { addressLabel } from "./runtime-address.ts";
 import { checkRuntime } from "./runtime-health.ts";
 import { RuntimeLink } from "./runtime-link.ts";
 import type { RuntimeProcess } from "./runtime-process.ts";
+import { RuntimeRestarts } from "./runtime-restarts.ts";
 import type { SessionStart } from "./session.ts";
 import { startUpFile } from "./start-up-file.ts";
-import {
-  createStudioWindow,
-  followTitle,
-  requestOpen,
-} from "./studio-window.ts";
+import { requestOpen, SessionStudio } from "./studio-window.ts";
 
 async function exists(file: string): Promise<boolean> {
   return access(file).then(
@@ -23,9 +21,27 @@ async function exists(file: string): Promise<boolean> {
   );
 }
 
+/** Said once, when the runtime will not stay up; Studio's own "disconnected" stays as it is behind it. */
+function sayRuntimeGaveUp(
+  over: BrowserWindow | undefined,
+  logFile: string,
+): void {
+  const options = {
+    type: "error" as const,
+    message: "The Runtime on this computer keeps stopping.",
+    detail: `Difracta started it again ${String(settings.desktop.runtimeRestartLimit)} times and has stopped trying. Its log is at ${logFile}. Quit Difracta and start it again to try once more.`,
+    buttons: ["OK"],
+  };
+  void (over === undefined
+    ? dialog.showMessageBox(options)
+    : dialog.showMessageBox(over, options));
+}
+
 /**
- * Local mode: fork the runtime, wait for `/health`, connect as a client, open
- * the Studio window with the document bridge and the menu bridge.
+ * Local mode: fork the runtime, wait for `/health`, connect as a client. The
+ * Studio window it then gets has the document bridge and the menu bridge.
+ * From here on the runtime is kept running (`runtime-restarts.ts`) until the
+ * session ends.
  *
  * With `devOrigin` (`--studio-url`, development only) nothing is forked: the
  * Studio dev server there stands in, proxying to a runtime already running on
@@ -37,6 +53,8 @@ export async function startLocalSession(options: {
   readonly preload: string;
   /** A file the OS asked for; undefined reopens the last one. */
   readonly file: string | undefined;
+  /** False for `--no-studio` and its setting. */
+  readonly studioWindow: boolean;
   readonly devOrigin?: string;
 }): Promise<SessionStart> {
   const { runtime, state, devOrigin } = options;
@@ -57,24 +75,58 @@ export async function startLocalSession(options: {
     return started;
   }
   const origin = devOrigin ?? runtime.origin;
+  let pending = options.file;
 
   const link = new RuntimeLink(origin);
-  await link.ensureDocument();
+  // A runtime that dies this early is still a start that failed, which the
+  // launch page reports; the link alone would wait for it for ever.
+  const died = new Promise<never>((_resolve, reject) => {
+    runtime.watchExit((code) => {
+      reject(
+        new Error(
+          `The runtime stopped while starting (exit code ${String(code)}). Its log is at ${runtime.logFile}.`,
+        ),
+      );
+    });
+  });
+  try {
+    await Promise.race([link.ensureDocument(), died]);
+  } catch (error) {
+    runtime.watchExit(undefined);
+    link.close();
+    await runtime.stop();
+    return {
+      ok: false,
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+  runtime.watchExit(undefined);
   link.onPathChange((file) => {
     lastFile = file;
     app.addRecentDocument(file);
     void state.update((known) => ({ ...known, lastFile: file }));
   });
 
-  const window = createStudioWindow({
+  const studio = new SessionStudio({
     origin,
     preload: options.preload,
-    mayClose: (closing) => mayClose(closing, link),
+    link,
+    title: { kind: "local", home: homedir() },
   });
-  followTitle(window, link, { kind: "local", home: homedir() });
-  // The dev server's runtime was running before this file was asked for.
-  if (devOrigin !== undefined && options.file !== undefined)
-    requestOpen(window, options.file);
+
+  const restarts = new RuntimeRestarts({
+    // The Installation that is open now; one never saved has no path.
+    currentFile: () => link.document()?.path ?? undefined,
+    start: (file) => runtime.start(file, { keepLog: true }),
+    stop: () => runtime.stop(),
+    // Main's link finds the new runtime by itself; one that came up with
+    // nothing open gets an Installation, as at start-up.
+    restarted: () => void link.ensureDocument().catch(() => undefined),
+    gaveUp: () => sayRuntimeGaveUp(studio.window, runtime.logFile),
+    log: (line) => void runtime.note(line),
+  });
+  if (devOrigin === undefined)
+    runtime.watchExit((code, expected) => void restarts.exited(code, expected));
 
   return {
     ok: true,
@@ -85,11 +137,39 @@ export async function startLocalSession(options: {
           : `Studio dev server (${addressLabel(devOrigin)})`,
       origin,
       resume: devOrigin === undefined ? { kind: "local" } : undefined,
-      window,
+      withoutStudio: !options.studioWindow,
+      get window() {
+        return studio.window;
+      },
+      showWindow: (mayClose) => {
+        const open = studio.window;
+        const window = studio.show(mayClose);
+        // The dev server's runtime was running before this file was asked for.
+        if (
+          open === undefined &&
+          devOrigin !== undefined &&
+          pending !== undefined
+        )
+          requestOpen(window, pending);
+        pending = undefined;
+        return window;
+      },
       bridgeOrigin: origin,
       currentFile: () => link.document()?.path ?? lastFile,
-      mayLeave: (over) => mayClose(over, link),
+      openWithoutStudio: async (file) => {
+        // Unsaved changes are never dropped for a file that arrived: Studio's
+        // own Open asks about them, so the file goes there with its window.
+        if (link.document()?.dirty === true) return false;
+        return link.open(file).then(
+          () => true,
+          () => false,
+        );
+      },
+      mayLeave: (over, leaving) =>
+        mayLeaveLocal({ link, over, leaving, attended: over !== undefined }),
       end: async () => {
+        restarts.end();
+        runtime.watchExit(undefined);
         link.close();
         await runtime.stop();
       },

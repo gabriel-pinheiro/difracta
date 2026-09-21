@@ -1,6 +1,8 @@
+import { settings } from "@difracta/core";
 import { DifractaClient } from "@difracta/client";
 import type { DocumentSummary } from "@difracta/protocol";
 
+import { countOutputSessions } from "./output-sessions.ts";
 import { liveUrl } from "./runtime-address.ts";
 
 /**
@@ -9,9 +11,11 @@ import { liveUrl } from "./runtime-address.ts";
  * Installation is open and whether it has unsaved changes (the document
  * summary every client receives). To the runtime on this computer it also
  * sends the few requests main makes itself: a first Installation at start-up,
- * Save and Don't Save when the window closes; it connects over loopback, so
- * the free runtime lets it. A connection that drops is retried by the client
- * for as long as the link is open.
+ * Save and Don't Save when the window closes, a file from the OS while there
+ * is no Studio window to hand it to; it connects over loopback, so the free
+ * runtime lets it. A connection that drops is retried by the client for as
+ * long as the link is open, which is also how the link finds a runtime child
+ * that was started again.
  */
 export class RuntimeLink {
   readonly #client: DifractaClient;
@@ -32,10 +36,12 @@ export class RuntimeLink {
     return this.#client.document.get();
   }
 
-  /** Calls back now and whenever the summary changes; null while nothing is open or known. */
-  onDocumentChange(listener: (summary: DocumentSummary | null) => void): void {
+  /** Calls back now and whenever the summary changes, until what it returns is called; null while nothing is open or known. */
+  onDocumentChange(
+    listener: (summary: DocumentSummary | null) => void,
+  ): () => void {
     listener(this.#client.document.get());
-    this.#client.document.subscribe(listener);
+    return this.#client.document.subscribe(listener);
   }
 
   /** Calls back with the open file's path whenever it becomes another one. */
@@ -91,6 +97,47 @@ export class RuntimeLink {
       documentId,
       discard: true,
     });
+  }
+
+  /** Replaces the open document with a file; refused by the runtime while there are unsaved changes. */
+  async open(path: string): Promise<void> {
+    await this.#client.request("documents.open", { path });
+  }
+
+  /** Whether the runtime is on the other end right now. */
+  connected(): boolean {
+    return this.#client.phase.get() === "connected";
+  }
+
+  /**
+   * How many Output Sessions are attached to the runtime now. Live state
+   * comes with a subscription to the document, whole Installation included,
+   * so main subscribes for the one snapshot when it needs the number and lets
+   * go again, rather than mirror every change of a show it never draws. A
+   * runtime that does not answer within
+   * `settings.desktop.outputSessionsTimeoutMs` counts as showing nothing.
+   */
+  async outputSessions(): Promise<number> {
+    const documentId = this.document()?.id;
+    if (documentId === undefined || !this.connected()) return 0;
+    const view = this.#client.openDocument(documentId, { live: true });
+    try {
+      const arrived = await new Promise<boolean>((resolve) => {
+        const timer = setTimeout(() => {
+          resolve(false);
+        }, settings.desktop.outputSessionsTimeoutMs);
+        // The snapshot sets the document, then its live state; the count
+        // below runs after this promise, so after both.
+        const stop = view.document.subscribe(() => {
+          clearTimeout(timer);
+          stop();
+          resolve(true);
+        });
+      });
+      return arrived ? countOutputSessions(view.liveState.get()) : 0;
+    } finally {
+      this.#client.closeDocument(documentId);
+    }
   }
 
   close(): void {
