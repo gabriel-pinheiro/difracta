@@ -1,59 +1,33 @@
-import {
-  generateId,
-  payloadIssues,
-  type Catalog,
-  type FilterDefinition,
-  type Patch,
-} from "@difracta/core";
+import type { Catalog, Patch } from "@difracta/core";
 import {
   ClientMessageSchema,
   EMPTY_LIVE_STATE,
   PROTOCOL_VERSION,
-  RuntimeRequestSchemas,
   type ClientMessage,
-  type CommandResult,
   type DocumentsMode,
   type LiveState,
   type OscLive,
-  type ServerMessage,
 } from "@difracta/protocol";
 import type { RawData, WebSocket } from "ws";
-import type { ZodType } from "zod";
 
-import type {
-  DocumentDelta,
-  DocumentEvent,
-  DocumentSession,
-  SessionCommandResult,
-} from "../documents/document-session.ts";
 import type { DocumentStore } from "../documents/document-store.ts";
 import { AttachedSession } from "./attached-session.ts";
-import { documentsModeFor, pinnedRefusal } from "./documents-mode.ts";
+import { catalogRequests } from "./catalog-requests.ts";
+import { ClientSession } from "./client-session.ts";
+import { ClientSessions } from "./client-sessions.ts";
+import { DisplayHosts } from "./display-hosts.ts";
+import { DisplayRequests } from "./display-requests.ts";
+import { commandOutcome, executeCommand } from "./document-commands.ts";
+import { documentRequests } from "./document-requests.ts";
+import { documentsModeFor } from "./documents-mode.ts";
 import { OutputPresence } from "./output-presence.ts";
+import { RuntimeRequests } from "./runtime-requests.ts";
 
 function decodeRawData(data: RawData): string {
   if (data instanceof ArrayBuffer) return Buffer.from(data).toString("utf8");
   if (Array.isArray(data)) return Buffer.concat(data).toString("utf8");
   return data.toString("utf8");
 }
-
-interface ClientSession {
-  readonly id: string;
-  readonly socket: WebSocket;
-  /** What this connection may do with the document, told in `welcome`. */
-  readonly documents: DocumentsMode;
-  identified: boolean;
-  /** Owner of undo entries; the session id unless hello supplied an actor. */
-  actor: string;
-  /** Subscribed document ids, with whether live state was requested. */
-  readonly subscriptions: Map<string, { readonly live: boolean }>;
-  pendingDeltas: DocumentDelta[];
-  pendingLive: Patch[];
-  pendingEvents: DocumentEvent[];
-  flushScheduled: boolean;
-}
-
-type ReplyOutcome = Extract<ServerMessage, { type: "reply" }>["outcome"];
 
 export interface LiveServerOptions {
   readonly store: DocumentStore;
@@ -75,42 +49,58 @@ export interface LiveServerOptions {
 
 /**
  * The websocket hub. Each client subscribes to the document and receives one
- * snapshot then batched deltas: deltas produced within one event-loop turn
- * are merged into a single message per client, so a Macro that changes
- * twelve values costs one packet. Live-state patches travel the same way but
- * only to clients that subscribed with `live`, so Output pages never pay for
- * each other's telemetry.
+ * snapshot then batched deltas (`client-session.ts`). Live-state patches
+ * travel the same way but only to clients that subscribed with `live`, so
+ * Output pages never pay for each other's telemetry. Commands run through
+ * `document-commands.ts`, requests through `runtime-requests.ts`.
  */
 export class LiveServer {
-  readonly #sessions = new Set<ClientSession>();
+  readonly #sessions = new ClientSessions();
   readonly #options: LiveServerOptions;
   readonly #presence = new OutputPresence();
-  readonly #unsubscribeStore: () => void;
-  readonly #unsubscribePresence: () => void;
-  readonly #unsubscribeOsc: (() => void) | undefined;
+  readonly #hosts = new DisplayHosts();
+  readonly #displayRequests: DisplayRequests;
+  readonly #requests: RuntimeRequests;
+  readonly #unsubscribe: readonly (() => void)[];
   readonly #attached: AttachedSession;
 
   constructor(options: LiveServerOptions) {
     this.#options = options;
     this.#attached = new AttachedSession({
-      onEvent: (event) => this.#fanOutEvent(event),
+      onEvent: (event) => this.#sessions.fanOutEvent(event),
       onDelta: (delta) => {
-        this.#fanOut(delta);
+        this.#sessions.fanOutDelta(delta);
         this.#reconcilePresence();
       },
     });
-    this.#unsubscribeStore = options.store.onChange(() => {
-      const swapped = this.#attached.follow(options.store.currentSession());
-      this.#reconcilePresence();
-      this.#broadcast({ type: "document", summary: options.store.current() });
-      if (swapped) this.#resnapshot();
+    this.#displayRequests = new DisplayRequests({
+      hosts: this.#hosts,
+      store: options.store,
+      send: (sessionId, message) => this.#sessions.sendTo(sessionId, message),
     });
-    this.#unsubscribePresence = this.#presence.onChange((patches) =>
-      this.#fanOutLive(patches),
-    );
-    this.#unsubscribeOsc = options.osc?.onChange((state) =>
-      this.#fanOutLive([{ op: "set", path: ["osc"], value: state }]),
-    );
+    this.#requests = new RuntimeRequests(options.store, {
+      ...documentRequests(options.store),
+      ...catalogRequests(options.catalog),
+      ...this.#displayRequests.handlers(),
+    });
+    const fanOutLive = (patches: readonly Patch[]): void =>
+      this.#sessions.fanOutLive(this.#attached.id, patches);
+    this.#unsubscribe = [
+      options.store.onChange(() => {
+        const swapped = this.#attached.follow(options.store.currentSession());
+        this.#reconcilePresence();
+        this.#sessions.broadcast({
+          type: "document",
+          summary: options.store.current(),
+        });
+        if (swapped) this.#resnapshot();
+      }),
+      this.#presence.onChange(fanOutLive),
+      this.#hosts.onChange(fanOutLive),
+      options.osc?.onChange((state) =>
+        fanOutLive([{ op: "set", path: ["osc"], value: state }]),
+      ) ?? (() => undefined),
+    ];
     this.#attached.follow(options.store.currentSession());
   }
 
@@ -119,32 +109,26 @@ export class LiveServer {
     return {
       osc: this.#options.osc?.state() ?? EMPTY_LIVE_STATE.osc,
       ...this.#presence.state(),
+      ...this.#hosts.state(),
     };
   }
 
   close(): void {
-    this.#unsubscribeStore();
-    this.#unsubscribePresence();
-    this.#unsubscribeOsc?.();
+    for (const unsubscribe of this.#unsubscribe) unsubscribe();
     this.#attached.close();
     this.#presence.close();
-    for (const session of this.#sessions) session.socket.close();
+    this.#displayRequests.close();
+    this.#hosts.close();
+    this.#sessions.disconnectAll();
   }
 
   /** `remoteAddress` is the peer's, as the accepted socket reports it. */
   accept(socket: WebSocket, remoteAddress: string | undefined): void {
-    const session: ClientSession = {
-      id: generateId("session"),
+    const session = new ClientSession(
       socket,
-      documents: documentsModeFor(this.#options.documents, remoteAddress),
-      identified: false,
-      actor: "",
-      subscriptions: new Map(),
-      pendingDeltas: [],
-      pendingLive: [],
-      pendingEvents: [],
-      flushScheduled: false,
-    };
+      documentsModeFor(this.#options.documents, remoteAddress),
+      () => this.#attached.id,
+    );
     this.#sessions.add(session);
     socket.on("message", (raw) => {
       this.#receive(session, decodeRawData(raw));
@@ -152,6 +136,7 @@ export class LiveServer {
     socket.on("close", () => {
       this.#sessions.delete(session);
       this.#presence.detach(session.id);
+      this.#displayRequests.withdraw(session.id);
       this.#releaseCalibration(session);
     });
   }
@@ -162,30 +147,13 @@ export class LiveServer {
     if (documentSession === undefined) return;
     if (documentSession.document.operational.calibration?.owner !== session.id)
       return;
-    this.#execute(documentSession, "calibration.exit", {}, session.actor);
-  }
-
-  /**
-   * Runs a command on the document, turning an exception inside it into a
-   * failed result: a reducer that throws must not take the socket, let alone
-   * the show, down with it.
-   */
-  #execute(
-    documentSession: DocumentSession,
-    name: string,
-    payload: unknown,
-    actor: string,
-  ): SessionCommandResult {
-    try {
-      return documentSession.execute(name, payload, actor);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.#options.log(`command “${name}” threw: ${message}`);
-      return {
-        ok: false,
-        error: `Command “${name}” failed inside the runtime: ${message}`,
-      };
-    }
+    executeCommand(
+      documentSession,
+      "calibration.exit",
+      {},
+      session.actor,
+      this.#options.log,
+    );
   }
 
   /**
@@ -195,11 +163,10 @@ export class LiveServer {
   #resnapshot(): void {
     const documentId = this.#attached.id;
     if (documentId === undefined) return;
-    for (const session of this.#sessions) {
-      const subscription = session.subscriptions.get(documentId);
-      if (subscription !== undefined)
-        this.#subscribe(session, documentId, subscription.live);
-    }
+    for (const { session, live } of [
+      ...this.#sessions.subscribedTo(documentId),
+    ])
+      this.#subscribe(session, documentId, live);
   }
 
   #reconcilePresence(): void {
@@ -207,130 +174,23 @@ export class LiveServer {
     this.#presence.reconcile(new Set(Object.keys(document?.outputs ?? {})));
   }
 
-  #fanOut(delta: DocumentDelta): void {
-    for (const session of this.#sessions) {
-      if (!session.subscriptions.has(delta.documentId)) continue;
-      session.pendingDeltas.push(delta);
-      this.#scheduleFlush(session);
-    }
-  }
-
-  #fanOutEvent(event: DocumentEvent): void {
-    for (const session of this.#sessions) {
-      if (!session.subscriptions.has(event.documentId)) continue;
-      session.pendingEvents.push(event);
-      this.#scheduleFlush(session);
-    }
-  }
-
-  #fanOutLive(patches: readonly Patch[]): void {
-    const documentId = this.#attached.id;
-    if (documentId === undefined) return;
-    for (const session of this.#sessions) {
-      if (session.subscriptions.get(documentId)?.live !== true) continue;
-      session.pendingLive.push(...patches);
-      this.#scheduleFlush(session);
-    }
-  }
-
-  #scheduleFlush(session: ClientSession): void {
-    if (session.flushScheduled) return;
-    session.flushScheduled = true;
-    setImmediate(() => this.#flush(session));
-  }
-
-  #flush(session: ClientSession): void {
-    session.flushScheduled = false;
-    const byDocument = new Map<string, DocumentDelta[]>();
-    for (const delta of session.pendingDeltas) {
-      const list = byDocument.get(delta.documentId) ?? [];
-      list.push(delta);
-      byDocument.set(delta.documentId, list);
-    }
-    session.pendingDeltas = [];
-    for (const [documentId, deltas] of byDocument) {
-      const first = deltas[0];
-      const last = deltas.at(-1);
-      if (first === undefined || last === undefined) continue;
-      this.#send(session, {
-        type: "delta",
-        documentId,
-        fromRevision: first.fromRevision,
-        revision: last.revision,
-        patches: deltas.flatMap((delta) =>
-          delta.patches.map((patch) => ({ ...patch, path: [...patch.path] })),
-        ),
-        ...(deltas.length === 1 && first.originSessionId !== undefined
-          ? { originSessionId: first.originSessionId }
-          : {}),
-      });
-    }
-    const live = session.pendingLive;
-    session.pendingLive = [];
-    const attachedId = this.#attached.id;
-    if (live.length > 0 && attachedId !== undefined) {
-      this.#send(session, {
-        type: "live",
-        documentId: attachedId,
-        patches: live.map((patch) => ({ ...patch, path: [...patch.path] })),
-      });
-    }
-    // Events follow the deltas of their tick, so a Macro's Parameter
-    // changes are in place before its Cue lands.
-    const events = session.pendingEvents;
-    session.pendingEvents = [];
-    for (const event of events) {
-      this.#send(session, {
-        type: "event",
-        documentId: event.documentId,
-        address: event.address,
-        ...(event.originSessionId === undefined
-          ? {}
-          : { originSessionId: event.originSessionId }),
-      });
-    }
-  }
-
   #receive(session: ClientSession, raw: string): void {
     let message: ClientMessage;
     try {
       message = ClientMessageSchema.parse(JSON.parse(raw));
     } catch (error) {
-      this.#send(session, {
+      session.send({
         type: "error",
         message: `Unreadable message: ${String(error)}`,
       });
       return;
     }
     if (message.type === "hello") {
-      if (message.protocolVersion !== PROTOCOL_VERSION) {
-        this.#send(session, {
-          type: "error",
-          message: `Protocol ${message.protocolVersion} is not supported; runtime speaks ${PROTOCOL_VERSION}.`,
-        });
-        session.socket.close();
-        return;
-      }
-      session.identified = true;
-      session.actor = message.client.actor ?? session.id;
-      this.#send(session, {
-        type: "welcome",
-        protocolVersion: PROTOCOL_VERSION,
-        sessionId: session.id,
-        runtime: {
-          name: this.#options.runtimeName,
-          version: this.#options.runtimeVersion,
-        },
-        documents: session.documents,
-      });
-      this.#send(session, {
-        type: "document",
-        summary: this.#options.store.current(),
-      });
+      this.#hello(session, message);
       return;
     }
     if (!session.identified) {
-      this.#send(session, { type: "error", message: "Send hello first." });
+      session.send({ type: "error", message: "Send hello first." });
       return;
     }
     switch (message.type) {
@@ -346,42 +206,84 @@ export class LiveServer {
       case "telemetry":
         this.#presence.report(session.id, message.telemetry);
         break;
+      case "display-host":
+        this.#displayRequests.offer(session, message.host);
+        break;
+      case "display-reply":
+        this.#displayRequests.settle(
+          session.id,
+          message.requestId,
+          message.outcome,
+        );
+        break;
       case "command":
         this.#command(session, message);
         break;
       case "input": {
         const documentSession = this.#options.store.session(message.documentId);
         if (documentSession === undefined) break;
-        const result = this.#execute(
+        const result = executeCommand(
           documentSession,
           "address.set",
           { address: message.address, value: message.value },
           session.actor,
+          this.#options.log,
         );
         if (!result.ok) this.#options.log(`input rejected: ${result.error}`);
         break;
       }
-      case "request":
-        void this.#request(session, message);
+      case "request": {
+        const { requestId } = message;
+        this.#requests.answer(
+          session,
+          message.name,
+          message.payload,
+          (outcome) => session.reply(requestId, outcome),
+        );
         break;
+      }
     }
+  }
+
+  #hello(
+    session: ClientSession,
+    message: ClientMessage & { type: "hello" },
+  ): void {
+    if (message.protocolVersion !== PROTOCOL_VERSION) {
+      session.send({
+        type: "error",
+        message: `Protocol ${message.protocolVersion} is not supported; runtime speaks ${PROTOCOL_VERSION}.`,
+      });
+      session.disconnect();
+      return;
+    }
+    session.kind = message.client.kind;
+    session.actor = message.client.actor ?? session.id;
+    session.send({
+      type: "welcome",
+      protocolVersion: PROTOCOL_VERSION,
+      sessionId: session.id,
+      runtime: {
+        name: this.#options.runtimeName,
+        version: this.#options.runtimeVersion,
+      },
+      documents: session.documents,
+    });
+    session.send({ type: "document", summary: this.#options.store.current() });
   }
 
   #subscribe(session: ClientSession, documentId: string, live: boolean): void {
     const documentSession = this.#options.store.session(documentId);
     if (documentSession === undefined) {
-      this.#send(session, {
+      session.send({
         type: "error",
         message: `Document “${documentId}” is not open.`,
       });
       return;
     }
     session.subscriptions.set(documentId, { live });
-    session.pendingDeltas = session.pendingDeltas.filter(
-      (delta) => delta.documentId !== documentId,
-    );
-    session.pendingLive = [];
-    this.#send(session, {
+    session.dropPending(documentId);
+    session.send({
       type: "snapshot",
       documentId,
       revision: documentSession.revision,
@@ -408,154 +310,22 @@ export class LiveServer {
   ): void {
     const documentSession = this.#options.store.session(message.documentId);
     if (documentSession === undefined) {
-      this.#reply(session, message.requestId, {
+      session.reply(message.requestId, {
         ok: false,
         error: `Document “${message.documentId}” is not open.`,
       });
       return;
     }
-    const result = this.#execute(
+    const result = executeCommand(
       documentSession,
       message.name,
       message.payload,
       session.actor,
+      this.#options.log,
     );
     // The caller sees its own change before the reply, so code that runs on
     // the reply (select the created entity) finds it in the view.
-    if (session.flushScheduled) this.#flush(session);
-    this.#reply(session, message.requestId, this.#outcome(result));
-  }
-
-  /** The reply for a session result; the result keeps only the fields it has. */
-  #outcome(result: SessionCommandResult): ReplyOutcome {
-    if (!result.ok)
-      return {
-        ok: false,
-        error: result.error,
-        ...(result.issues === undefined ? {} : { issues: [...result.issues] }),
-      };
-    const reply: CommandResult = {
-      revision: result.revision,
-      changed: result.changed,
-    };
-    if (result.label !== undefined) reply.label = result.label;
-    if (result.warnings !== undefined) reply.warnings = [...result.warnings];
-    if (result.created !== undefined) reply.created = [...result.created];
-    return { ok: true, result: reply };
-  }
-
-  async #request(
-    session: ClientSession,
-    message: ClientMessage & { type: "request" },
-  ): Promise<void> {
-    const reply = (outcome: ReplyOutcome): void => {
-      this.#reply(session, message.requestId, outcome);
-    };
-    const schema = (RuntimeRequestSchemas as Record<string, ZodType>)[
-      message.name
-    ];
-    if (schema === undefined) {
-      reply({ ok: false, error: `Unknown request “${message.name}”.` });
-      return;
-    }
-    const parsed = schema.safeParse(message.payload ?? {});
-    if (!parsed.success) {
-      const issues = payloadIssues(parsed.error);
-      reply({
-        ok: false,
-        error: `Invalid payload for “${message.name}”: ${issues.join("; ")}`,
-        issues,
-      });
-      return;
-    }
-    const store = this.#options.store;
-    const payload = parsed.data as never;
-    const refusal =
-      session.documents === "pinned"
-        ? pinnedRefusal(store, message.name, payload)
-        : undefined;
-    if (refusal !== undefined) {
-      reply({ ok: false, error: refusal });
-      return;
-    }
-    try {
-      switch (message.name) {
-        case "documents.new": {
-          const { name, discard } = payload as {
-            name: string;
-            discard?: boolean;
-          };
-          reply(await store.create(name, discard ?? false));
-          break;
-        }
-        case "documents.open": {
-          const { path, discard } = payload as {
-            path: string;
-            discard?: boolean;
-          };
-          reply(await store.open(path, discard ?? false));
-          break;
-        }
-        case "documents.save": {
-          const { documentId, path } = payload as {
-            documentId: string;
-            path?: string;
-          };
-          reply(await store.save(documentId, path));
-          break;
-        }
-        case "documents.revert":
-          reply(
-            await store.revert((payload as { documentId: string }).documentId),
-          );
-          break;
-        case "documents.close": {
-          const { documentId, discard } = payload as {
-            documentId: string;
-            discard?: boolean;
-          };
-          reply(await store.close(documentId, discard ?? false));
-          break;
-        }
-        case "catalog.list":
-          // Definitions carry their implementation: JSON drops the
-          // functions, and a Filter's shader source is left out here.
-          reply({
-            ok: true,
-            result: {
-              visuals: this.#options.catalog.visuals(),
-              filters: this.#options.catalog.filters().map((filter) => {
-                const { fragment: _fragment, ...metadata } =
-                  filter as FilterDefinition & { fragment?: unknown };
-                return metadata;
-              }),
-            },
-          });
-          break;
-        default:
-          reply({ ok: false, error: `Unhandled request “${message.name}”.` });
-      }
-    } catch (error) {
-      reply({ ok: false, error: (error as Error).message });
-    }
-  }
-
-  #reply(
-    session: ClientSession,
-    requestId: string,
-    outcome: ReplyOutcome,
-  ): void {
-    this.#send(session, { type: "reply", requestId, outcome });
-  }
-
-  #broadcast(message: ServerMessage): void {
-    for (const session of this.#sessions) {
-      if (session.identified) this.#send(session, message);
-    }
-  }
-
-  #send(session: ClientSession, message: ServerMessage): void {
-    if (session.socket.readyState !== session.socket.OPEN) return;
-    session.socket.send(JSON.stringify(message));
+    session.flushNow();
+    session.reply(message.requestId, commandOutcome(result));
   }
 }

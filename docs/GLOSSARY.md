@@ -399,6 +399,22 @@ One Output page tab attached to one Output through the Runtime. An Output may
 have several at once (a display and a preview tab, say); each reports its own
 Output Telemetry. A session that stops reporting is stale, then dropped.
 
+### Display
+
+A physical screen attached to a machine, as that machine's operating system
+describes it: a monitor, a TV, a Projector's input. A Display is where an Output
+can be shown; it is not the Output (what is rendered) nor the Projector (the
+device in the room). Do not call it `screen` or `monitor`.
+
+### Display Host
+
+A Desktop's connection to a Runtime that offers the Displays of its machine for
+showing Outputs. It says which Displays it has and which Output each shows, and
+carries out the Runtime's requests to show an Output on one or to stop. Any
+client of that Runtime may make those requests, from any machine. Like an Output
+Session it exists only while connected and is never saved. Do not call it
+`display server` or `screen host`.
+
 ### Runtime
 
 The authoritative process on the mini-PC. It holds one Installation at a time,

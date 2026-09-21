@@ -254,6 +254,7 @@ describe("live protocol", () => {
     expect(pageView.liveState.get()).toEqual({
       osc: { port: null, listeners: 0 },
       outputs: {},
+      displayHosts: {},
     });
 
     // Removing the Output drops its sessions; closing the page drops the rest.

@@ -87,6 +87,13 @@ export const settings = {
     /** How often the runtime checks sessions for staleness. */
     sweepIntervalMs: 1_000,
   },
+  displays: {
+    /**
+     * How long a Display Host gets to answer `displays.show` or
+     * `displays.hide` before the runtime tells the requester it did not.
+     */
+    requestTimeoutMs: 10_000,
+  },
   client: {
     /** First reconnect delay; doubles on each failure up to the maximum. */
     reconnectInitialMs: 500,

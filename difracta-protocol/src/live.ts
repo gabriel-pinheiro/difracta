@@ -1,10 +1,13 @@
 import { z } from "zod";
 
+import { DisplayHostLiveSchema } from "./display-hosts.ts";
+
 /**
  * Live state: what is happening right now around a document, replicated to
  * subscribers that ask for it (`subscribe` with `live: true`) but never
  * written to the file, never in undo history, and never versioned by the
- * document revision. Today it holds the Output Sessions.
+ * document revision. Today it holds the OSC door, the Output Sessions and the
+ * connected Display Hosts.
  */
 const Count = z
   .object({
@@ -86,6 +89,8 @@ export const LiveStateSchema = z
         .object({ sessions: z.record(z.string(), OutputSessionLiveSchema) })
         .strict(),
     ),
+    /** Connected Display Hosts by id; they belong to connections, not to the document. */
+    displayHosts: z.record(z.string(), DisplayHostLiveSchema),
   })
   .strict();
 export type LiveState = z.infer<typeof LiveStateSchema>;
@@ -93,4 +98,5 @@ export type LiveState = z.infer<typeof LiveStateSchema>;
 export const EMPTY_LIVE_STATE: LiveState = {
   osc: { port: null, listeners: 0 },
   outputs: {},
+  displayHosts: {},
 };

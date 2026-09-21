@@ -45,6 +45,7 @@ const telemetry: OutputTelemetry = {
 
 const live: LiveState = {
   osc: { port: 9000, listeners: 2 },
+  displayHosts: {},
   outputs: {
     out_tv: {
       sessions: {
@@ -111,6 +112,7 @@ describe("liveStatus", () => {
   it("treats a report without issues as clean and a closed OSC door as off", () => {
     const quiet: LiveState = {
       osc: { port: null, listeners: 0 },
+      displayHosts: {},
       outputs: {
         out_tv: {
           sessions: {

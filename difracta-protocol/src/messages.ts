@@ -1,6 +1,11 @@
 import { DocumentSchema } from "@difracta/core";
 import { z } from "zod";
 
+import {
+  DisplayActionSchema,
+  DisplayHostReportSchema,
+  DisplayOutcomeSchema,
+} from "./display-hosts.ts";
 import { LiveStateSchema, OutputTelemetrySchema } from "./live.ts";
 
 /**
@@ -18,6 +23,9 @@ import { LiveStateSchema, OutputTelemetrySchema } from "./live.ts";
  *   stored or replayed.
  * - Presence: an Output page `attach`es to one Output and reports
  *   `telemetry`; both are unacknowledged.
+ * - Display Hosts: a `desktop` connection offers its Displays with
+ *   `display-host`; the runtime sends it a `display-request` for each
+ *   `displays.show` or `displays.hide` and waits for its `display-reply`.
  *
  * `command` is a document-scoped acknowledged operation (registry commands,
  * undo, redo). `request` is a runtime-scoped one (documents, the Catalog).
@@ -107,6 +115,25 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
     .strict(),
   z
     .object({ type: z.literal("telemetry"), telemetry: OutputTelemetrySchema })
+    .strict(),
+  /**
+   * This connection is a Display Host offering `host`; null withdraws it.
+   * Only a connection of kind `desktop` may send it. Sent again, whole, on
+   * every change.
+   */
+  z
+    .object({
+      type: z.literal("display-host"),
+      host: DisplayHostReportSchema.nullable(),
+    })
+    .strict(),
+  /** A Display Host's answer to the `display-request` with this id. */
+  z
+    .object({
+      type: z.literal("display-reply"),
+      requestId: RequestId,
+      outcome: DisplayOutcomeSchema,
+    })
     .strict(),
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
@@ -223,6 +250,14 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
           })
           .strict(),
       ]),
+    })
+    .strict(),
+  /** To a Display Host: show an Output on one of its Displays, or stop. */
+  z
+    .object({
+      type: z.literal("display-request"),
+      requestId: RequestId,
+      request: DisplayActionSchema,
     })
     .strict(),
   z.object({ type: z.literal("error"), message: z.string() }).strict(),

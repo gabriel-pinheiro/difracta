@@ -445,16 +445,21 @@ they could not notice, so the runtime sends each of them a new `snapshot`.
 - `subscribe` with `live: true` adds the **live state** to the snapshot and
   sends `live` messages afterwards: patches relative to the live root, with no
   revision. Live state is what is happening right now around the document, today
-  the Output Sessions; it is never saved, never undone, and never changes the
-  document revision. Studio reads it under the `live` path root
-  (`["live", "outputs", id, "sessions"]`) with the same subscriptions as the
-  document. Output pages never ask for it.
+  the OSC door, the Output Sessions and the connected Display Hosts; it is never
+  saved, never undone, and never changes the document revision. Studio reads it
+  under the `live` path root (`["live", "outputs", id, "sessions"]`) with the
+  same subscriptions as the document. Output pages never ask for it.
 - `attach` declares the connection an Output page showing one Output; the
   runtime keeps an **Output Session** per attached connection. `telemetry`
   reports frame interval, render work, resolution, pixel ratio and workload once
   a second (`settings.live`). A session with no report for a few seconds shows
   as stale, one silent for minutes is dropped, and a closed socket drops it at
   once. Removing the Output drops its sessions.
+- `display-host` declares a connection of kind `desktop` a **Display Host**: its
+  name, its Displays (id, label, bounds, scale factor, primary, internal) and
+  `showing`, Display id → Output id. The host sends it again, whole, on every
+  change, and `null` to step down; the runtime refuses it from any other kind of
+  client. See Display Hosts below.
 - `command` is acknowledged with a `reply`. The caller's own delta is flushed
   before its reply, so code that runs on the reply (select what was just
   created) already finds it in the view. `history.undo` and `history.redo` are
@@ -463,9 +468,9 @@ they could not notice, so the runtime sends each of them a new `snapshot`.
   frame on the client; the runtime applies it as `address.set`.
 - `request` covers runtime-scoped operations: `documents.new/open` (replace the
   document; refused while it has unsaved changes unless `discard`),
-  `documents.save/revert/close` and `catalog.list`. Paths in them are absolute
-  paths on the runtime's machine. A pinned connection is refused `new`, `open`,
-  `close` and a `save` to another path.
+  `documents.save/revert/close`, `catalog.list` and `displays.list/show/hide`.
+  Paths in them are absolute paths on the runtime's machine. A pinned connection
+  is refused `new`, `open`, `close` and a `save` to another path.
 
 The document as a file does not travel on the socket: `GET /document` downloads
 a copy and `PUT /document` replaces the content (see Files).
@@ -482,6 +487,61 @@ client. Per-path deltas make a Macro that changes twelve values cost one packet
 of twelve pairs, and let Studio components subscribe to single paths. The
 separate input channel keeps continuous values out of the acknowledged path and
 out of undo.
+
+In the runtime, `live/live-server.ts` is the hub: it accepts sockets, reads each
+message and hands it on. `client-session.ts` is one connection and its batched
+sends, `client-sessions.ts` who among them hears what, `document-commands.ts`
+runs commands, and `runtime-requests.ts` validates a `request`, applies the
+pinned refusal and calls the request's handler. Handlers come by feature
+(`document-requests.ts`, `catalog-requests.ts`, `display-requests.ts`) and the
+table's type makes a request without a handler a compile error.
+
+### Display Hosts
+
+```text
+CLI / Studio ── request displays.show {host, display, output} ──▶ Runtime
+                                                                    │ display-request
+Display Host ◀──────────────────────────────────────────────────────┘
+      └── display-reply {ok | error} ──▶ Runtime ── reply ──▶ CLI / Studio
+      └── display-host {…, showing} ──▶ Runtime ── live patches ──▶ live subscribers
+```
+
+The runtime keeps one entry per Display Host under the live root,
+`["displayHosts", hostId]`: `id`, `sessionId`, `connectedAt`, `name`,
+`displays`, `showing`. A later `display-host` from the same connection becomes
+one patch per property that changed and one per Display whose Output changed
+(`["displayHosts", id, "showing", displayId]`). Hosts belong to connections, not
+to the document: replacing the document keeps them, and the next snapshot
+carries them; a closed socket removes its host at once. `displays.list` returns
+the same entries without a subscription, so it also answers when no Installation
+is open.
+
+A host's id is its name as a slug (`Stage PC` → `stage-pc`), with `-2`, `-3`…
+while another connected host holds that slug, and stays for the connection's
+lifetime. `displays.show { host, display, output }` and
+`displays.hide { host, display }` take a host by id, or by name when only one
+connected host has it, and a Display by id, or by label when only one of the
+host's has it; names and labels match ignoring case. The runtime refuses what it
+can tell is wrong (no such host, no such Display, no Installation open, the
+Output is not in it), otherwise sends the host's connection a `display-request`
+and replies to the requester with the host's `display-reply`: the ids the action
+landed on, or the host's error. A host that does not answer within
+`settings.displays.requestTimeoutMs`, or disconnects first, fails the request.
+The runtime never edits `showing`: the host reports it after it acted.
+
+In `@difracta/client`, `client.displayHost` (`offered-displays.ts`) is the host
+side: `offer(report)` registers and updates, `onAction(handler)` answers the
+runtime's requests with `{ ok: true }` or `{ ok: false, error }` (a throw
+becomes the error), `withdraw()` steps down, and the offer is sent again after a
+reconnect. Every client lists and places with the ordinary `request`.
+`difracta displays list|show|hide` is the CLI's side of it.
+
+**Why routed through the runtime:** whoever wants an Output on a Display (a
+laptop's Studio, a shell) is rarely on the machine that has the Display. Both
+are already clients of the same runtime, so the runtime is the one place that
+knows every host and can check the Output exists before anyone opens anything.
+**Why the host owns `showing`:** only the host knows whether the Output is
+really up on the Display, or stopped being so without being asked.
 
 ## OSC and OSCQuery
 
@@ -948,10 +1008,11 @@ the OS, and what it returns is only a path for a request the CLI can send too.
 
 `difracta-core/src/settings.ts` holds every tunable in one object: history
 coalesce window and limit, autosave delay, default host, port and document mode,
-the discovery service and its delays, client reconnect backoff, CLI connect
-timeout, Desktop's waits for its runtime to start and stop and for a runtime
-elsewhere to answer, its window sizes and how many runtimes it remembers.
-Packages import from there instead of carrying their own literals.
+the discovery service and its delays, how long a Display Host gets to answer,
+client reconnect backoff, CLI connect timeout, Desktop's waits for its runtime
+to start and stop and for a runtime elsewhere to answer, its window sizes and
+how many runtimes it remembers. Packages import from there instead of carrying
+their own literals.
 
 ## Rendering
 

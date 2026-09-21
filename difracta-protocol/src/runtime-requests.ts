@@ -1,10 +1,11 @@
 import { z } from "zod";
 
 /**
- * Runtime-scoped requests: the document and the Catalog. These are not
- * Document commands; they manage which Document the runtime has open, or
- * read what the runtime is built with. Names and payload schemas live here
- * so the runtime, Studio and CLI agree.
+ * Runtime-scoped requests: the document, the Catalog and the Display Hosts.
+ * These are not Document commands; they manage which Document the runtime
+ * has open, read what the runtime is built with, or reach another
+ * connection. Names and payload schemas live here so the runtime, Studio and
+ * CLI agree.
  *
  * A connection whose `welcome` said `documents: "pinned"` is refused
  * `documents.new`, `documents.open`, `documents.close` and a
@@ -45,6 +46,26 @@ export const RuntimeRequestSchemas = {
     .strict(),
   /** The Visual and Filter definitions this runtime renders, metadata only. */
   "catalog.list": z.object({}).strict(),
+  /** The connected Display Hosts, as in the live state, oldest connection first. */
+  "displays.list": z.object({}).strict(),
+  /**
+   * Show an Output of the open Installation on a Display of a connected
+   * Display Host. `host` is a host's id, or its name when only one connected
+   * host has it; `display` a Display's id, or its label when only one of the
+   * host's has it. Names and labels match ignoring case. Replaces what the
+   * Display was showing. Resolves with the host's answer.
+   */
+  "displays.show": z
+    .object({
+      host: z.string().min(1),
+      display: z.string().min(1),
+      output: z.string().min(1),
+    })
+    .strict(),
+  /** Stop showing an Output on that Display. */
+  "displays.hide": z
+    .object({ host: z.string().min(1), display: z.string().min(1) })
+    .strict(),
 } as const;
 
 export type RuntimeRequestName = keyof typeof RuntimeRequestSchemas;

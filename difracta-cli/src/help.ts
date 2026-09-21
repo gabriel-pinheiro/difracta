@@ -35,6 +35,11 @@ Working from a shell
              place, unsaved until "documents save" ("documents revert" goes
              back). Both work on any runtime, from any machine.
 
+  Displays   "displays list" shows the Display Hosts connected to the runtime
+             and their Displays (physical screens); "displays show <host>
+             <display> <Output>" puts an Output on one, "displays hide <host>
+             <display>" takes it off. Works from any machine.
+
   Order      A create lands first in its Group (a Layer: on top). Pass
              "after": <sibling id|name> to place it below that sibling, or
              null for first; entity.move, layer.move and the others rearrange.
