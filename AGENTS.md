@@ -88,13 +88,20 @@ near-synonyms.
 ## Commands
 
 Node 24. `npm run dev` starts the runtime (4800), Output dev server (4801) and
-Studio dev server (4802). `npm test`, `npm run typecheck`, `npm run lint`,
-`npm run format:check`, `npm run build`. `npm run test:gpu` renders the
-compositor's pixel tests (`difracta-render/gpu/`) in headless Chromium, which
-`npx playwright install chromium` provides once. `npm run desktop` builds and
-launches Difracta Desktop; `npm run test:desktop` drives the built app through
-Playwright and needs a display. `npm run package:desktop` packages Desktop for
-the current OS into `difracta-desktop/release/` (`electron-builder.yml`);
+Studio dev server (4802). `npm run check` runs `npm test`, `npm run typecheck`,
+`npm run lint` and `npm run format:check` at once, in parallel; `npm run build`
+is separate. While iterating, run only what you touched
+(`npx vitest run <file>`, `npm run typecheck -w <package>`); run `npm run check`
+and, for a Desktop change, `npm run test:desktop` once, before reporting.
+Typecheck is incremental and lint and format are cached, so a second run costs
+seconds; the caches live in `node_modules/.cache/` and `*.tsbuildinfo`, and a
+stale one is never the cause of a failure that a cold run does not show.
+`npm run test:gpu` renders the compositor's pixel tests (`difracta-render/gpu/`)
+in headless Chromium, which `npx playwright install chromium` provides once.
+`npm run desktop` builds and launches Difracta Desktop; `npm run test:desktop`
+drives the built app through Playwright and needs a display.
+`npm run package:desktop` packages Desktop for the current OS into
+`difracta-desktop/release/` (`electron-builder.yml`);
 `DIFRACTA_DESKTOP_EXECUTABLE=<packaged executable>` makes the Desktop suite
 drive that package instead. The CLI is `node difracta-cli/bin/difracta.mjs` (or
 `npx difracta` inside the repo).

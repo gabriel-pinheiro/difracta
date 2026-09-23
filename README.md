@@ -218,12 +218,12 @@ with a guide to the Address grammar and a Layer recipe.
 ## Quality
 
 ```sh
-npm test
-npm run typecheck
-npm run lint
-npm run format:check
+npm run check   # npm test, npm run typecheck, npm run lint, npm run format:check, in parallel
 npm run build
 ```
+
+Typecheck is incremental (`*.tsbuildinfo`) and lint and format are cached
+(`node_modules/.cache/`), so a second run costs seconds.
 
 `npm run test:gpu` renders the compositor's pixel tests in headless Chromium,
 which `npx playwright install chromium` provides once. `npm run test:desktop`
