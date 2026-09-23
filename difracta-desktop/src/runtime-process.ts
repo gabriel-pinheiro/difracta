@@ -4,6 +4,7 @@ import { createWriteStream, type WriteStream } from "node:fs";
 import { appendFile, mkdir, rename } from "node:fs/promises";
 import { createServer } from "node:net";
 import path from "node:path";
+import { finished } from "node:stream/promises";
 
 import { waitForHealth } from "./health-wait.ts";
 import { localOrigin } from "./local-origin.ts";
@@ -25,6 +26,19 @@ function portIsFree(port: number): Promise<boolean> {
       probe.close(() => resolve(true));
     });
   });
+}
+
+/** Ends `log` once the child's pipes have closed, and resolves once the file has everything. */
+async function endLog(
+  log: WriteStream,
+  pipes: readonly (NodeJS.ReadableStream | null)[],
+): Promise<void> {
+  await Promise.all(
+    pipes
+      .filter((pipe) => pipe !== null)
+      .map((pipe) => finished(pipe).catch(() => undefined)),
+  );
+  await new Promise<void>((resolve) => log.end(resolve));
 }
 
 /**
@@ -125,9 +139,13 @@ export class RuntimeProcess {
       child.once("exit", (code) => {
         this.#exitCode = code;
         this.#child = undefined;
-        log.end();
-        resolve();
-        this.#exitListener?.(code, this.#stopping);
+        // Its last lines can still be in the pipes at its exit, and in the
+        // stream's buffer once read: the exit counts when the file has them,
+        // so a quit that waits for the stop does not lose them.
+        void endLog(log, [child.stdout, child.stderr]).then(() => {
+          resolve();
+          this.#exitListener?.(code, this.#stopping);
+        });
       });
     });
 

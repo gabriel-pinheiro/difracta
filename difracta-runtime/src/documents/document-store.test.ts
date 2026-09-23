@@ -17,6 +17,27 @@ let store: DocumentStore;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * The autosaves of `filePath` once one of them says `text`. The sidecar is
+ * written on a timer, which a busy machine runs late, so a test waits for
+ * the write rather than a fixed time; one that never comes still fails.
+ */
+async function autosaveSaying(
+  filePath: string,
+  text: string,
+): Promise<readonly string[]> {
+  const deadline = Date.now() + 5_000;
+  for (;;) {
+    const sidecars = await listAutosaves(filePath);
+    const texts = await Promise.all(
+      sidecars.map((sidecar) => readFile(sidecar, "utf8")),
+    );
+    if (texts.some((t) => t.includes(text)) || Date.now() > deadline)
+      return sidecars;
+    await sleep(10);
+  }
+}
+
 beforeEach(async () => {
   dir = await mkdtemp(path.join(tmpdir(), "difracta-"));
   store = new DocumentStore({
@@ -137,9 +158,8 @@ describe("DocumentStore", () => {
     store
       .session(documentId)!
       .execute("installation.rename", { name: "Changed" }, "test");
-    await new Promise((resolve) => setTimeout(resolve, 60));
     const filePath = path.join(dir, "living.difracta");
-    expect(await listAutosaves(filePath)).toHaveLength(1);
+    expect(await autosaveSaying(filePath, "Changed")).toHaveLength(1);
     await store.create("Other", true);
     expect(await listAutosaves(filePath)).toEqual([]);
   });
@@ -152,8 +172,7 @@ describe("DocumentStore", () => {
     store
       .session(documentId)!
       .execute("installation.rename", { name: "Living 2" }, "test");
-    await new Promise((resolve) => setTimeout(resolve, 60));
-    const sidecars = await listAutosaves(filePath);
+    const sidecars = await autosaveSaying(filePath, "Living 2");
     expect(sidecars).toHaveLength(1);
     expect(sidecars[0]).toMatch(/\/living\.\d{8}T\d{6}Z\.autosave\.difracta$/);
     expect(await readFile(sidecars[0]!, "utf8")).toContain("Living 2");
@@ -203,7 +222,7 @@ describe("DocumentStore", () => {
     store
       .session(documentId)!
       .execute("installation.rename", { name: "Living 3" }, "test");
-    await new Promise((resolve) => setTimeout(resolve, 60));
+    await autosaveSaying(filePath, "Living 3");
     await store.save(documentId);
     expect(await listAutosaves(filePath)).toEqual([]);
     expect(await readFile(filePath, "utf8")).toContain("Living 3");
@@ -217,15 +236,13 @@ describe("DocumentStore", () => {
     const session = store.session(documentId)!;
     for (const name of ["Living 1", "Living 2", "Living 3"])
       session.execute("installation.rename", { name }, "test");
-    await sleep(60);
-    let sidecars = await listAutosaves(filePath);
+    let sidecars = await autosaveSaying(filePath, "Living 3");
     expect(sidecars).toHaveLength(1);
     expect(await readFile(sidecars[0]!, "utf8")).toContain("Living 3");
 
     // Changes after the first sidecar reach the next one as well.
     session.execute("installation.rename", { name: "Living 4" }, "test");
-    await sleep(60);
-    sidecars = await listAutosaves(filePath);
+    sidecars = await autosaveSaying(filePath, "Living 4");
     expect(sidecars).toHaveLength(1);
     expect(await readFile(sidecars[0]!, "utf8")).toContain("Living 4");
   });
@@ -237,8 +254,7 @@ describe("DocumentStore", () => {
     const filePath = path.join(dir, "living.difracta");
     const session = store.session(documentId)!;
     session.execute("installation.rename", { name: "Living 2" }, "test");
-    await sleep(60);
-    expect(await listAutosaves(filePath)).toHaveLength(1);
+    expect(await autosaveSaying(filePath, "Living 2")).toHaveLength(1);
 
     session.execute("installation.rename", { name: "Living 3" }, "test");
     await store.flush();
@@ -275,8 +291,7 @@ describe("DocumentStore", () => {
       // 180ms in: changes come faster than the delay, only the max wait writes.
       if (step === 12) expect(await listAutosaves(filePath)).toHaveLength(1);
     }
-    await sleep(100);
-    const sidecars = await listAutosaves(filePath);
+    const sidecars = await autosaveSaying(filePath, "Living 20");
     expect(sidecars).toHaveLength(1);
     expect(await readFile(sidecars[0]!, "utf8")).toContain("Living 20");
   });
