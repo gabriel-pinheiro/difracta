@@ -138,5 +138,10 @@ export const settings = {
     runtimeRestartWindowMs: 60_000,
     /** How long the runtime gets to say which Output Sessions are attached before Desktop leaves without the warning. */
     outputSessionsTimeoutMs: 1_500,
+    /**
+     * For how many Installations Desktop remembers which Display showed each
+     * Output; the one placed longest ago drops off.
+     */
+    displayMappingsLimit: 64,
   },
 } as const;

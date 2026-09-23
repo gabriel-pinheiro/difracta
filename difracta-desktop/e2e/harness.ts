@@ -253,10 +253,26 @@ export function useDesktop(): void {
   });
 
   afterEach(async () => {
-    await app?.close().catch(() => undefined);
+    const launched = app;
     app = undefined;
-    await stopStandalone();
-    await rm(dir, { recursive: true, force: true });
+    try {
+      // A test that failed half way may leave a native question up that
+      // nobody answers; the Desktop it launched is then killed, so that the
+      // runtime and the folder below are still cleaned up.
+      const closed = await Promise.race([
+        launched?.close().then(
+          () => true,
+          () => true,
+        ),
+        new Promise<boolean>((resolve) =>
+          setTimeout(() => resolve(false), 15_000),
+        ),
+      ]);
+      if (closed === false) launched?.process().kill("SIGKILL");
+    } finally {
+      await stopStandalone();
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 }
 

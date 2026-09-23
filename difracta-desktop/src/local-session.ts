@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 
 import { mayLeaveLocal } from "./close-prompt.ts";
 import type { DesktopStateStore } from "./desktop-state.ts";
+import { DisplayHost } from "./display-host.ts";
 import { addressLabel } from "./runtime-address.ts";
 import { checkRuntime } from "./runtime-health.ts";
 import { RuntimeLink } from "./runtime-link.ts";
@@ -39,7 +40,8 @@ function sayRuntimeGaveUp(
 
 /**
  * Local mode: fork the runtime, wait for `/health`, connect as a client. The
- * Studio window it then gets has the document bridge and the menu bridge.
+ * Studio window it then gets has the document bridge and the menu bridge, and
+ * Desktop becomes a Display Host of that runtime (`display-host.ts`).
  * From here on the runtime is kept running (`runtime-restarts.ts`) until the
  * session ends.
  *
@@ -114,6 +116,11 @@ export async function startLocalSession(options: {
     title: { kind: "local", home: homedir() },
   });
 
+  // This computer's Displays are offered from here on, Studio window or not,
+  // and the ones that showed this Installation's Outputs light up again.
+  const displays = new DisplayHost({ link, state, origin });
+  await displays.start();
+
   const restarts = new RuntimeRestarts({
     // The Installation that is open now; one never saved has no path.
     currentFile: () => link.document()?.path ?? undefined,
@@ -166,8 +173,15 @@ export async function startLocalSession(options: {
         );
       },
       mayLeave: (over, leaving) =>
-        mayLeaveLocal({ link, over, leaving, attended: over !== undefined }),
+        mayLeaveLocal({
+          link,
+          over,
+          leaving,
+          attended: over !== undefined,
+          showing: displays.showing,
+        }),
       end: async () => {
+        displays.end();
         restarts.end();
         runtime.watchExit(undefined);
         link.close();

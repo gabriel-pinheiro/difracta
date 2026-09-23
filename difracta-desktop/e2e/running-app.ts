@@ -1,4 +1,9 @@
 import { DifractaClient } from "@difracta/client";
+import type {
+  DisplayHostLive,
+  RuntimeRequestName,
+  RuntimeRequestPayload,
+} from "@difracta/protocol";
 
 import { app, env, eventually } from "./harness.ts";
 
@@ -123,4 +128,55 @@ export async function menuChecked(id: string): Promise<boolean | undefined> {
       Menu.getApplicationMenu()?.getMenuItemById(itemId)?.checked,
     id,
   );
+}
+
+/** A request sent from another client, as the CLI would; its result. */
+export async function requestFromElsewhere<
+  TResult,
+  TName extends RuntimeRequestName,
+>(
+  port: string | number | undefined,
+  name: TName,
+  payload: RuntimeRequestPayload<TName>,
+): Promise<TResult> {
+  const client = new DifractaClient({
+    url: `ws://127.0.0.1:${String(port ?? "")}/live`,
+    kind: "cli",
+    reconnect: false,
+  });
+  try {
+    await eventually(
+      () => Promise.resolve(client.phase.get()),
+      (phase) => phase === "connected",
+    );
+    return await client.request<TResult, TName>(name, payload);
+  } finally {
+    client.close();
+  }
+}
+
+/** The connected Display Hosts, as `difracta displays list` asks for them. */
+export function displayHosts(
+  port: string | number | undefined,
+): Promise<DisplayHostLive[]> {
+  return requestFromElsewhere<DisplayHostLive[], "displays.list">(
+    port,
+    "displays.list",
+    {},
+  );
+}
+
+/** The Display windows Desktop has open: what each loads and its size. */
+export async function displayWindows(): Promise<
+  { url: string; width: number; height: number }[]
+> {
+  const windows = await app?.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()
+      .filter((window) => window.webContents.getURL().includes("/output/"))
+      .map((window) => {
+        const { width, height } = window.getBounds();
+        return { url: window.webContents.getURL(), width, height };
+      }),
+  );
+  return windows ?? [];
 }

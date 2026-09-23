@@ -1,6 +1,6 @@
 import { settings } from "@difracta/core";
-import { DifractaClient } from "@difracta/client";
-import type { DocumentSummary } from "@difracta/protocol";
+import { DifractaClient, type DisplayActionHandler } from "@difracta/client";
+import type { DisplayHostReport, DocumentSummary } from "@difracta/protocol";
 
 import { countOutputSessions } from "./output-sessions.ts";
 import { liveUrl } from "./runtime-address.ts";
@@ -13,7 +13,9 @@ import { liveUrl } from "./runtime-address.ts";
  * sends the few requests main makes itself: a first Installation at start-up,
  * Save and Don't Save when the window closes, a file from the OS while there
  * is no Studio window to hand it to; it connects over loopback, so the free
- * runtime lets it. A connection that drops is retried by the client for as
+ * runtime lets it. It is also the connection Desktop is a Display Host on
+ * (`display-host.ts`), to a runtime elsewhere as much as to this one. A
+ * connection that drops is retried by the client for as
  * long as the link is open, which is also how the link finds a runtime child
  * that was started again.
  */
@@ -138,6 +140,20 @@ export class RuntimeLink {
     } finally {
       this.#client.closeDocument(documentId);
     }
+  }
+
+  /** Says which Displays this computer has and what each shows; the client says it again after a reconnect. */
+  offerDisplays(report: DisplayHostReport): void {
+    this.#client.displayHost.offer(report);
+  }
+
+  /** Who carries out the runtime's `displays.show` and `displays.hide` here. */
+  onDisplayAction(handler: DisplayActionHandler): void {
+    this.#client.displayHost.onAction(handler);
+  }
+
+  withdrawDisplays(): void {
+    this.#client.displayHost.withdraw();
   }
 
   close(): void {

@@ -5,9 +5,10 @@ import {
   type Surface,
   type Table,
 } from "@difracta/core";
-import { Box } from "lucide-react";
-import { useEffect } from "react";
+import { Box, MonitorUp } from "lucide-react";
+import { useEffect, useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import { CopyField } from "@/inspector/fields/copy-field";
 import { InspectorHeading } from "@/inspector/fields/inspector-heading";
 import { NameField } from "@/inspector/fields/name-field";
@@ -15,6 +16,7 @@ import { SwitchField } from "@/inspector/fields/switch-field";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useSelection } from "@/selection/selection";
 
+import { OpenOutputDialog } from "./open-output-dialog";
 import { outputPageUrl } from "./output-url";
 
 export function OutputInspector({
@@ -26,6 +28,7 @@ export function OutputInspector({
 }) {
   const command = useCommand(view);
   const { select } = useSelection();
+  const [opening, setOpening] = useState(false);
   const output = useDocumentPath<Output>(view, ["outputs", id]);
   const surfaces = useDocumentPath<Table<Surface>>(view, ["surfaces"]) ?? {};
 
@@ -51,9 +54,23 @@ export function OutputInspector({
         />
         <CopyField
           label="Output page"
-          description="Open this address on the display paired with the Output."
+          description="Open this address in a browser on any machine, or use Open to show the Output on a Display."
           value={outputPageUrl(id)}
-          openHref={outputPageUrl(id)}
+          actions={
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setOpening(true)}
+            >
+              <MonitorUp /> Open
+            </Button>
+          }
+        />
+        <OpenOutputDialog
+          view={view}
+          output={output}
+          open={opening}
+          onOpenChange={setOpening}
         />
         <SwitchField
           label="Limit pixel ratio"

@@ -534,7 +534,14 @@ side: `offer(report)` registers and updates, `onAction(handler)` answers the
 runtime's requests with `{ ok: true }` or `{ ok: false, error }` (a throw
 becomes the error), `withdraw()` steps down, and the offer is sent again after a
 reconnect. Every client lists and places with the ordinary `request`.
-`difracta displays list|show|hide` is the CLI's side of it.
+`difracta displays list|show|hide` is the CLI's side of it, and Studio's is the
+Open Output dialog (`entities/output/open-output-dialog.tsx`), opened from an
+Output's card and inspector: "Open in a window" (a plain link, which in Desktop
+becomes a window of Desktop's), "Show on a Display" with the hosts of
+`["live", "displayHosts"]` and Show and Hide beside each Display, and the Output
+page URL to copy. It is the same in a plain browser, since the hosts are
+whichever Desktops are connected to the runtime, and it uses no bridge. The host
+itself is Difracta Desktop (see Desktop).
 
 **Why routed through the runtime:** whoever wants an Output on a Display (a
 laptop's Studio, a shell) is rarely on the machine that has the Display. Both
@@ -860,12 +867,16 @@ chosen; Don't Save waits until the second question is answered too. The count
 comes from live state (`["live","outputs",id,"sessions"]`, stale sessions left
 out), which main subscribes to for that one snapshot and lets go again; every
 Output page counts, a window of this Desktop as much as a TV's browser, since
-all go dark. Remote mode asks nothing: the Installation and its Outputs live in
-that runtime and stay. Nothing is asked either when no window of Desktop is
-open, because nobody is there to answer, nor of a runtime that is not answering.
-After the questions the windows close and main posts `shutdown` on the child's
-parent port: the runtime flushes its autosave, closes and exits, and is killed
-only after `settings.desktop.runtimeStopTimeoutMs`.
+all go dark; a Display window (below) is one of them once its page has attached,
+and is counted even before. Leaving remote mode stops nothing over there: the
+Installation and its Outputs live in that runtime and stay. The one thing asked
+is about this computer's Display windows, which close ("1 Display of this
+computer is showing an Output. Quitting stops it."). Nothing is asked either
+when no window of Desktop is open, because nobody is there to answer, nor of a
+runtime that is not answering. After the questions the windows close and main
+posts `shutdown` on the child's parent port: the runtime flushes its autosave,
+closes and exits, and is killed only after
+`settings.desktop.runtimeStopTimeoutMs`.
 
 Local mode can start without the Studio window: `--no-studio` for one launch, or
 File ▸ Startup ▸ Start Without Studio Window, kept in `desktop-state.json`, for
@@ -928,7 +939,8 @@ changes, after `settings.desktop.menuRebuildDelayMs` so a burst makes one
 rebuild. The launch window has a smaller menu of its own (Quit, the text roles
 with undo and redo for its address field, zoom, Developer Tools). An Output
 window has none (`removeMenu`), and so none of the menu's shortcuts; F11 alone
-is handled in the window itself, since an Output has to go full screen. On
+is handled in the window itself, since an Output has to go full screen. A
+Display window has none either, in a session without a Studio window too. On
 macOS, where one menu serves every window, zoom and Developer Tools act only
 when the focused window is Studio's or the launch page's.
 
@@ -944,6 +956,69 @@ command (for Undo and Redo it is passed to the focused text field instead, which
 is the one case Studio leaves the key alone). Windows and Linux hide the native
 bar while a window is full screen, so main tells the page (`onFullScreenChange`)
 and Studio draws its in-page bar for as long as that lasts.
+
+In both modes Desktop is a **Display Host** of the session's runtime
+(`display-host.ts`), over main's own link. It offers Electron's `screen`
+Displays under the ids `1`, `2`… by position, left to right then top to bottom
+(`screen-displays.ts`): short enough to type, and the same from launch to launch
+while the Displays stay arranged as they are; Electron's own ids are neither. A
+Display the operating system has no name for is labelled `Display <id>`, and the
+host's name is the computer's hostname. The offer is sent again on
+`display-added`, `display-removed` and `display-metrics-changed`, and withdrawn
+when the session is left.
+
+`show` opens a **Display window** (`display-window.ts`): the runtime's
+`/output/?output=<id>`, an ordinary Output page and Output Session, on the
+Display's bounds with no frame, full screen, always on top, background
+throttling off, a black background, the cursor hidden by an inserted style, no
+menu, no preload and the page security of every window; it never navigates off
+the runtime's origin and opens no windows. A Display has one window: another
+Output shown there is loaded into it. The host answers once the window exists,
+not when the page attaches, and reports `showing` after every change. While any
+Display window is open a `powerSaveBlocker` keeps the Displays awake. The window
+is shown without taking the keyboard, so placing an Output does not pull typing
+away from Studio; Esc is the one key it handles, the way out for a person whose
+Display is covered: click it, press Esc, and the host does what `hide` does.
+
+What should be on the Displays is a list of **placements**, an Output and the
+description of a Display (`display-mapping.ts`), and every event (a request,
+Esc, a Display plugged or unplugged, another Installation, an Output removed)
+changes the placements or what is known, after which one step makes the windows
+match (`display-plan.ts`, pure, as are the two files before). So an unplugged
+Display loses its window, rather than have the operating system move it to
+another Display, and keeps its placement, which opens the window again when the
+Display is back; a placement whose Output is gone waits the same way, which
+makes removing an Output undoable. Only `hide` and Esc drop a placement;
+quitting, leaving the session or a window closed by other means do not.
+Placements are saved in `desktop-state.json` per Installation id
+(`displayMappings`, at most `settings.desktop.displayMappingsLimit`
+Installations), because which Display shows what belongs to the computer and not
+to the file; the host id is never saved. They are applied whenever the document
+summary names that Installation: when the session starts, Studio window or not,
+and when another document is opened. Placements of the Installation before are
+carried over only for Outputs the new one has too, and its own saved ones win a
+Display. A null summary (a runtime being started again, the moment between two
+documents) changes nothing, so Displays stay lit through a restart.
+
+After a reboot no id survives, so a placement finds its Display by description:
+label, whether it is built in, and bounds. The same label at the same bounds
+first; then the same label elsewhere (rearranged, another resolution), the same
+size before the nearest; then the same bounds when one side has no label to
+compare. A built-in Display never stands in for an external one, and a placement
+that finds nothing waits: an unplugged projector's Output must not land on the
+laptop's own Display, which often takes over its place on the desktop. A
+placement that matched is described again as its Display is now.
+
+**Why ids by position:** `difracta displays show stage-pc 2 wall` has to be
+typed, and has to mean the same Display tomorrow. **Why answer on window
+creation:** the page attaches seconds later on a slow GPU and not at all without
+WebGL, and the window is what was asked for; whether it draws is what the
+Output's sessions and telemetry say. **Why Esc and nothing else:** the window
+covers a Display and sits above everything, so a person at that computer needs a
+way out that needs no other window; every other key must do nothing in front of
+an audience, and because the window never takes the keyboard by itself, Esc only
+arrives after a deliberate click. **Why Esc forgets the placement:** otherwise
+the next event would put the window back.
 
 **Why the runtime is a child process:** it is the same program a mini-PC runs
 standalone, so Desktop adds no second way of holding an Installation, a busy

@@ -57,13 +57,30 @@ both apply from the next start:
 | Start Without Studio Window | `--no-studio` for one launch | Local mode starts the runtime and shows nothing. The runtime listens on every interface and is announced on the network as always. Starting Difracta again while it runs shows Studio; closing that window leaves the runtime running, and File ▸ Quit quits. In remote mode the flag is ignored. |
 | Start at Login              |                              | The operating system starts Desktop at login: a login item on macOS and Windows, `~/.config/autostart/difracta-desktop.desktop` on Linux. The checkbox shows what the operating system has, so it is right after the entry was removed by other means.                                            |
 
+Every Desktop, in either mode, is also a **Display Host** of the runtime it is
+connected to: it offers the Displays of its computer (the physical screens,
+numbered `1`, `2`… from left to right), and any Studio or shell connected to
+that runtime can put an Output on one. In Studio, the Open button of an Output
+(its card in the Outputs tab, or its inspector) offers "Open in a window", "Show
+on a Display" with the Displays of every connected host and Show and Hide beside
+each, and the Output page URL to copy; from a shell it is
+`difracta displays list`, `show` and `hide`. A shown Output covers its Display:
+full screen, no frame, above every other window, no cursor, and the Display is
+kept awake. To get out of one at that computer, click it and press Esc, which
+does what Hide does. Desktop remembers which Display showed which Output, per
+Installation and per computer, and shows them again when that Installation is
+open, at start-up too, with or without the Studio window: a venue's mini-PC
+lights its projectors at boot. A Display that is unplugged loses its Output
+instead of handing it to another Display, and gets it back when it returns.
+
 Leaving the runtime on this computer (quitting, closing Studio, choosing another
 target under Connect to...) asks about unsaved changes first, and then warns
 when Outputs are showing from it, on this computer's screens or anywhere else,
 since they go dark: "2 Outputs are showing from this computer. Quitting stops
 them." It only warns. Stopped by SIGTERM or the end of the OS session with no
 window open, Desktop asks nothing and stops the runtime cleanly, unsaved changes
-autosaved.
+autosaved. Leaving a runtime elsewhere stops nothing there; Desktop warns only
+when Displays of this computer are showing its Outputs, since those go dark.
 
 If the runtime crashes or the OS kills it, Desktop starts it again with the
 Installation that was open; the autosave brings unsaved changes back, and
@@ -160,9 +177,10 @@ all of them, and the everyday ones have shortcuts: `scene`, `get`, `edit`,
 their Displays and what each shows;
 `difracta displays show <host> <display> <Output>` and
 `difracta displays hide <host> <display>` ask a host to put an Output on one of
-its Displays or take it off, from any machine. Names work wherever ids do,
-replies name what they created, and `--json` makes every output one JSON value.
-`difracta --help` ends with a guide to the Address grammar and a Layer recipe.
+its Displays or take it off, from any machine; a host is a running Difracta
+Desktop (see Desktop above). Names work wherever ids do, replies name what they
+created, and `--json` makes every output one JSON value. `difracta --help` ends
+with a guide to the Address grammar and a Layer recipe.
 
 ## Quality
 

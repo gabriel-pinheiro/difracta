@@ -1,3 +1,6 @@
+import { mayLeaveRemote } from "./close-prompt.ts";
+import type { DesktopStateStore } from "./desktop-state.ts";
+import { DisplayHost } from "./display-host.ts";
 import { remoteLabel } from "./runtime-address.ts";
 import { checkRuntime } from "./runtime-health.ts";
 import { RuntimeLink } from "./runtime-link.ts";
@@ -10,8 +13,11 @@ import { SessionStudio } from "./studio-window.ts";
  * computer would. Its window gets the menu preload, so that Studio can show
  * its menu in the native bar, and nothing else: no document bridge, because a
  * path on this disk means nothing over there, and that Studio may be another
- * version than this Desktop. Leaving asks nothing, because the Installation
- * lives in that runtime and stays open there, as do the Outputs it shows.
+ * version than this Desktop. Desktop is a Display Host of that runtime too
+ * (`display-host.ts`), so this computer's Displays can show its Outputs.
+ * Leaving stops nothing over there: the Installation lives in that runtime
+ * and stays open, as do the Outputs it shows elsewhere. The one thing asked
+ * is about the Outputs on this computer's Displays, which go dark.
  */
 export async function startRemoteSession(options: {
   readonly origin: string;
@@ -19,8 +25,9 @@ export async function startRemoteSession(options: {
   readonly name: string | null;
   /** `menu-preload.cjs`. */
   readonly preload: string;
+  readonly state: DesktopStateStore;
 }): Promise<SessionStart> {
-  const { origin, name } = options;
+  const { origin, name, state } = options;
   const check = await checkRuntime(origin);
   if (!check.ok) return check;
 
@@ -32,6 +39,9 @@ export async function startRemoteSession(options: {
     link,
     title: { kind: "remote", label: where },
   });
+
+  const displays = new DisplayHost({ link, state, origin });
+  await displays.start();
 
   return {
     ok: true,
@@ -48,9 +58,13 @@ export async function startRemoteSession(options: {
       bridgeOrigin: undefined,
       currentFile: () => undefined,
       openWithoutStudio: () => Promise.resolve(false),
-      // Leaving stops nothing over there, so there is nothing to ask.
-      mayLeave: () => Promise.resolve(true),
-      end: async () => link.close(),
+      mayLeave: (over, leaving) =>
+        mayLeaveRemote({ over, leaving, showing: displays.showing }),
+      end: () => {
+        displays.end();
+        link.close();
+        return Promise.resolve();
+      },
     },
   };
 }

@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 
+import { DisplayMappingsSchema, type Placement } from "./display-mapping.ts";
 import { rememberRuntime } from "./remembered-runtimes.ts";
 
 const RememberedSchema = z.object({
@@ -26,6 +27,11 @@ const StateSchema = z.object({
    * `--no-studio` says for one launch, kept for every launch.
    */
   startWithoutStudio: z.boolean().optional(),
+  /**
+   * Which Display of this computer shows which Output, per Installation
+   * (`display-mapping.ts`); restored when that Installation is open.
+   */
+  displayMappings: DisplayMappingsSchema.optional(),
 });
 
 export type DesktopState = z.infer<typeof StateSchema>;
@@ -48,6 +54,31 @@ export function withLastMode(
           )
         : state.remembered,
   };
+}
+
+/**
+ * The state with an Installation's placements as they are now. The
+ * Installation placed last goes last, and past
+ * `settings.desktop.displayMappingsLimit` the first drops off; one with no
+ * placement left is forgotten.
+ */
+export function withDisplayMapping(
+  state: DesktopState,
+  installationId: string,
+  placements: readonly Placement[],
+): DesktopState {
+  const { [installationId]: _before, ...others } = state.displayMappings ?? {};
+  const entries = Object.entries(others);
+  if (placements.length > 0) entries.push([installationId, [...placements]]);
+  const { displayMappings: _all, ...rest } = state;
+  return entries.length === 0
+    ? rest
+    : {
+        ...rest,
+        displayMappings: Object.fromEntries(
+          entries.slice(-settings.desktop.displayMappingsLimit),
+        ),
+      };
 }
 
 const EMPTY: DesktopState = { remembered: [] };

@@ -88,9 +88,10 @@ export class ApplicationMenu {
    * On Windows and Linux each window carries its own bar, and
    * `setApplicationMenu` hands its menu to every window there is, so the
    * others are put right after it: the launch window opened over a session
-   * gets its smaller menu, and an Output window gets none at all, which also
-   * takes every menu shortcut away from it. A stray key on a projector's
-   * window must do nothing.
+   * gets its smaller menu, and an Output window or a Display window gets none
+   * at all, which also takes every menu shortcut away from it, in a session
+   * without a Studio window as well. A stray key on a projector's window must
+   * do nothing.
    */
   #apply(): void {
     clearTimeout(this.#timer);
@@ -107,13 +108,14 @@ export class ApplicationMenu {
         }),
       );
     Menu.setApplicationMenu(build(studio === undefined ? "launch" : "studio"));
-    if (process.platform === "darwin" || studio === undefined) return;
+    if (process.platform === "darwin") return;
     for (const window of BrowserWindow.getAllWindows())
-      if (window === this.#launchWindow) window.setMenu(build("launch"));
-      else if (window !== studio.window) window.removeMenu();
+      if (window === this.#launchWindow) {
+        if (studio !== undefined) window.setMenu(build("launch"));
+      } else if (window !== studio?.window) window.removeMenu();
   }
 
-  /** The focused window when it is one the View and Help items may act on: Studio or the launch page, never an Output. */
+  /** The focused window when it is one the View and Help items may act on: Studio or the launch page, never an Output or a Display window. */
   #ownWindow(window: BaseWindow | undefined): BrowserWindow | undefined {
     return [this.#studio?.window, this.#launchWindow].find(
       (own) => own !== undefined && own === window && !own.isDestroyed(),

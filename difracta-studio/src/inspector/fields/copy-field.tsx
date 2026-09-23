@@ -1,21 +1,22 @@
-import { ExternalLink, Link } from "lucide-react";
+import { Link } from "lucide-react";
+import type { ReactNode } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-/** A read-only value with a copy button and, when given, a link that opens it. */
+/** A read-only value with a copy button and, when given, more actions beside it. */
 export function CopyField({
   label,
   description,
   value,
-  openHref,
+  actions,
 }: {
   readonly label: string;
   readonly description?: string;
   readonly value: string;
-  readonly openHref?: string;
+  readonly actions?: ReactNode;
 }) {
   function copy(): void {
     void navigator.clipboard
@@ -38,15 +39,7 @@ export function CopyField({
         <Button size="sm" variant="outline" onClick={copy}>
           <Link /> Copy
         </Button>
-        {openHref !== undefined && (
-          <Button
-            size="sm"
-            variant="outline"
-            render={<a href={openHref} target="_blank" rel="noreferrer" />}
-          >
-            <ExternalLink /> Open
-          </Button>
-        )}
+        {actions}
       </div>
     </div>
   );

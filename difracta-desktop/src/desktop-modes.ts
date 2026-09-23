@@ -173,7 +173,8 @@ export class DesktopModes {
     readonly name: string | null;
   }): () => Promise<SessionStart> {
     const preload = path.join(this.#options.distDir, "menu-preload.cjs");
-    return () => startRemoteSession({ ...target, preload });
+    const { state } = this.#options;
+    return () => startRemoteSession({ ...target, preload, state });
   }
 
   /**
@@ -277,8 +278,8 @@ export class DesktopModes {
     this.#session = undefined;
     // The launch page outlives the Studio window it was opened over.
     this.#launchPage.window?.setParentWindow(null);
-    // Studio, and the Output pages opened from it. `destroy` skips the
-    // question `close` would ask again.
+    // Studio, the Output pages opened from it and the Display windows.
+    // `destroy` skips the question `close` would ask again.
     for (const window of BrowserWindow.getAllWindows())
       if (window !== this.#launchPage.window) window.destroy();
     await session.end();

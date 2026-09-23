@@ -1,7 +1,8 @@
 import type { DocumentView } from "@difracta/client";
 import type { Output } from "@difracta/core";
 import type { WorkloadCount } from "@difracta/protocol";
-import { ExternalLink, Link } from "lucide-react";
+import { Link, MonitorUp } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ import {
   toneTitle,
   type SessionTable,
 } from "./output-live";
+import { OpenOutputDialog } from "./open-output-dialog";
 import { outputPageUrl } from "./output-url";
 
 const workloadKinds = [
@@ -53,6 +55,7 @@ export function OutputCard({
   readonly onSelect: () => void;
 }) {
   const url = outputPageUrl(output.id);
+  const [opening, setOpening] = useState(false);
   const sessions = sessionList(
     useDocumentPath<SessionTable>(view, [
       "live",
@@ -155,10 +158,12 @@ export function OutputCard({
         <Button
           size="sm"
           variant="outline"
-          render={<a href={url} target="_blank" rel="noreferrer" />}
-          onClick={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            setOpening(true);
+          }}
         >
-          <ExternalLink /> Open page
+          <MonitorUp /> Open
         </Button>
         <Button
           size="sm"
@@ -171,6 +176,12 @@ export function OutputCard({
           <Link /> Copy URL
         </Button>
       </footer>
+      <OpenOutputDialog
+        view={view}
+        output={output}
+        open={opening}
+        onOpenChange={setOpening}
+      />
     </article>
   );
 }

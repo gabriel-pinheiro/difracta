@@ -3,7 +3,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { DesktopStateStore, withLastMode } from "./desktop-state.ts";
+import { settings } from "@difracta/core";
+
+import {
+  DesktopStateStore,
+  withDisplayMapping,
+  withLastMode,
+} from "./desktop-state.ts";
 
 let dir: string;
 
@@ -84,5 +90,42 @@ describe("desktop state store", () => {
       lastMode: { kind: "remote", ...stage },
       remembered: [stage],
     });
+  });
+
+  it("keeps which Display showed which Output per Installation, the one placed last longest", async () => {
+    const display = {
+      label: "EPSON PJ",
+      internal: false,
+      bounds: { x: 1920, y: 0, width: 1920, height: 1080 },
+    };
+    const store = new DesktopStateStore(dir);
+    await store.update((state) =>
+      withDisplayMapping(state, "show-a", [{ output: "wall", display }]),
+    );
+    expect(await new DesktopStateStore(dir).read()).toEqual({
+      remembered: [],
+      displayMappings: { "show-a": [{ output: "wall", display }] },
+    });
+
+    let state = await store.read();
+    for (let i = 0; i < settings.desktop.displayMappingsLimit; i += 1)
+      state = withDisplayMapping(state, `show-${String(i)}`, [
+        { output: "wall", display },
+      ]);
+    expect(Object.keys(state.displayMappings ?? {})).not.toContain("show-a");
+    // Placed again, an Installation is the newest; with nothing placed, forgotten.
+    state = withDisplayMapping(state, "show-0", [{ output: "floor", display }]);
+    expect(Object.keys(state.displayMappings ?? {}).at(-1)).toBe("show-0");
+    state = withDisplayMapping(state, "show-0", []);
+    expect(Object.keys(state.displayMappings ?? {})).not.toContain("show-0");
+    expect(
+      withDisplayMapping(
+        withDisplayMapping({ remembered: [] }, "only", [
+          { output: "wall", display },
+        ]),
+        "only",
+        [],
+      ),
+    ).toEqual({ remembered: [] });
   });
 });

@@ -2,7 +2,12 @@ import { dialog, type BrowserWindow, type MessageBoxOptions } from "electron";
 
 import { pickSavePath } from "./file-dialogs.ts";
 import { mayLeave, type UnsavedAnswer } from "./leave-checks.ts";
-import { outputsWarning, type Leaving } from "./output-sessions.ts";
+import {
+  displaysWarning,
+  outputsWarning,
+  type Leaving,
+  type LeaveWarning,
+} from "./output-sessions.ts";
 import type { RuntimeLink } from "./runtime-link.ts";
 
 /** A message box on `over` when there is such a window, else one of its own. */
@@ -14,6 +19,39 @@ async function ask(
     ? dialog.showMessageBox(options)
     : dialog.showMessageBox(over, options));
   return response;
+}
+
+/** A warning with its one way on and Cancel, which is the default; true goes on. */
+async function warn(
+  over: BrowserWindow | undefined,
+  { message, detail, confirm }: LeaveWarning,
+): Promise<boolean> {
+  const response = await ask(over, {
+    type: "warning",
+    message,
+    detail,
+    buttons: [confirm, "Cancel"],
+    defaultId: 1,
+    cancelId: 1,
+  });
+  return response === 0;
+}
+
+/**
+ * The one question asked before a runtime elsewhere is left: nothing stops
+ * over there, but the Displays of this computer that show its Outputs go
+ * dark. With no window of Desktop's open nobody is there to answer, so
+ * nothing is asked.
+ */
+export async function mayLeaveRemote(options: {
+  readonly over: BrowserWindow | undefined;
+  readonly leaving: Leaving;
+  /** How many Display windows are open. */
+  readonly showing: number;
+}): Promise<boolean> {
+  const { over, leaving, showing } = options;
+  if (over === undefined || showing === 0) return true;
+  return warn(over, displaysWarning(showing, leaving));
 }
 
 /** An act that may fail, with the failure shown rather than thrown; false when it did. */
@@ -47,6 +85,8 @@ export function mayLeaveLocal(options: {
   readonly over: BrowserWindow | undefined;
   readonly leaving: Leaving;
   readonly attended: boolean;
+  /** How many Display windows are open; see `outputSessions` below. */
+  readonly showing: number;
 }): Promise<boolean> {
   const { link, over, leaving } = options;
   // The document the questions are about, as it was when they began.
@@ -55,7 +95,10 @@ export function mayLeaveLocal(options: {
     local: true,
     attended: options.attended,
     connected: link.connected(),
-    outputSessions: () => link.outputSessions(),
+    // A Display window is an Output Session once its page has attached, and
+    // goes dark all the same if it has not yet.
+    outputSessions: async () =>
+      Math.max(await link.outputSessions(), options.showing),
     askUnsaved: async (): Promise<UnsavedAnswer> => {
       if (summary?.dirty !== true) return "clean";
       const response = await ask(over, {
@@ -81,18 +124,7 @@ export function mayLeaveLocal(options: {
         await link.save(summary.id, path);
         return true;
       }),
-    warnOutputs: async (count) => {
-      const { message, detail, confirm } = outputsWarning(count, leaving);
-      const response = await ask(over, {
-        type: "warning",
-        message,
-        detail,
-        buttons: [confirm, "Cancel"],
-        defaultId: 1,
-        cancelId: 1,
-      });
-      return response === 0;
-    },
+    warnOutputs: (count) => warn(over, outputsWarning(count, leaving)),
     discard: () =>
       shown(async () => {
         if (summary !== null) await link.discard(summary.id);

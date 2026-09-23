@@ -415,6 +415,19 @@ client of that Runtime may make those requests, from any machine. Like an Output
 Session it exists only while connected and is never saved. Do not call it
 `display server` or `screen host`.
 
+### Display window
+
+The window a Display Host opens to show an Output on a Display: an Output page
+covering that Display, full screen, without a frame and above every other
+window. It is an Output Session like any other. Not the same as an Output page
+opened in an ordinary window of Desktop or in a browser tab.
+
+### Placement
+
+One Output put on one Display of a computer. A Desktop keeps its placements per
+Installation, in its own state and not in the Installation, and shows them again
+when that Installation is open. Hiding drops a placement; quitting does not.
+
 ### Runtime
 
 The authoritative process on the mini-PC. It holds one Installation at a time,

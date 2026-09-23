@@ -1,7 +1,11 @@
 import type { LiveState, OutputSessionLive } from "@difracta/protocol";
 import { describe, expect, it } from "vitest";
 
-import { countOutputSessions, outputsWarning } from "./output-sessions.ts";
+import {
+  countOutputSessions,
+  displaysWarning,
+  outputsWarning,
+} from "./output-sessions.ts";
 
 function session(
   sessionId: string,
@@ -52,6 +56,19 @@ describe("Output Sessions attached to the runtime", () => {
     });
     expect(outputsWarning(2, "switch")).toEqual({
       message: "2 Outputs are showing from this computer.",
+      detail: "Switching stops them.",
+      confirm: "Switch",
+    });
+  });
+
+  it("words the warning about this computer's Displays, which a runtime elsewhere does not keep lit", () => {
+    expect(displaysWarning(1, "quit")).toEqual({
+      message: "1 Display of this computer is showing an Output.",
+      detail: "Quitting stops it.",
+      confirm: "Quit",
+    });
+    expect(displaysWarning(2, "switch")).toEqual({
+      message: "2 Displays of this computer are showing Outputs.",
       detail: "Switching stops them.",
       confirm: "Switch",
     });
