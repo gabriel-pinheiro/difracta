@@ -12,6 +12,7 @@ import {
   installationFile,
   launch,
   launchWithoutStudio,
+  packaged,
   quit,
   renameFromElsewhere,
   secondLaunch,
@@ -81,7 +82,10 @@ describe("Difracta Desktop as an appliance", () => {
     )
       .split("\n")
       .find((line) => line.startsWith("Exec="));
-    expect(exec).toContain(path.dirname(import.meta.dirname));
+    expect(exec).toContain(packaged ?? path.dirname(import.meta.dirname));
+    // An AppImage's entry is the file alone: its launcher sees to the sandbox.
+    if (packaged?.endsWith(".AppImage") === true)
+      expect(exec).toBe(`Exec=${packaged}`);
     expect(exec).not.toContain("--no-studio");
     await eventually(
       () => menuChecked("desktop:start-at-login"),

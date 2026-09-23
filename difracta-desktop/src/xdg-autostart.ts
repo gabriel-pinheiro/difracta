@@ -39,19 +39,30 @@ function execArgument(argument: string): string {
  * one is its own executable. `--no-sandbox` travels only when this launch has
  * it, since a Desktop that needed it to start will need it at login too, and
  * one that did not must not lose its sandbox to a setting.
+ *
+ * An AppImage is the exception to both. Its executable sits in a mount made
+ * for this run only, so the entry names the AppImage file itself; and the
+ * AppImage's launcher adds `--no-sandbox` on its own wherever the OS keeps
+ * Chromium from its sandbox, so this launch having the switch says nothing
+ * and the entry leaves it to the launcher.
  */
 export function autostartCommand(running: {
   readonly execPath: string;
   /** The app's folder, for a build that is not packaged. */
   readonly appPath: string | undefined;
+  /** The AppImage file a packaged Linux build runs from (`$APPIMAGE`). */
+  readonly appImage: string | undefined;
   readonly noSandbox: boolean;
   readonly noStudio: boolean;
 }): string[] {
+  const studio = running.noStudio ? ["--no-studio"] : [];
+  if (running.appImage !== undefined && running.appImage !== "")
+    return [running.appImage, ...studio];
   return [
     running.execPath,
     ...(running.appPath === undefined ? [] : [running.appPath]),
     ...(running.noSandbox ? ["--no-sandbox"] : []),
-    ...(running.noStudio ? ["--no-studio"] : []),
+    ...studio,
   ];
 }
 

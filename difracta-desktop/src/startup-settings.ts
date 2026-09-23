@@ -96,6 +96,7 @@ export class StartupSettings {
       autostartCommand({
         execPath: process.execPath,
         appPath: app.isPackaged ? undefined : app.getAppPath(),
+        appImage: app.isPackaged ? process.env.APPIMAGE : undefined,
         noSandbox: app.commandLine.hasSwitch("no-sandbox"),
         noStudio,
       }),

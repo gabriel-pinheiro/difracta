@@ -1,6 +1,6 @@
 {
   "name": "@difracta/visuals",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -11,7 +11,7 @@
     "thumbnails": "tsx scripts/thumbnails.ts"
   },
   "dependencies": {
-    "@difracta/core": "0.0.0",
-    "@difracta/render": "0.0.0"
+    "@difracta/core": "0.1.0",
+    "@difracta/render": "0.1.0"
   }
 }

@@ -3,7 +3,7 @@ import { builtInCatalog, thumbnailsRoot } from "@difracta/visuals";
 import fastifyStatic from "@fastify/static";
 import fastifyWebsocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance } from "fastify";
-import { access } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 
@@ -18,7 +18,7 @@ import { DocumentStore } from "./documents/document-store.ts";
 import { LiveServer } from "./live/live-server.ts";
 import { OscServer } from "./osc/osc-server.ts";
 
-export const RUNTIME_VERSION = "0.0.0";
+export const RUNTIME_VERSION = "0.1.0";
 
 export interface Runtime {
   readonly app: FastifyInstance;
@@ -31,9 +31,11 @@ async function existingDir(
   candidate: string | undefined,
 ): Promise<string | undefined> {
   if (candidate === undefined) return undefined;
+  // `stat`, not `access`: packaged Desktop's Studio and Output page sit in
+  // its asar archive, where Electron's fs finds them but its `access` reports
+  // a folder as missing.
   try {
-    await access(candidate);
-    return candidate;
+    return (await stat(candidate)).isDirectory() ? candidate : undefined;
   } catch {
     return undefined;
   }

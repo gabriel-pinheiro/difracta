@@ -913,9 +913,11 @@ Linux that call does nothing, so Desktop writes and removes an XDG autostart
 entry itself (`xdg-autostart.ts`): `difracta-desktop.desktop` in
 `$XDG_CONFIG_HOME/autostart`, whose `Exec` is what is running now (the
 executable, the app's folder for a build that is not packaged, `--no-sandbox`
-only when this launch has it) plus `--no-studio` when that setting is on, so the
-entry is written again when either checkbox changes. The wish is not stored: the
-checkbox shows what the operating system has.
+only when this launch has it; for an AppImage, the AppImage file in `$APPIMAGE`
+and no `--no-sandbox`, which its launcher adds by itself) plus `--no-studio`
+when that setting is on, so the entry is written again when either checkbox
+changes. The wish is not stored: the checkbox shows what the operating system
+has.
 
 The native menu bar is always visible and dark (`nativeTheme` is forced dark, as
 Studio is), and one builder (`native-menu.ts`, a pure template;
@@ -1078,6 +1080,25 @@ from, and a page from another machine does not get to name the window. **Why the
 document bridge is three functions:** anything a page can call in main is attack
 surface and is out of the CLI's reach; a file dialog is the one thing that needs
 the OS, and what it returns is only a path for a request the CLI can send too.
+
+**Packaging** (`electron-builder.yml`, `npm run package:desktop`) wraps the
+bundle in each operating system's package: AppImages for Linux x86_64 and arm64,
+a dmg per Mac architecture, a per-user NSIS installer for Windows, all unsigned.
+The package holds `dist/` without its source maps and a `package.json`, in one
+asar archive, and no `node_modules`: esbuild inlined every dependency, so the
+workspace packages Desktop bundles are devDependencies, and Electron is the only
+import left. The runtime child reads its Studio, Output page and thumbnails out
+of the archive through Electron's fs. Chromium's sandbox needs unprivileged user
+namespaces, which Ubuntu 23.10 and later refuse to programs without an AppArmor
+profile, and an AppImage cannot ship one or a setuid `chrome-sandbox`; the
+AppImage's `AppRun` probes with `unshare -Ur true` and passes `--no-sandbox`
+only when that fails. package.json's `productName` makes the user data folder
+`~/.config/Difracta` on Linux, for a checkout's Desktop too.
+`.github/workflows/release.yml` builds each OS on its own runner, takes the
+version from a `vX.Y.Z` tag (package.json's version plus `-g<sha>` on main),
+runs the Desktop suite against the x86_64 AppImage
+(`DIFRACTA_DESKTOP_EXECUTABLE` points the harness at a packaged executable) and
+attaches the packages to the tag's GitHub Release.
 
 ## Settings
 

@@ -4,6 +4,9 @@ research/
 node_modules/
 dist/
 build/
+# Desktop's build resources (its icon) are source; its packages are not.
+!difracta-desktop/build/
+difracta-desktop/release/
 out/
 coverage/
 *.log

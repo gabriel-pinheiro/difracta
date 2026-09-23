@@ -36,6 +36,7 @@ describe("XDG autostart", () => {
       autostartCommand({
         execPath: "/opt/Difracta/difracta",
         appPath: undefined,
+        appImage: undefined,
         noSandbox: false,
         noStudio: false,
       }),
@@ -44,6 +45,7 @@ describe("XDG autostart", () => {
       autostartCommand({
         execPath: "/repo/node_modules/electron/dist/electron",
         appPath: "/repo/difracta-desktop",
+        appImage: undefined,
         noSandbox: true,
         noStudio: true,
       }),
@@ -53,6 +55,37 @@ describe("XDG autostart", () => {
       "--no-sandbox",
       "--no-studio",
     ]);
+  });
+
+  it("starts an AppImage from its file, and leaves the sandbox switch to its launcher", () => {
+    expect(
+      autostartCommand({
+        execPath: "/tmp/.mount_DifracXYZ/difracta",
+        appPath: undefined,
+        appImage: "/home/ana/Apps/Difracta-1.2.3-x86_64.AppImage",
+        noSandbox: true,
+        noStudio: false,
+      }),
+    ).toEqual(["/home/ana/Apps/Difracta-1.2.3-x86_64.AppImage"]);
+    expect(
+      autostartCommand({
+        execPath: "/tmp/.mount_DifracXYZ/difracta",
+        appPath: undefined,
+        appImage: "/home/ana/Apps/Difracta-1.2.3-x86_64.AppImage",
+        noSandbox: true,
+        noStudio: true,
+      }),
+    ).toEqual(["/home/ana/Apps/Difracta-1.2.3-x86_64.AppImage", "--no-studio"]);
+    // An empty variable is no AppImage.
+    expect(
+      autostartCommand({
+        execPath: "/opt/Difracta/difracta",
+        appPath: undefined,
+        appImage: "",
+        noSandbox: false,
+        noStudio: false,
+      }),
+    ).toEqual(["/opt/Difracta/difracta"]);
   });
 
   it("writes an entry whose Exec is the command, quoted where the format asks", () => {

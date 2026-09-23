@@ -1,0 +1,74 @@
+# Packages the bundle `scripts/build.mjs` writes into dist/ as Difracta for
+# Linux, macOS and Windows: `npm run package:desktop` at the root builds the
+# Output page, Studio and Desktop, then runs this for the current OS. The
+# packages land in release/. The product name, and so the user data folder
+# (~/.config/Difracta on Linux), is package.json's `productName`.
+#
+# No code signing and no update feed: releases are GitHub Release assets the
+# workflow uploads (`.github/workflows/release.yml`). The version is
+# package.json's unless the command line says otherwise
+# (`-c.extraMetadata.version=1.2.3`, which the workflow takes from the tag).
+
+appId: org.difracta.desktop
+
+directories:
+  output: release
+  buildResources: build
+
+# The bundle is the whole app: esbuild inlined every dependency, and only
+# `electron` stayed external, which Electron provides. That is why the
+# workspace packages it bundles are devDependencies: electron-builder copies
+# a package's `dependencies` into the app, and there are none.
+files:
+  - package.json
+  - dist/**
+  - "!dist/**/*.map"
+
+# The app is one asar archive, nothing unpacked. Electron reads files inside
+# it wherever Node's fs is used, the utility process that runs
+# dist/runtime.mjs included, so forking the runtime and @fastify/static
+# serving dist/studio, dist/output and dist/thumbnails from inside the archive
+# both work, as does the app:// launch page read through net.fetch. One gap:
+# Electron's `access` reports a folder inside the archive as missing, so the
+# runtime checks its folders with `stat`.
+asar: true
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64, arm64]
+  executableName: difracta
+  # The entry is difracta.desktop, package.json's `desktopName`, which is also
+  # the app id Electron gives its windows, so the desktop matches the two.
+  syncDesktopName: true
+  # The desktop entry's Comment is package.json's description.
+  category: AudioVideo;Video;
+appImage:
+  # The AppImage's own desktop entry, the one integration tools install,
+  # starts it bare: its AppRun adds --no-sandbox where the OS keeps Chromium
+  # from its user namespace sandbox, and only there.
+  executableArgs: []
+  # electron-builder's AppImage names x64 as x86_64.
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+mac:
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+  category: public.app-category.video
+  # Unsigned: nothing looks for a Developer ID in the keychain.
+  identity: null
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+nsis:
+  # Installs for the person running it, so Windows asks for no administrator,
+  # and asks where to install instead of doing it in one click.
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: ${productName}-Setup-${version}.${ext}

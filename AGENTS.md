@@ -93,5 +93,8 @@ Studio dev server (4802). `npm test`, `npm run typecheck`, `npm run lint`,
 compositor's pixel tests (`difracta-render/gpu/`) in headless Chromium, which
 `npx playwright install chromium` provides once. `npm run desktop` builds and
 launches Difracta Desktop; `npm run test:desktop` drives the built app through
-Playwright and needs a display. The CLI is `node difracta-cli/bin/difracta.mjs`
-(or `npx difracta` inside the repo).
+Playwright and needs a display. `npm run package:desktop` packages Desktop for
+the current OS into `difracta-desktop/release/` (`electron-builder.yml`);
+`DIFRACTA_DESKTOP_EXECUTABLE=<packaged executable>` makes the Desktop suite
+drive that package instead. The CLI is `node difracta-cli/bin/difracta.mjs` (or
+`npx difracta` inside the repo).

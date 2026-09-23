@@ -1,0 +1,95 @@
+# Packages Difracta Desktop on each OS: on every push to main, as workflow
+# artifacts kept for 7 days, and on a `vX.Y.Z` tag, also as a GitHub Release
+# of that tag.
+#
+# The version is X.Y.Z from a vX.Y.Z tag, or package.json's version plus
+# -g<short sha> for a push to main. It reaches electron-builder as
+# `-c.extraMetadata.version`, which writes it into the packaged package.json
+# and the file names and leaves the checkout alone.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+concurrency:
+  group: release-${{ github.ref }}
+  # A newer push to main replaces the packages of the older one; a tag's run
+  # always finishes.
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      # Unsigned: electron-builder does not look for a signing identity.
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Version
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            base="$(node -p "require('./difracta-desktop/package.json').version")"
+            echo "version=$base-g${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+      # Linux: both AppImages; macOS: both dmgs; Windows: the installer
+      # (`difracta-desktop/electron-builder.yml`).
+      - name: Package
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: npm run package:desktop -- "-c.extraMetadata.version=$VERSION"
+      # The Desktop suite against the x86_64 AppImage, so a package that
+      # does not start fails the run. The AppImage mounts itself with FUSE 2.
+      - name: Desktop suite against the AppImage
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfuse2t64
+          DIFRACTA_DESKTOP_EXECUTABLE="$(ls "$PWD"/difracta-desktop/release/Difracta-*-x86_64.AppImage)" \
+            xvfb-run -a npm run test:desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: difracta-${{ runner.os }}
+          path: |
+            difracta-desktop/release/*.AppImage
+            difracta-desktop/release/*.dmg
+            difracta-desktop/release/*.exe
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          path: packages
+          merge-multiple: true
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" packages/* \
+            --title "Difracta ${GITHUB_REF_NAME#v}" --generate-notes --verify-tag

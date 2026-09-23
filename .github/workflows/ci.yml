@@ -1,0 +1,36 @@
+# Every push to main and every pull request: the checks AGENTS.md lists, then
+# the Desktop suite against the unpackaged build, under Xvfb.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch or pull request cancels the run before it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run build
+      # Playwright drives Electron from node_modules here, not a browser of
+      # its own, so no `playwright install`; the runner has Xvfb and the
+      # libraries Chromium needs.
+      - run: xvfb-run -a npm run test:desktop

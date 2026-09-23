@@ -6,6 +6,39 @@ render its Scenes, and Studio, the shell and OSC hubs edit and drive it at once.
 Everything a control surface can move is an Address, everything that changes the
 Installation is a command, and the runtime is the one source of truth.
 
+## Install
+
+Difracta Desktop is on the repository's GitHub Releases page, one package per
+operating system. The packages are not signed, so each system asks once whether
+to trust them.
+
+- **Linux**: `Difracta-<version>-x86_64.AppImage`, or `-arm64.AppImage` for an
+  ARM computer. Make it executable and run it:
+  `chmod +x Difracta-*.AppImage && ./Difracta-*.AppImage`. It mounts itself with
+  FUSE 2; where that library is missing (Ubuntu 24.04 ships without it),
+  `sudo apt install libfuse2t64` provides it. On a Linux that keeps programs
+  from Chromium's sandbox (Ubuntu 23.10 and later), the AppImage starts itself
+  with `--no-sandbox`.
+- **macOS**: `Difracta-<version>-arm64.dmg` for Apple silicon, `-x64.dmg` for
+  Intel. Drag Difracta to Applications. macOS refuses an unsigned app the first
+  time: right-click it and choose Open, or, where macOS no longer offers that
+  (macOS 15 and later), allow it under System Settings ▸ Privacy & Security ▸
+  Open Anyway. If macOS says the app is damaged, clear the quarantine it put on
+  the download: `xattr -cr /Applications/Difracta.app`.
+- **Windows**: `Difracta-Setup-<version>.exe` installs for the current user,
+  with no administrator prompt, in a folder of your choice. SmartScreen warns
+  about an unrecognised app: More info ▸ Run anyway.
+
+Desktop keeps its state in its user data folder: `~/.config/Difracta` on Linux,
+`~/Library/Application Support/Difracta` on macOS, `%APPDATA%\Difracta` on
+Windows; a Desktop run from a checkout uses the same folder. Start at Login (see
+Desktop below) with an AppImage starts that AppImage file, so after moving it or
+replacing it with a newer one, turn the setting off and on again.
+
+`npm run package:desktop` builds these packages for the operating system it runs
+on into `difracta-desktop/release/`, as the release workflow does on each
+system; `-- --linux AppImage --x64` narrows it to one of them.
+
 ## Run locally
 
 Node 24.
@@ -55,7 +88,7 @@ both apply from the next start:
 | Setting                     | Flag                         | What it does                                                                                                                                                                                                                                                                                      |
 | --------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Start Without Studio Window | `--no-studio` for one launch | Local mode starts the runtime and shows nothing. The runtime listens on every interface and is announced on the network as always. Starting Difracta again while it runs shows Studio; closing that window leaves the runtime running, and File ▸ Quit quits. In remote mode the flag is ignored. |
-| Start at Login              |                              | The operating system starts Desktop at login: a login item on macOS and Windows, `~/.config/autostart/difracta-desktop.desktop` on Linux. The checkbox shows what the operating system has, so it is right after the entry was removed by other means.                                            |
+| Start at Login              |                              | The operating system starts Desktop at login: a login item on macOS and Windows, `~/.config/autostart/difracta-desktop.desktop` on Linux, which starts the AppImage file itself. The checkbox shows what the operating system has, so it is right after the entry was removed by other means.     |
 
 Every Desktop, in either mode, is also a **Display Host** of the runtime it is
 connected to: it offers the Displays of its computer (the physical screens,
@@ -200,4 +233,6 @@ run it under Xvfb:
 `env -u WAYLAND_DISPLAY XDG_SESSION_TYPE=x11 xvfb-run -a npm run test:desktop`.
 With `WAYLAND_DISPLAY` set Electron would open its windows on the real Wayland
 session; the suite drops it by itself inside `xvfb-run`, and the long form says
-the same by hand.
+the same by hand. With `DIFRACTA_DESKTOP_EXECUTABLE` naming a packaged Desktop
+(an AppImage from `npm run package:desktop`, say) the suite drives that instead
+of the build in `dist/`.

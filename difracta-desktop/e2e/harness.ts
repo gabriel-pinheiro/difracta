@@ -17,6 +17,19 @@ import { serializeDocument } from "../../difracta-runtime/src/documents/document
 
 const packageDir = fileURLToPath(new URL("..", import.meta.url));
 
+/**
+ * A packaged Desktop to drive instead of the build in dist/: its executable,
+ * an AppImage or the `difracta` inside `release/linux-unpacked/`, named by
+ * `DIFRACTA_DESKTOP_EXECUTABLE`. A packaged app carries its own code, so it is
+ * started without the app's folder. The standalone runtime below still comes
+ * from dist/.
+ */
+export const packaged =
+  process.env.DIFRACTA_DESKTOP_EXECUTABLE === ""
+    ? undefined
+    : process.env.DIFRACTA_DESKTOP_EXECUTABLE;
+const executable = packaged === undefined ? {} : { executablePath: packaged };
+
 /** A port nothing uses, so the suite never meets a runtime already on 4800. */
 export async function sparePort(): Promise<number> {
   const server = createServer();
@@ -50,7 +63,7 @@ export const launchArguments = (
   file?: string,
   switches: readonly string[] = [],
 ): string[] => [
-  packageDir,
+  ...(packaged === undefined ? [packageDir] : []),
   `--user-data-dir=${userData}`,
   ...switches,
   ...(file === undefined ? [] : [file]),
@@ -60,13 +73,18 @@ export async function launch(
   file?: string,
   switches: readonly string[] = [],
 ): Promise<Page> {
-  app = await electron.launch({ args: launchArguments(file, switches), env });
+  app = await electron.launch({
+    ...executable,
+    args: launchArguments(file, switches),
+    env,
+  });
   return app.firstWindow();
 }
 
 /** A launch that shows nothing, so there is no first window to wait for: `/health` says when it is up. */
 export async function launchWithoutStudio(file: string): Promise<void> {
   app = await electron.launch({
+    ...executable,
     args: launchArguments(file, ["--no-studio"]),
     env,
   });
@@ -206,7 +224,7 @@ export async function renameFromElsewhere(
  */
 export async function secondLaunch(file?: string): Promise<void> {
   const other = spawn(
-    (await import("electron")).default as unknown as string,
+    packaged ?? ((await import("electron")).default as unknown as string),
     [
       ...(process.platform === "linux" ? ["--no-sandbox"] : []),
       ...launchArguments(file),
