@@ -110,6 +110,8 @@ export const settings = {
     healthPollMaxMs: 500,
     /** How long the runtime gets to flush and exit on quit before it is killed. */
     runtimeStopTimeoutMs: 5_000,
+    /** How long, after the runtime exits, its last lines get to come through its pipes before the log is closed. */
+    runtimeLogDrainMs: 250,
     /** The Studio window's size on first show. */
     windowWidth: 1440,
     windowHeight: 900,

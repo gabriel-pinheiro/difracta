@@ -28,16 +28,30 @@ function portIsFree(port: number): Promise<boolean> {
   });
 }
 
-/** Ends `log` once the child's pipes have closed, and resolves once the file has everything. */
+/**
+ * Ends `log` once the child's pipes have closed, or after
+ * `settings.desktop.runtimeLogDrainMs` when they do not: on Linux the zygote
+ * that forks utility processes can keep a pipe's write end, so the read end
+ * sees no end of file until the app itself exits. Resolves once the file has
+ * everything.
+ */
 async function endLog(
   log: WriteStream,
   pipes: readonly (NodeJS.ReadableStream | null)[],
 ): Promise<void> {
-  await Promise.all(
+  const drained = Promise.all(
     pipes
       .filter((pipe) => pipe !== null)
       .map((pipe) => finished(pipe).catch(() => undefined)),
   );
+  let timer: NodeJS.Timeout | undefined;
+  await Promise.race([
+    drained,
+    new Promise((resolve) => {
+      timer = setTimeout(resolve, settings.desktop.runtimeLogDrainMs);
+    }),
+  ]);
+  clearTimeout(timer);
   await new Promise<void>((resolve) => log.end(resolve));
 }
 
