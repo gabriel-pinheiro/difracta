@@ -1,16 +1,39 @@
 import { z } from "zod";
 
 import { accepted, defineCommand, rejected } from "../command/command.ts";
-import { LAYER_KINDS, type Layer } from "../document/document.ts";
+import {
+  LAYER_KINDS,
+  type Document,
+  type Layer,
+} from "../document/document.ts";
 import { childLayers, LAYER_LABELS } from "../document/layers.ts";
 import { uniqueName } from "../document/names.ts";
+import { orderedEntries } from "../document/order.ts";
 import { orderKeyForNew } from "../document/tree.ts";
 import { generateId, id } from "../ids.ts";
 
+/** The neighbour's Target when it has one, else the first Surface, else none. */
+function defaultTarget(
+  document: Document,
+  siblings: readonly Layer[],
+  after: string | null,
+): string | null {
+  const neighbour =
+    after === null
+      ? siblings[0]
+      : siblings.find((sibling) => sibling.id === after);
+  if (neighbour?.kind === "visual" && neighbour.target !== null)
+    return neighbour.target;
+  return orderedEntries(document.surfaces)[0]?.id ?? null;
+}
+
 /**
  * A new Layer lands at the top of the Scene root or Group it was added to,
- * or right below the sibling `after` names, without a Visual, Filter or
- * Target: those are picked afterwards.
+ * or right below the sibling `after` names, without a Visual or Filter: those
+ * are picked afterwards. A Visual Layer gets a Target unless the payload names
+ * one or null: the Target of the sibling it lands next to (the current top, or
+ * the `after` sibling) when that is a Visual Layer with one, otherwise the
+ * first Surface in order, otherwise none.
  */
 export const layerCreate = defineCommand({
   name: "layer.create",
@@ -26,6 +49,11 @@ export const layerCreate = defineCommand({
       name: z.string().trim().min(1).max(120).optional(),
       /** Sibling to land below; null or absent for the top. */
       after: z.string().min(1).nullable().optional(),
+      /**
+       * Visual Layers only: Surface to render onto; null for none. Omitted
+       * picks the neighbouring sibling's Target, else the first Surface.
+       */
+      target: z.string().min(1).nullable().optional(),
     })
     .strict(),
   label: ({ kind }) => `Add ${LAYER_LABELS[kind]}`,
@@ -48,6 +76,12 @@ export const layerCreate = defineCommand({
       payload.sceneId,
       payload.parentId,
     );
+    if (payload.target !== undefined && payload.target !== null) {
+      if (payload.kind !== "visual")
+        return rejected("Only a Visual Layer has a Target.");
+      if (!(payload.target in document.surfaces))
+        return rejected(`Surface “${payload.target}” does not exist.`);
+    }
     const order = orderKeyForNew(siblings, payload.after ?? null, "Layer");
     if (typeof order !== "string") return rejected(order.error);
     const base = {
@@ -68,7 +102,10 @@ export const layerCreate = defineCommand({
             kind: "visual",
             visual: null,
             parameters: {},
-            target: null,
+            target:
+              payload.target === undefined
+                ? defaultTarget(document, siblings, payload.after ?? null)
+                : payload.target,
             paths: {},
             opacity: 1,
             blendMode: "normal",

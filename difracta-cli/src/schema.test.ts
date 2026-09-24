@@ -18,6 +18,7 @@ describe("formatSchema", () => {
       "parentId  string | null  (default null)",
       "name  string",
       "after  string | null",
+      "target  string | null",
     ]);
   });
 

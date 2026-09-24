@@ -113,7 +113,7 @@ describe("built-in commands", () => {
     expect(unchanged.patches).toEqual([]);
   });
 
-  it("creates Surfaces, assigning the only Output with a default mapping", () => {
+  it("creates Surfaces, assigning the first Output with a default mapping", () => {
     const unassigned = run(emptyDocument("Living"), "surface.create", {
       id: "sur_a",
       name: "Wall",
@@ -156,6 +156,22 @@ describe("built-in commands", () => {
         output: "out_missing",
       }),
     ).toMatchObject({ ok: false });
+
+    let twoOutputs = run(oneOutput, "output.create", {
+      id: "out_b",
+      name: "TV",
+    }).document;
+    twoOutputs = run(twoOutputs, "entity.move", {
+      table: "outputs",
+      id: "out_b",
+      after: null,
+    }).document;
+    const first = run(twoOutputs, "surface.create", {
+      id: "sur_c",
+      name: "Floor",
+    }).document.surfaces.sur_c;
+    expect(first?.output).toBe("out_b");
+    expect(Object.keys(first?.mappings ?? {})).toEqual(["out_b"]);
   });
 
   it("assigns Surfaces, keeping dormant mappings per Output", () => {

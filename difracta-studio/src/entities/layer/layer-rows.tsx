@@ -35,10 +35,12 @@ import {
   NavigatorRow,
   RowAction,
 } from "@/navigator/navigator-row";
+import { NavigatorWarning } from "@/navigator/navigator-warning";
 import { SortableItem, SortableList } from "@/navigator/sortable";
 import { isSelected, useSelection } from "@/selection/selection";
 
 import { layerIcons, layerKindLabels } from "./layer-icons";
+import { layerWarning } from "./layer-warning";
 import { useLayerActions } from "./use-layer-actions";
 
 /**
@@ -112,6 +114,7 @@ export function LayerRows({
           enabledLink === undefined
             ? undefined
             : controllers[enabledLink.controllerId]?.name;
+        const warning = layerWarning(layer);
         return (
           <SortableItem
             key={layer.id}
@@ -180,7 +183,14 @@ export function LayerRows({
                       </RowAction>
                     )
                   }
-                />
+                >
+                  {warning !== undefined && (
+                    <NavigatorWarning
+                      label={warning.label}
+                      explanation={warning.explanation}
+                    />
+                  )}
+                </NavigatorRow>
               </ContextMenuTrigger>
               <ContextMenuContent>
                 {group ? (

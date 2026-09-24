@@ -4,7 +4,7 @@ import { accepted, defineCommand, rejected } from "../command/command.ts";
 import { tableEntries, type Surface } from "../document/document.ts";
 import { FULL_FRAME } from "../document/geometry.ts";
 import { uniqueName } from "../document/names.ts";
-import { appendOrderKey } from "../document/order.ts";
+import { appendOrderKey, orderedEntries } from "../document/order.ts";
 import { generateId, id } from "../ids.ts";
 
 export const surfaceCreate = defineCommand({
@@ -17,8 +17,8 @@ export const surfaceCreate = defineCommand({
       id: z.string().min(1).optional(),
       name: z.string().trim().min(1).max(120),
       /**
-       * Output to assign; null for none. Omitted picks the only Output when
-       * the Installation has exactly one, otherwise none.
+       * Output to assign; null for none. Omitted picks the first Output in
+       * order, or none when the Installation has no Outputs.
        */
       output: z.string().min(1).nullable().optional(),
     })
@@ -31,10 +31,9 @@ export const surfaceCreate = defineCommand({
         : id("surface", payload.id);
     if (surfaceId in document.surfaces)
       return rejected(`Surface “${surfaceId}” already exists.`);
-    const outputIds = Object.keys(document.outputs);
     const output =
       payload.output === undefined
-        ? ((outputIds.length === 1 ? outputIds[0] : undefined) ?? null)
+        ? (orderedEntries(document.outputs)[0]?.id ?? null)
         : payload.output;
     if (output !== null && !(output in document.outputs))
       return rejected(`Output “${output}” does not exist.`);

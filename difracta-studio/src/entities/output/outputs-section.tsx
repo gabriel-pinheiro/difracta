@@ -3,6 +3,7 @@ import {
   generateId,
   orderedEntries,
   type Output,
+  type Surface,
   type Table,
 } from "@difracta/core";
 import { Monitor, MonitorUp, Trash2 } from "lucide-react";
@@ -20,6 +21,7 @@ import { useNow } from "@/lib/use-now";
 import { useExpansion } from "@/navigator/expansion";
 import { NavigatorEmptyRow, NavigatorRow } from "@/navigator/navigator-row";
 import { NavigatorSection } from "@/navigator/navigator-section";
+import { NavigatorWarning } from "@/navigator/navigator-warning";
 import { SortableItem, SortableList } from "@/navigator/sortable";
 import { isSelected, useSelection } from "@/selection/selection";
 
@@ -39,6 +41,10 @@ export function OutputsSection({ view }: { readonly view: DocumentView }) {
   const command = useCommand(view);
   const { selection, select } = useSelection();
   const outputs = useDocumentPath<Table<Output>>(view, ["outputs"]) ?? {};
+  const surfaces = useDocumentPath<Table<Surface>>(view, ["surfaces"]) ?? {};
+  const assigned = new Set(
+    Object.values(surfaces).map((surface) => surface.output),
+  );
   const [naming, setNaming] = useState(false);
   const ordered = orderedEntries(outputs);
 
@@ -72,6 +78,7 @@ export function OutputsSection({ view }: { readonly view: DocumentView }) {
                   <OutputRow
                     view={view}
                     output={output}
+                    unassigned={!assigned.has(output.id)}
                     selected={isSelected(selection, "output", output.id)}
                     onSelect={() => select({ kind: "output", id: output.id })}
                   />
@@ -113,11 +120,14 @@ export function OutputsSection({ view }: { readonly view: DocumentView }) {
 function OutputRow({
   view,
   output,
+  unassigned,
   selected,
   onSelect,
 }: {
   readonly view: DocumentView;
   readonly output: Output;
+  /** No Surface renders through this Output. */
+  readonly unassigned: boolean;
   readonly selected: boolean;
   readonly onSelect: () => void;
 }) {
@@ -142,6 +152,12 @@ function OutputRow({
         onToggle={(next) => setExpanded("output", output.id, next)}
         onSelect={onSelect}
       >
+        {unassigned && (
+          <NavigatorWarning
+            label="no Surface"
+            explanation="Nothing renders on this Output until a Surface is assigned to it."
+          />
+        )}
         <span
           className={`size-1.5 shrink-0 rounded-full ${toneClass[presenceTone(sessions)]}`}
           title={toneTitle(sessions)}

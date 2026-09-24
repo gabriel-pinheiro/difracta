@@ -134,14 +134,14 @@ describe("scenes", () => {
 });
 
 describe("layers", () => {
-  it("creates at the top of its parent, named per siblings, with kind defaults", () => {
+  it("creates at the top of its parent, named per siblings, with kind defaults, the first Surface as Target", () => {
     const document = show();
     expect(names(document, "scene_a", null)).toEqual(["Blur", "Sky"]);
     expect(names(document, "scene_a", "grp")).toEqual(["Moon", "Stars"]);
     expect(document.layers.stars).toMatchObject({
       kind: "visual",
       visual: null,
-      target: null,
+      target: "sur_a",
       opacity: 1,
       blendMode: "normal",
       enabled: true,

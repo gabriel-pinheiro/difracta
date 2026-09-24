@@ -23,6 +23,7 @@ describe("describeCommand", () => {
       "name",
       "parentId",
       "sceneId",
+      "target",
     ]);
     expect([...(payload.required ?? [])].sort()).toEqual(["kind", "sceneId"]);
   });

@@ -105,8 +105,9 @@ coordinates (`document/geometry.ts`); corners may lie outside the unit square
 when a Surface overshoots the projector's edge. Only the mapping for `output` is
 used. `surface.assign` reuses a mapping the Surface already has for the chosen
 Output and otherwise creates one covering the whole frame; `surface.create`
-picks the only Output when the Installation has exactly one. Removing an Output
-removes its mapping from every Surface and unassigns the ones using it.
+picks the first Output in order unless the payload names one or null. Removing
+an Output removes its mapping from every Surface and unassigns the ones using
+it.
 
 Corners are edited by `surface.corner.set` (absolute) and `surface.corner.nudge`
 (relative). Both coalesce under one key per corner, so a drag or a held arrow
@@ -195,11 +196,13 @@ rendering will walk it bottom up. Siblings are the Layers sharing `sceneId` and
 Group's contents along and refusing cycles; `entity.move` still covers
 reordering among siblings. `layer.group` wraps a Layer in a new Group at its
 position and `layer.ungroup` dissolves one; duplicating a Scene or a Group
-copies everything inside with fresh ids. A Visual Layer starts without a Visual
-or Target, a Filter Layer without a Filter: both are picked afterwards from the
-Catalog. Removing a Surface clears the Target of Layers using it. The first
-Scene created becomes `installation.activeScene`; the active Scene cannot be
-removed.
+copies everything inside with fresh ids. A Visual Layer starts without a Visual,
+a Filter Layer without a Filter: both are picked afterwards from the Catalog. A
+new Visual Layer takes the Target of the sibling it lands next to when that is a
+Visual Layer with one, otherwise the first Surface, unless `layer.create` names
+a Target or null. Removing a Surface clears the Target of Layers using it. The
+first Scene created becomes `installation.activeScene`; the active Scene cannot
+be removed.
 
 **Why one table for three kinds:** the stack is one ordering across kinds, and
 the words followed the data. Having "Layer" mean only "Visual instance" left

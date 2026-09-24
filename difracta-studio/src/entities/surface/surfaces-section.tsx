@@ -24,6 +24,7 @@ import { useCommand, useDocumentPath } from "@/lib/client";
 import { useExpansion } from "@/navigator/expansion";
 import { NavigatorEmptyRow, NavigatorRow } from "@/navigator/navigator-row";
 import { NavigatorSection } from "@/navigator/navigator-section";
+import { NavigatorWarning } from "@/navigator/navigator-warning";
 import { SortableItem, SortableList } from "@/navigator/sortable";
 import { isSelected, useSelection } from "@/selection/selection";
 
@@ -112,15 +113,16 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
                         },
                       ]}
                     >
-                      <span
-                        className={
-                          output === undefined
-                            ? "truncate text-[0.625rem] text-muted-foreground/60 italic"
-                            : "truncate text-[0.625rem] text-muted-foreground"
-                        }
-                      >
-                        {output?.name ?? "no Output"}
-                      </span>
+                      {output === undefined ? (
+                        <NavigatorWarning
+                          label="no Output"
+                          explanation="This Surface has no Output, so nothing projects it. Pick one in the inspector."
+                        />
+                      ) : (
+                        <span className="truncate text-[0.625rem] text-muted-foreground">
+                          {output.name}
+                        </span>
+                      )}
                     </NavigatorRow>
                   </ContextMenuTrigger>
                   <ContextMenuContent>
