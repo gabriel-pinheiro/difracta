@@ -47,11 +47,14 @@ export function OutputCard({
   view,
   output,
   selected,
+  emphasizeOpen,
   onSelect,
 }: {
   readonly view: DocumentView;
   readonly output: Output;
   readonly selected: boolean;
+  /** Draws the eye to Open: filled, with a ping that runs six times each time this turns on. */
+  readonly emphasizeOpen: boolean;
   readonly onSelect: () => void;
 }) {
   const url = outputPageUrl(output.id);
@@ -155,16 +158,26 @@ export function OutputCard({
         </ul>
       )}
       <footer className="flex gap-1">
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={(event) => {
-            event.stopPropagation();
-            setOpening(true);
-          }}
-        >
-          <MonitorUp /> Open
-        </Button>
+        <span className="relative inline-flex">
+          {emphasizeOpen && (
+            // Mounted each time the emphasis turns on, so the six pings restart.
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-0 animate-ping rounded-md bg-primary/40 [animation-iteration-count:6] motion-reduce:hidden"
+            />
+          )}
+          <Button
+            size="sm"
+            variant={emphasizeOpen ? "default" : "outline"}
+            className="relative"
+            onClick={(event) => {
+              event.stopPropagation();
+              setOpening(true);
+            }}
+          >
+            <MonitorUp /> Open
+          </Button>
+        </span>
         <Button
           size="sm"
           variant="outline"
