@@ -1,6 +1,6 @@
 {
   "name": "@difracta/render",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -12,6 +12,6 @@
     "test:gpu": "vitest run --config gpu/vitest.config.ts"
   },
   "dependencies": {
-    "@difracta/core": "0.1.0"
+    "@difracta/core": "0.2.0"
   }
 }

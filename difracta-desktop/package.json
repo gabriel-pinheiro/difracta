@@ -2,7 +2,7 @@
   "name": "@difracta/desktop",
   "productName": "Difracta",
   "desktopName": "difracta.desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Difracta Desktop: a window that shows Studio, from a Runtime it runs on this machine or from one elsewhere.",
@@ -15,10 +15,10 @@
     "package": "electron-builder --config electron-builder.yml --publish never"
   },
   "devDependencies": {
-    "@difracta/client": "0.1.0",
-    "@difracta/core": "0.1.0",
-    "@difracta/protocol": "0.1.0",
-    "@difracta/runtime": "0.1.0",
+    "@difracta/client": "0.2.0",
+    "@difracta/core": "0.2.0",
+    "@difracta/protocol": "0.2.0",
+    "@difracta/runtime": "0.2.0",
     "electron": "44.4.3",
     "electron-builder": "^26.15.3",
     "zod": "^4.4.3"
