@@ -13,8 +13,8 @@ import { CalibrationFollowsSelection } from "@/lib/calibration-follows-selection
 import { BrowserProvider, useBrowser } from "@/library/browser-state";
 import { LibraryView } from "@/library/library-view";
 import { ExpansionProvider } from "@/navigator/expansion";
-import { SelectionProvider } from "@/selection/selection";
 import { SelectionKeys } from "@/selection/selection-keys";
+import { NavigatorKeys } from "@/keyboard/navigator-keys";
 
 import { OutputsTab } from "./outputs-tab";
 
@@ -27,20 +27,19 @@ const isLayout = (candidate: unknown): candidate is Record<string, number> =>
 
 /**
  * Navigator, center tabs and inspector as three resizable columns. Column
- * sizes are remembered per browser; selection, which rows are open and the
- * Library's binding reset with the document.
+ * sizes are remembered per browser; which rows are open and the Library's
+ * binding reset with the document, as the selection (held in `App`) does.
  */
 export function Workspace({ view }: { readonly view: DocumentView }) {
   return (
-    <SelectionProvider key={view.documentId}>
-      <ExpansionProvider>
-        <BrowserProvider>
-          <SelectionKeys />
-          <CalibrationFollowsSelection view={view} />
-          <Columns view={view} />
-        </BrowserProvider>
-      </ExpansionProvider>
-    </SelectionProvider>
+    <ExpansionProvider key={view.documentId}>
+      <BrowserProvider>
+        <SelectionKeys />
+        <NavigatorKeys />
+        <CalibrationFollowsSelection view={view} />
+        <Columns view={view} />
+      </BrowserProvider>
+    </ExpansionProvider>
   );
 }
 

@@ -1,6 +1,7 @@
 import type React from "react";
 import {
   createContext,
+  useCallback,
   useContext,
   useMemo,
   useState,
@@ -22,14 +23,27 @@ interface SelectionState {
 
 const Context = createContext<SelectionState | undefined>(undefined);
 
-/** Studio-local, never sent to the runtime. Mount with a `key` per document so it resets. */
+/**
+ * Studio-local, never sent to the runtime. Held above the menu, which removes
+ * the selection, and empty again whenever `documentId` changes.
+ */
 export function SelectionProvider({
+  documentId,
   children,
 }: {
+  readonly documentId: string | undefined;
   readonly children: ReactNode;
 }) {
-  const [selection, select] = useState<Selection | undefined>(undefined);
-  const state = useMemo(() => ({ selection, select }), [selection]);
+  const [held, setHeld] = useState<{
+    readonly documentId: string | undefined;
+    readonly selection: Selection | undefined;
+  }>({ documentId, selection: undefined });
+  const selection = held.documentId === documentId ? held.selection : undefined;
+  const select = useCallback(
+    (next: Selection | undefined) => setHeld({ documentId, selection: next }),
+    [documentId],
+  );
+  const state = useMemo(() => ({ selection, select }), [selection, select]);
   return <Context.Provider value={state}>{children}</Context.Provider>;
 }
 

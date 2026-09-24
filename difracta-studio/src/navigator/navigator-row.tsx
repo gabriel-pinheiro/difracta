@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight, Plus, type LucideIcon } from "lucide-react";
-import type { KeyboardEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import {
   DropdownMenu,
@@ -25,8 +25,9 @@ function indent(depth: number): string {
  * One selectable line in the navigator; the selected one carries the outline
  * the inspector follows. Rows below the root reserve a slot for a chevron so
  * labels align within a level whether or not the row can open; the chevron
- * toggles without selecting, the label selects without toggling, and Left and
- * Right on a focused row close and open it.
+ * toggles without selecting and the label selects without toggling. Arrow
+ * keys move through rows in `keyboard/navigator-keys.tsx`, which reads the
+ * `data-navigator-*` attributes put on the selecting button here.
  */
 export function NavigatorRow({
   id,
@@ -44,7 +45,7 @@ export function NavigatorRow({
   dimmed = false,
   children,
 }: {
-  /** The entity's id, so focus can return to the row (`focus-row.ts`). */
+  /** The entity's id, so focus can return to the row (`focus-row.ts`) and arrow keys reach it. */
   readonly id?: string;
   readonly icon: LucideIcon;
   readonly label: string;
@@ -70,13 +71,6 @@ export function NavigatorRow({
   readonly children?: ReactNode;
 }) {
   const open = expanded === true;
-  function onKeyDown(event: KeyboardEvent<HTMLButtonElement>): void {
-    if (onToggle === undefined) return;
-    if (event.key === "ArrowRight" && !open) onToggle(true);
-    else if (event.key === "ArrowLeft" && open) onToggle(false);
-    else return;
-    event.preventDefault();
-  }
   return (
     <div
       data-selected={selected || undefined}
@@ -115,6 +109,9 @@ export function NavigatorRow({
         data-row-select=""
         data-navigator-row={id}
         data-navigator-depth={id === undefined ? undefined : depth}
+        data-navigator-expanded={
+          id === undefined || onToggle === undefined ? undefined : open
+        }
         className={cn(
           "flex h-full min-w-0 flex-1 items-center gap-1.5 text-left focus-visible:outline-none",
           onCreate === undefined &&
@@ -125,7 +122,6 @@ export function NavigatorRow({
         )}
         onClick={onSelect}
         onDoubleClick={onOpen}
-        onKeyDown={onKeyDown}
       >
         <Icon className="size-3.5 shrink-0" />
         <span className="min-w-0 flex-1 truncate">{label}</span>

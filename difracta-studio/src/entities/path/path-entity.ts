@@ -6,4 +6,10 @@ import { PathInspector } from "./path-inspector";
 export const pathEntity: EntityModule = {
   label: "Paths",
   Inspector: PathInspector,
+  removal: {
+    noun: "Path",
+    command: "path.remove",
+    payload: (id) => ({ pathId: id }),
+    find: (document, id) => document.paths[id],
+  },
 };

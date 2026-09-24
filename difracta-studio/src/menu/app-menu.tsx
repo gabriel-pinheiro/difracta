@@ -1,7 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 
 import { useDocumentCommands } from "@/documents/document-commands";
 import { useClient, useSignal } from "@/lib/client";
+import { useRemoveSelection } from "@/selection/remove-selection";
 
 import { MenuBar } from "./menu-bar";
 import { menuModel, runMenuCommand, type MenuModel } from "./menu-model";
@@ -18,9 +19,15 @@ import { useInPageBar } from "./use-in-page-bar";
 export function AppMenu() {
   const client = useClient();
   const connected = useSignal(client.phase) === "connected";
-  const commands = useDocumentCommands();
-  const { selected, free } = commands;
+  const documentCommands = useDocumentCommands();
+  const { removable, remove } = useRemoveSelection();
+  const commands = useMemo(
+    () => ({ ...documentCommands, remove }),
+    [documentCommands, remove],
+  );
+  const { selected, free } = documentCommands;
   const model = menuModel({
+    removable,
     free,
     connected,
     document:

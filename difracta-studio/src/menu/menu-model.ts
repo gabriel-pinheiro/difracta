@@ -1,4 +1,3 @@
-import type { DocumentCommands } from "../documents/document-commands";
 import { shortcuts } from "../shortcuts";
 
 /**
@@ -26,7 +25,7 @@ export interface MenuModel {
   readonly edit: readonly MenuItemModel[];
 }
 
-/** Each id is the `DocumentCommands` function the item runs. */
+/** Each id is the `MenuCommands` function the item runs. */
 export type MenuCommandId =
   | "create"
   | "open"
@@ -37,7 +36,14 @@ export type MenuCommandId =
   | "replaceFromFile"
   | "close"
   | "undo"
-  | "redo";
+  | "redo"
+  | "remove";
+
+/**
+ * What the items run: `DocumentCommands` for the document, plus `remove`,
+ * which removes the selection (`selection/remove-selection.ts`).
+ */
+export type MenuCommands = Readonly<Record<MenuCommandId, () => void>>;
 
 const commandIds: ReadonlySet<string> = new Set<MenuCommandId>([
   "create",
@@ -50,6 +56,7 @@ const commandIds: ReadonlySet<string> = new Set<MenuCommandId>([
   "close",
   "undo",
   "redo",
+  "remove",
 ]);
 
 export interface MenuModelInput {
@@ -59,10 +66,12 @@ export interface MenuModelInput {
   /** The open Installation, as far as the menu cares. */
   readonly document:
     { readonly path: string | null; readonly dirty: boolean } | undefined;
+  /** Whether the selection is an entity that Remove may take away now. */
+  readonly removable: boolean;
 }
 
 export function menuModel(input: MenuModelInput): MenuModel {
-  const { free, connected, document } = input;
+  const { free, connected, document, removable } = input;
   const open = document !== undefined;
   const canRevert = document?.dirty === true && document.path !== null;
   const whenFree = (items: MenuItemModel[]): MenuItemModel[] =>
@@ -128,6 +137,13 @@ export function menuModel(input: MenuModelInput): MenuModel {
         shortcutLabel: shortcuts.redo.label,
         enabled: open,
       },
+      {
+        id: "remove",
+        label: "Remove",
+        shortcutLabel: shortcuts.remove.label,
+        enabled: open && removable,
+        separatorBefore: true,
+      },
     ],
   };
 }
@@ -136,6 +152,6 @@ export function menuModel(input: MenuModelInput): MenuModel {
  * Runs the command behind a menu item. `id` is a string because a click in
  * the native menu comes back over IPC; one that names no command does nothing.
  */
-export function runMenuCommand(id: string, commands: DocumentCommands): void {
+export function runMenuCommand(id: string, commands: MenuCommands): void {
   if (commandIds.has(id)) commands[id as MenuCommandId]();
 }

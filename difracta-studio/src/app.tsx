@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { Toaster } from "@/components/ui/sonner";
 import {
   DocumentCommandsProvider,
@@ -6,20 +8,33 @@ import {
 import { ShortcutKeys } from "@/keyboard/shortcut-keys";
 import { useClient, useSignal } from "@/lib/client";
 import { AppMenu } from "@/menu/app-menu";
+import { SelectionProvider } from "@/selection/selection";
 import { StatusStrip } from "@/status/status-strip";
 import { Workspace } from "@/workspace/workspace";
 
 export function App() {
   return (
     <DocumentCommandsProvider>
-      <div className="flex h-dvh flex-col">
-        <AppMenu />
-        <Main />
-        <StatusStrip />
-      </div>
-      <ShortcutKeys />
+      <DocumentSelection>
+        <div className="flex h-dvh flex-col">
+          <AppMenu />
+          <Main />
+          <StatusStrip />
+        </div>
+        <ShortcutKeys />
+      </DocumentSelection>
       <Toaster position="bottom-right" closeButton />
     </DocumentCommandsProvider>
+  );
+}
+
+/** The selection, above the menu and the shortcuts that remove it; empty for each document. */
+function DocumentSelection({ children }: { readonly children: ReactNode }) {
+  const { view } = useDocumentCommands();
+  return (
+    <SelectionProvider documentId={view?.documentId}>
+      {children}
+    </SelectionProvider>
   );
 }
 

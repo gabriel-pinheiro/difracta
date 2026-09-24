@@ -125,7 +125,7 @@ export function useCommand(
 }
 
 /** One toast for a command's warnings: the warning itself, or a count and the list. */
-function showWarnings(warnings: readonly string[]): void {
+export function showWarnings(warnings: readonly string[]): void {
   const [first] = warnings;
   if (first === undefined) return;
   if (warnings.length === 1) toast.warning(first);

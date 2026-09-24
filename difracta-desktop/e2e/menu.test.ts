@@ -56,6 +56,9 @@ describe("Difracta Desktop's native menu", () => {
     expect(await menuItems("edit")).toEqual([
       ["page:undo", true],
       ["page:redo", true],
+      // Nothing is selected yet, so there is nothing to remove.
+      ["-", true],
+      ["page:remove", false],
       ["-", true],
       ["cut", true],
       ["copy", true],

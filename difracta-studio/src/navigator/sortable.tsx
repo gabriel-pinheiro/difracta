@@ -272,6 +272,7 @@ export function SortableItem({
   return (
     <div
       ref={ref}
+      title="Drag to reorder, or Alt+↑ / Alt+↓ on the selected row"
       className={cn(
         "relative",
         dragging && "opacity-40",

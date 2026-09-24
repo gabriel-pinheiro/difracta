@@ -6,4 +6,10 @@ import { MaskInspector } from "./mask-inspector";
 export const maskEntity: EntityModule = {
   label: "Masks",
   Inspector: MaskInspector,
+  removal: {
+    noun: "Mask",
+    command: "mask.remove",
+    payload: (id) => ({ maskId: id }),
+    find: (document, id) => document.masks[id],
+  },
 };

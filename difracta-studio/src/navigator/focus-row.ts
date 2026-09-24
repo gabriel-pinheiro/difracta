@@ -57,3 +57,15 @@ export function removeFocusingNeighbour(
     if (neighbour !== undefined) focusNavigatorRow(neighbour);
   });
 }
+
+/**
+ * Selects the row for `id` after the next paint, as a click on it would, and
+ * keeps keyboard focus on it.
+ */
+export function selectNavigatorRow(id: string): void {
+  requestAnimationFrame(() => {
+    const row = rowButton(id);
+    row?.click();
+    row?.focus();
+  });
+}

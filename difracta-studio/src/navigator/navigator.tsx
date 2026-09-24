@@ -10,6 +10,9 @@ import { deselectOnBackgroundClick, useSelection } from "@/selection/selection";
 
 import { NavigatorRow } from "./navigator-row";
 
+/** The root row's id among entity ids, which never take this form. */
+const INSTALLATION_ROW = "installation";
+
 /** Everything in the Installation: its root row, then one section per entity kind. */
 export function Navigator({ view }: { readonly view: DocumentView }) {
   const { selection, select } = useSelection();
@@ -23,6 +26,7 @@ export function Navigator({ view }: { readonly view: DocumentView }) {
   }, []);
   return (
     <aside
+      data-navigator=""
       className="flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground"
       onClick={deselectOnBackgroundClick(select)}
     >
@@ -32,6 +36,7 @@ export function Navigator({ view }: { readonly view: DocumentView }) {
         className="grid flex-1 grid-cols-[minmax(0,1fr)] content-start gap-1 overflow-auto p-1"
       >
         <NavigatorRow
+          id={INSTALLATION_ROW}
           icon={Theater}
           label={name}
           depth={0}

@@ -1,5 +1,5 @@
 import type { DocumentView } from "@difracta/client";
-import type { DocumentSummary } from "@difracta/protocol";
+import type { CommandResult, DocumentSummary } from "@difracta/protocol";
 import {
   createContext,
   useContext,
@@ -106,9 +106,25 @@ export function DocumentCommandsProvider({
     };
     const showNameDialog = (request: NameRequest): void =>
       setDialog({ kind: "name", request });
-    const history = (name: "history.undo" | "history.redo"): void => {
+    /** Undo or redo, said in a quiet toast: "Undid Create Mask “Mask 1”". */
+    const history = (direction: "undo" | "redo"): void => {
       if (selected === undefined) return;
-      void client.command(selected.id, name, {}).catch(() => undefined);
+      const [done, empty] =
+        direction === "undo"
+          ? ["Undid", "Nothing to undo"]
+          : ["Redid", "Nothing to redo"];
+      client
+        .command<CommandResult>(selected.id, `history.${direction}`, {})
+        .then(
+          (result) => toast.message(`${done} ${result.label ?? "a step"}`),
+          (failure: unknown) => {
+            const message =
+              failure instanceof Error ? failure.message : String(failure);
+            // The runtime's words for an empty history, less the full stop.
+            if (message.startsWith(empty)) toast.message(empty);
+            else toast.error(message);
+          },
+        );
     };
 
     return {
@@ -215,8 +231,8 @@ export function DocumentCommandsProvider({
           },
         });
       },
-      undo: () => history("history.undo"),
-      redo: () => history("history.redo"),
+      undo: () => history("undo"),
+      redo: () => history("redo"),
     };
   }, [client, selected, free]);
 

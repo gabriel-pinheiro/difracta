@@ -6,4 +6,10 @@ import { LayerInspector } from "./layer-inspector";
 export const layerEntity: EntityModule = {
   label: "Layers",
   Inspector: LayerInspector,
+  removal: {
+    noun: "Layer",
+    command: "layer.remove",
+    payload: (id) => ({ layerId: id }),
+    find: (document, id) => document.layers[id],
+  },
 };
