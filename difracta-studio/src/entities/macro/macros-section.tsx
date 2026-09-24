@@ -23,7 +23,7 @@ import { macroIcons, macroKindLabels } from "./macro-icons";
  * Navigator section listing the Macros as a tree of Groups, each Macro with
  * a Run button. Creating asks for a name, since a Macro is named for what
  * it does ("Strobe On", "Look · Ice"). The section starts collapsed unless
- * it is empty, where the hint to add one is the whole content.
+ * it is empty, where the empty row is the whole content.
  */
 export function MacrosSection({ view }: { readonly view: DocumentView }) {
   const command = useCommand(view);
@@ -66,9 +66,7 @@ export function MacrosSection({ view }: { readonly view: DocumentView }) {
         storageKey="macro"
         label="Macros"
         defaultExpanded={roots.length === 0}
-        empty={
-          roots.length === 0 ? "No Macros. Press + to add one." : undefined
-        }
+        empty={roots.length === 0 ? "No Macros yet." : undefined}
         createItems={createItems(null)}
       >
         <MacroRows

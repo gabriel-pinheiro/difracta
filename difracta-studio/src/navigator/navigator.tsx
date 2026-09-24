@@ -29,7 +29,7 @@ export function Navigator({ view }: { readonly view: DocumentView }) {
       <PanelHeader>Navigator</PanelHeader>
       <div
         ref={scroller}
-        className="grid flex-1 content-start gap-1 overflow-auto p-1"
+        className="grid flex-1 grid-cols-[minmax(0,1fr)] content-start gap-1 overflow-auto p-1"
       >
         <NavigatorRow
           icon={Theater}

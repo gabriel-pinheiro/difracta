@@ -24,8 +24,8 @@ import { controllerIcons, controllerKindLabels } from "./controller-icons";
  * Color Controllers are values Parameter Links spread over Layers; Groups
  * only arrange them. Creating asks for a name, since a Controller is named
  * for what it drives ("Energy", "Strobe Color") rather than numbered. The
- * section starts collapsed unless it is empty, where the hint to add one
- * is the whole content.
+ * section starts collapsed unless it is empty, where the empty row is the
+ * whole content.
  */
 export function ControllersSection({ view }: { readonly view: DocumentView }) {
   const command = useCommand(view);
@@ -70,9 +70,7 @@ export function ControllersSection({ view }: { readonly view: DocumentView }) {
         storageKey="controller"
         label="Controllers"
         defaultExpanded={roots.length === 0}
-        empty={
-          roots.length === 0 ? "No Controllers. Press + to add one." : undefined
-        }
+        empty={roots.length === 0 ? "No Controllers yet." : undefined}
         createItems={createItems(null)}
       >
         <ControllerRows

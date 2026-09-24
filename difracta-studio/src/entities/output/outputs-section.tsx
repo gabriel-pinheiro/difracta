@@ -54,9 +54,7 @@ export function OutputsSection({ view }: { readonly view: DocumentView }) {
       <NavigatorSection
         storageKey="output"
         label="Outputs"
-        empty={
-          ordered.length === 0 ? "No Outputs. Press + to add one." : undefined
-        }
+        empty={ordered.length === 0 ? "No Outputs yet." : undefined}
         onCreate={() => setNaming(true)}
       >
         <SortableList

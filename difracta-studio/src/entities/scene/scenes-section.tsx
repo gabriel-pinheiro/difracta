@@ -55,9 +55,7 @@ export function ScenesSection({ view }: { readonly view: DocumentView }) {
       <NavigatorSection
         storageKey="scene"
         label="Scenes"
-        empty={
-          ordered.length === 0 ? "No Scenes. Press + to add one." : undefined
-        }
+        empty={ordered.length === 0 ? "No Scenes yet." : undefined}
         onCreate={() => setNaming(true)}
       >
         <SortableList

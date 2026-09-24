@@ -87,7 +87,9 @@ export function NavigatorSection({
       </div>
       {expanded &&
         (empty === undefined ? (
-          <div className="grid gap-px">{children}</div>
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-px">
+            {children}
+          </div>
         ) : (
           <NavigatorEmptyRow>{empty}</NavigatorEmptyRow>
         ))}
