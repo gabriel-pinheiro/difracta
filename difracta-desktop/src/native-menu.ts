@@ -2,6 +2,7 @@ import type { BaseWindow, MenuItemConstructorOptions } from "electron";
 
 import type { PageMenu, PageMenuItem } from "./page-menu.ts";
 import type { StartupChoices } from "./startup-settings.ts";
+import { zoomPercent, type ZoomChange } from "./zoom-levels.ts";
 
 /** What the menu's own items do; `application-menu.ts` fills these in with Electron. */
 export interface NativeMenuActions {
@@ -13,8 +14,9 @@ export interface NativeMenuActions {
   connectTo(): void;
   setStartAtLogin(on: boolean): void;
   setStartWithoutStudio(on: boolean): void;
+  /** Studio's zoom, in every Studio window whichever window is focused. */
+  zoom(change: ZoomChange): void;
   /** `window` is the focused one, which the action checks before it acts. */
-  zoom(window: BaseWindow | undefined, change: "in" | "out" | "reset"): void;
   toggleDevTools(window: BaseWindow | undefined): void;
   reloadStudio(): void;
   showRuntimeLog(): void;
@@ -30,6 +32,8 @@ export interface NativeMenuOptions {
   readonly local: boolean;
   /** The two checkboxes of File ▸ Startup, as they really are now. */
   readonly startup: StartupChoices;
+  /** Studio's zoom as an Electron level, 0 being 100% (`zoom-levels.ts`). */
+  readonly zoomLevel: number;
   readonly actions: NativeMenuActions;
 }
 
@@ -103,7 +107,7 @@ function separated(...groups: Item[][]): Item[] {
  *
  *   File   [page's]  ─  Connect to..., Startup ▸  ─  Quit
  *   Edit   [page's: Undo and Redo of the Installation]  ─  cut, copy, paste, select all
- *   View   zoom  ─  full screen
+ *   View   zoom (Studio only)  ─  full screen
  *   Help   Reload Studio, Developer Tools, Show Runtime Log (local only)
  *
  * Roles are items whose label, shortcut and behaviour Electron supplies per
@@ -123,11 +127,14 @@ function separated(...groups: Item[][]): Item[] {
  * in it, Close Window in File, and a Window menu.
  *
  * Zoom and Developer Tools are not roles, because a role acts on whichever
- * window is focused and macOS has one menu for every window: the actions act
- * on a Studio or launch window only, never on an Output's.
+ * window is focused and macOS has one menu for every window. Developer Tools
+ * acts on a Studio or launch window only, never on an Output's. Zoom is
+ * Studio's setting (`studio-zoom.ts`), whichever window is focused, so only
+ * the Studio menu has it: the launch page stays at 100%. Actual Size says the
+ * zoom there is now, and is greyed out at 100%.
  */
 export function nativeMenuTemplate(options: NativeMenuOptions): Item[] {
-  const { platform, kind, page, local, startup, actions } = options;
+  const { platform, kind, page, local, startup, zoomLevel, actions } = options;
   const mac = platform === "darwin";
   const studio = kind === "studio";
 
@@ -176,20 +183,22 @@ export function nativeMenuTemplate(options: NativeMenuOptions): Item[] {
       { role: "selectAll" },
     ],
   );
-  const zoomIn = (window: BaseWindow | undefined): void =>
-    actions.zoom(window, "in");
-  const view: Item[] = [
+  const zoom: Item[] = [
     {
       id: "view:actual-size",
-      label: "Actual Size",
+      label:
+        zoomLevel === 0
+          ? "Actual Size"
+          : `Actual Size (Now ${String(zoomPercent(zoomLevel))}%)`,
+      enabled: zoomLevel !== 0,
       accelerator: "CommandOrControl+0",
-      click: (_item, window) => actions.zoom(window, "reset"),
+      click: () => actions.zoom("reset"),
     },
     {
       id: "view:zoom-in",
       label: "Zoom In",
       accelerator: "CommandOrControl+Plus",
-      click: (_item, window) => zoomIn(window),
+      click: () => actions.zoom("in"),
     },
     // Ctrl+Plus is Ctrl+Shift+= on most layouts; browsers also take the bare
     // Ctrl+=, so a hidden twin does.
@@ -197,17 +206,16 @@ export function nativeMenuTemplate(options: NativeMenuOptions): Item[] {
       label: "Zoom In",
       accelerator: "CommandOrControl+=",
       visible: false,
-      click: (_item, window) => zoomIn(window),
+      click: () => actions.zoom("in"),
     },
     {
       id: "view:zoom-out",
       label: "Zoom Out",
       accelerator: "CommandOrControl+-",
-      click: (_item, window) => actions.zoom(window, "out"),
+      click: () => actions.zoom("out"),
     },
-    separator,
-    { role: "togglefullscreen" },
   ];
+  const view = separated(studio ? zoom : [], [{ role: "togglefullscreen" }]);
   const help: Item[] = [
     ...(studio
       ? [

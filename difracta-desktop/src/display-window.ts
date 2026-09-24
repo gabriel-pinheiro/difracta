@@ -14,8 +14,8 @@ export function outputPageUrl(origin: string, output: string): string {
  * is what a Display Host opens when asked to show. It is an ordinary Output
  * page, so an Output Session like any other, in a window made for a
  * projector: no frame, full screen on the Display's bounds, above every other
- * window, never throttled, black until the page draws, no cursor, no menu
- * and no preload, so no bridge.
+ * window, never throttled, black until the page draws, no cursor, no zoom, no
+ * menu and no preload, so no bridge.
  *
  * It is shown without taking the keyboard, so that showing an Output does not
  * pull typing away from Studio. Esc is the one key it knows, and the way out
@@ -37,7 +37,12 @@ export function openDisplayWindow(options: {
     alwaysOnTop: true,
     skipTaskbar: true,
     backgroundColor: "#000000",
-    webPreferences: { ...pageSecurity, backgroundThrottling: false },
+    // A projector's page never zooms, whatever Studio's zoom is.
+    webPreferences: {
+      ...pageSecurity,
+      backgroundThrottling: false,
+      zoomMode: "disabled",
+    },
   });
   window.removeMenu();
   // Above full-screen windows and the desktop's own panels too.

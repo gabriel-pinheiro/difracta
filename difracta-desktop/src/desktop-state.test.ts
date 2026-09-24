@@ -75,6 +75,21 @@ describe("desktop state store", () => {
     });
   });
 
+  it("keeps Studio's zoom, read as a level Desktop uses", async () => {
+    const store = new DesktopStateStore(dir);
+    await store.update((state) => ({ ...state, zoomLevel: 1.5 }));
+    expect((await new DesktopStateStore(dir).read()).zoomLevel).toBe(1.5);
+    await writeFile(
+      path.join(dir, "desktop-state.json"),
+      JSON.stringify({ zoomLevel: 99, lastFile: "/shows/a.difracta" }),
+    );
+    expect(await new DesktopStateStore(dir).read()).toEqual({
+      lastFile: "/shows/a.difracta",
+      remembered: [],
+      zoomLevel: 5,
+    });
+  });
+
   it("notes the mode to resume, and remembers a runtime elsewhere", () => {
     const stage = {
       origin: "http://10.0.0.5:4800",

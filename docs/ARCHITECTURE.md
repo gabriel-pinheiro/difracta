@@ -942,24 +942,39 @@ the page's items, Connect to..., the Startup submenu with its two checkboxes
 page's Undo and Redo, which are the Installation's, then the cut, copy, paste
 and select-all roles; the `undo` and `redo` roles are left out beside them, and
 the keys still undo typing inside a text field. **View**: Actual Size, Zoom In
-(with a hidden `Ctrl+=` twin), Zoom Out, Toggle Full Screen. **Help**: Reload
-Studio, Toggle Developer Tools, and Show Runtime Log in local mode. Windows and
-Linux have no Window menu and no Close Window: closing the Studio window quits
-Desktop and stops the local runtime, too much for a casual Ctrl+W; Quit keeps
-its accelerator and goes through the questions above. macOS keeps its
-conventions (the application menu with Quit, Close Window in File, a Window
-menu). Items have stable ids (`page:save`, `desktop:connect-to`,
-`help:reload-studio`), which is how the e2e suite clicks them from the main
-process. A native menu cannot be edited once set, so it is built again when the
-page's model, the session, the Studio or launch window or a Startup checkbox
-changes, after `settings.desktop.menuRebuildDelayMs` so a burst makes one
-rebuild. The launch window has a smaller menu of its own (Quit, the text roles
-with undo and redo for its address field, zoom, Developer Tools). An Output
-window has none (`removeMenu`), and so none of the menu's shortcuts; F11 alone
-is handled in the window itself, since an Output has to go full screen. A
-Display window has none either, in a session without a Studio window too. On
-macOS, where one menu serves every window, zoom and Developer Tools act only
-when the focused window is Studio's or the launch page's.
+(with a hidden `Ctrl+=` twin), Zoom Out, Toggle Full Screen; the launch window's
+View has Toggle Full Screen alone. **Help**: Reload Studio, Toggle Developer
+Tools, and Show Runtime Log in local mode. Windows and Linux have no Window menu
+and no Close Window: closing the Studio window quits Desktop and stops the local
+runtime, too much for a casual Ctrl+W; Quit keeps its accelerator and goes
+through the questions above. macOS keeps its conventions (the application menu
+with Quit, Close Window in File, a Window menu). Items have stable ids
+(`page:save`, `desktop:connect-to`, `help:reload-studio`), which is how the e2e
+suite clicks them from the main process. A native menu cannot be edited once
+set, so it is built again when the page's model, the session, the Studio or
+launch window or a Startup checkbox changes, after
+`settings.desktop.menuRebuildDelayMs` so a burst makes one rebuild. The launch
+window has a smaller menu of its own (Quit, the text roles with undo and redo
+for its address field, Developer Tools). An Output window has none
+(`removeMenu`), and so none of the menu's shortcuts; F11 alone is handled in the
+window itself, since an Output has to go full screen. A Display window has none
+either, in a session without a Studio window too. On macOS, where one menu
+serves every window, Developer Tools acts only when the focused window is
+Studio's or the launch page's.
+
+Studio's zoom is one setting of Desktop's, not a page's. Zoom In and Zoom Out
+move half an Electron zoom level (the step of Electron's own zoom roles) between
+-3 and +5, about 58% to 249% (`zoom-levels.ts`), and Actual Size goes back to 0,
+100%. The level is kept in `desktop-state.json` as `zoomLevel` and put on every
+Studio window Desktop opens, on this computer's runtime or one elsewhere, and a
+change reaches every open one at once (`studio-zoom.ts`). Chromium keeps zoom
+per host and shares it between that host's pages, which would zoom a runtime's
+Output pages with its Studio and give a runtime elsewhere a level of its own, so
+a Studio window's zoom is its own (`zoomMode: "isolated"`) and an Output or
+Display window cannot zoom at all (`"disabled"`): a projector's page never
+zooms. The launch page stays at 100%. Actual Size says the zoom there is now
+("Actual Size (Now 120%)") and is greyed out at 100%; the zoom is one of the
+changes that rebuild the menu.
 
 The page's items show their shortcuts and do not act on them. Studio's key
 handler (`keyboard/shortcut-keys.tsx`) is the only handler of Ctrl+S, Ctrl+O,

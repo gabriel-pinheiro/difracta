@@ -51,6 +51,7 @@ function template(options: Partial<NativeMenuOptions> = {}): Item[] {
     page,
     local: true,
     startup: { startAtLogin: false, startWithoutStudio: false },
+    zoomLevel: 0,
     actions: actions(),
     ...options,
   });
@@ -269,8 +270,36 @@ describe("the native menu", () => {
       "paste",
       "selectAll",
     ]);
+    // The launch page stays at 100%: zoom is Studio's.
+    expect(shape(menus, "view")).toEqual(["togglefullscreen"]);
     expect(shape(menus, "help")).toEqual(["Toggle Developer Tools"]);
     expect(all(menus).some((item) => item.id?.startsWith("page:"))).toBe(false);
+  });
+
+  it("says Studio's zoom on Actual Size, greyed out at 100%, and zooms whatever is focused", () => {
+    const actualSize = (zoomLevel: number): Item | undefined =>
+      all(template({ zoomLevel })).find(
+        (item) => item.id === "view:actual-size",
+      );
+    expect(actualSize(0)).toMatchObject({
+      label: "Actual Size",
+      enabled: false,
+    });
+    expect(actualSize(2)).toMatchObject({
+      label: "Actual Size (Now 144%)",
+      enabled: true,
+    });
+
+    const given = actions();
+    const view = all(template({ actions: given, zoomLevel: 1 })).filter(
+      (item) => item.id?.startsWith("view:") === true || item.visible === false,
+    );
+    for (const item of view)
+      (item.click as unknown as (item: unknown, window: unknown) => void)(
+        undefined,
+        undefined,
+      );
+    expect(given.zoom.mock.calls).toEqual([["reset"], ["in"], ["in"], ["out"]]);
   });
 
   it("uses plain ASCII in its own labels", () => {

@@ -4,6 +4,7 @@ import { BrowserWindow, Menu, shell, type BaseWindow } from "electron";
 import { nativeMenuTemplate, type NativeMenuActions } from "./native-menu.ts";
 import { emptyPageMenu, type PageMenu } from "./page-menu.ts";
 import type { StartupSettings } from "./startup-settings.ts";
+import type { StudioZoom } from "./studio-zoom.ts";
 import {
   followMenuWindow,
   registerMenuBridge,
@@ -22,6 +23,8 @@ export interface ApplicationMenuOptions {
   readonly onConnectTo: () => void;
   /** File ▸ Startup's two checkboxes, and what changes them. */
   readonly startup: StartupSettings;
+  /** View's zoom items, and what they change: every Studio window's zoom. */
+  readonly zoom: StudioZoom;
 }
 
 /**
@@ -32,7 +35,7 @@ export interface ApplicationMenuOptions {
  * A native menu cannot be edited once set, so every change means a new one:
  * the page describing its items (`setMenu`, on every dirty flip), another
  * session, the Studio or the launch window coming or going, a checkbox of
- * File ▸ Startup. Changes arrive in bursts, so
+ * File ▸ Startup, Studio's zoom (Actual Size says the level). Changes arrive in bursts, so
  * the rebuild waits `settings.desktop.menuRebuildDelayMs` for the last.
  */
 export class ApplicationMenu {
@@ -45,6 +48,7 @@ export class ApplicationMenu {
   constructor(options: ApplicationMenuOptions) {
     this.#options = options;
     options.startup.onChange(() => this.#changed());
+    options.zoom.onChange(() => this.#changed());
     registerMenuBridge({
       studio: () => this.#studio,
       onMenu: (menu) => {
@@ -59,6 +63,8 @@ export class ApplicationMenu {
   setStudio(studio: MenuStudio | undefined): void {
     this.#studio = studio;
     this.#page = emptyPageMenu;
+    // Every Studio window, local or elsewhere, comes through here.
+    if (studio !== undefined) this.#options.zoom.follow(studio.window);
     if (studio !== undefined)
       followMenuWindow(studio.window, () => {
         if (this.#studio !== studio) return;
@@ -104,6 +110,7 @@ export class ApplicationMenu {
           page: this.#page,
           local: studio?.local ?? false,
           startup: this.#options.startup.choices,
+          zoomLevel: this.#options.zoom.level,
           actions: this.#actions,
         }),
       );
@@ -115,7 +122,7 @@ export class ApplicationMenu {
       } else if (window !== studio?.window) window.removeMenu();
   }
 
-  /** The focused window when it is one the View and Help items may act on: Studio or the launch page, never an Output or a Display window. */
+  /** The focused window when it is one Developer Tools may act on: Studio or the launch page, never an Output or a Display window. */
   #ownWindow(window: BaseWindow | undefined): BrowserWindow | undefined {
     return [this.#studio?.window, this.#launchWindow].find(
       (own) => own !== undefined && own === window && !own.isDestroyed(),
@@ -140,15 +147,7 @@ export class ApplicationMenu {
     setStartAtLogin: (on) => void this.#options.startup.setStartAtLogin(on),
     setStartWithoutStudio: (on) =>
       void this.#options.startup.setStartWithoutStudio(on),
-    zoom: (focused, change) => {
-      const contents = this.#ownWindow(focused)?.webContents;
-      if (contents === undefined) return;
-      // Half a level is the step of Electron's own zoom roles.
-      const step = change === "in" ? 0.5 : -0.5;
-      contents.setZoomLevel(
-        change === "reset" ? 0 : contents.getZoomLevel() + step,
-      );
-    },
+    zoom: (change) => this.#options.zoom.change(change),
     toggleDevTools: (focused) =>
       this.#ownWindow(focused)?.webContents.toggleDevTools(),
     reloadStudio: () => this.#studio?.window.webContents.reload(),

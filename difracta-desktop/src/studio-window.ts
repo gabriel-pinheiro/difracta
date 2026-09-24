@@ -49,8 +49,10 @@ function confine(contents: WebContents, origin: string): void {
  *
  * No menu either (`removeMenu`; on macOS the one menu belongs to the app, and
  * its items leave this window alone, see `native-menu.ts`). With the bar go
- * its shortcuts, so no key zooms, reloads or opens developer tools on a
- * projector. F11 is the one key kept, handled here because the menu that had
+ * its shortcuts, so no key reloads or opens developer tools on a projector.
+ * Nothing zooms it either (`zoomMode: "disabled"`): not Ctrl and the wheel,
+ * and not Studio's zoom, which Chromium would otherwise share with every page
+ * of the same host. F11 is the one key kept, handled here because the menu that had
  * it is gone: a window that cannot go full screen is no use on a projector.
  */
 function openPageWindow(url: string, origin: string): void {
@@ -58,7 +60,11 @@ function openPageWindow(url: string, origin: string): void {
     width: 1280,
     height: 720,
     backgroundColor: "#000000",
-    webPreferences: { ...pageSecurity, backgroundThrottling: false },
+    webPreferences: {
+      ...pageSecurity,
+      backgroundThrottling: false,
+      zoomMode: "disabled",
+    },
   });
   window.removeMenu();
   window.webContents.on("before-input-event", (event, input) => {
@@ -111,6 +117,9 @@ export function createStudioWindow(
       ...pageSecurity,
       preload: options.preload,
       additionalArguments: [`${BRIDGE_ORIGIN_ARGUMENT}${options.origin}`],
+      // Its zoom is its own (`studio-zoom.ts` sets it), not its host's, which
+      // Chromium would share with the Output pages of the same runtime.
+      zoomMode: "isolated",
     },
   });
   confine(window.webContents, options.origin);

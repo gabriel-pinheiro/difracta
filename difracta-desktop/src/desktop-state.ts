@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { DisplayMappingsSchema, type Placement } from "./display-mapping.ts";
 import { rememberRuntime } from "./remembered-runtimes.ts";
+import { zoomLevel } from "./zoom-levels.ts";
 
 const RememberedSchema = z.object({
   origin: z.string().min(1),
@@ -32,6 +33,12 @@ const StateSchema = z.object({
    * (`display-mapping.ts`); restored when that Installation is open.
    */
   displayMappings: DisplayMappingsSchema.optional(),
+  /**
+   * Studio's zoom in every Studio window, local or elsewhere, as an Electron
+   * zoom level (`zoom-levels.ts`); absent is 0, 100%. A level off the steps
+   * or past the limits is read as the nearest one Desktop uses.
+   */
+  zoomLevel: z.number().transform(zoomLevel).optional(),
 });
 
 export type DesktopState = z.infer<typeof StateSchema>;
