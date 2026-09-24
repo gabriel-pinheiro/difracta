@@ -1,7 +1,7 @@
 import type { Document } from "../document/document.ts";
 import { applyPatches, invertPatches, type Patch } from "../document/patch.ts";
 import { validatePatchedDocument } from "../document/validate.ts";
-import type { CommandDefinition } from "./command.ts";
+import type { CommandDefinition, MacroRun } from "./command.ts";
 import type { CommandRegistry } from "./registry.ts";
 
 export type ExecutionResult =
@@ -14,6 +14,8 @@ export type ExecutionResult =
       /** Trigger Addresses the command fired. */
       readonly events: readonly string[];
       readonly warnings: readonly string[];
+      /** Present when the command ran a Macro. */
+      readonly run?: MacroRun;
       readonly label: string;
       readonly coalesceKey: string | undefined;
     }
@@ -38,16 +40,18 @@ export function payloadIssues(error: {
 }
 
 /**
- * Validates a raw payload against the command's schema, runs the pure apply,
+ * Validates a raw payload against the command's schema, runs apply,
  * validates the touched entities, and returns the next Document with forward
- * and inverse patches. Used by the runtime; usable by clients for optimistic
- * application because everything here is pure.
+ * and inverse patches. Deterministic given `random`, which only a Macro
+ * run's picks and Chance rolls consult: the runtime passes `Math.random`,
+ * tests a seeded source.
  */
 export function executeCommand(
   registry: CommandRegistry,
   document: Document,
   name: string,
   rawPayload: unknown,
+  random: () => number = Math.random,
 ): ExecutionResult {
   const definition = registry.get(name);
   if (definition === undefined)
@@ -68,6 +72,7 @@ export function executeCommand(
     document,
     payload,
     catalog: registry.catalog,
+    random,
   });
   if (!outcome.ok) return outcome;
 
@@ -88,9 +93,13 @@ export function executeCommand(
     inverse: invertPatches(document, outcome.patches),
     events: outcome.events ?? [],
     warnings: outcome.warnings ?? [],
+    ...(outcome.run === undefined ? {} : { run: outcome.run }),
     label:
-      definition.label?.(payload, { document, catalog: registry.catalog }) ??
-      definition.name,
+      definition.label?.(payload, {
+        document,
+        catalog: registry.catalog,
+        random,
+      }) ?? definition.name,
     coalesceKey: definition.coalesceKey?.(payload),
   };
 }

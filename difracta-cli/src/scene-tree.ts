@@ -218,9 +218,19 @@ export function describeController(controller: Controller): string {
   }
 }
 
+/** A Macro with its action count and, in a Run Mode other than All, the mode: "runs one", "runs some 3", "runs in sequence". */
 export function describeMacro(macro: Macro): string {
   const head = `“${macro.name}”  ${macro.id}`;
   if (macro.kind === "group") return `Group ${head}`;
   const count = macro.actions.length;
-  return `Macro ${head}  ${String(count)} ${count === 1 ? "action" : "actions"}`;
+  const actions = `${String(count)} ${count === 1 ? "action" : "actions"}`;
+  const mode =
+    macro.mode === "all"
+      ? ""
+      : macro.mode === "some"
+        ? `  runs some ${String(macro.count)}`
+        : macro.mode === "sequence"
+          ? "  runs in sequence"
+          : "  runs one";
+  return `Macro ${head}  ${actions}${mode}`;
 }

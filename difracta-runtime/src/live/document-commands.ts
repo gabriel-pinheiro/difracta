@@ -45,5 +45,6 @@ export function commandOutcome(result: SessionCommandResult): ReplyOutcome {
   if (result.label !== undefined) reply.label = result.label;
   if (result.warnings !== undefined) reply.warnings = [...result.warnings];
   if (result.created !== undefined) reply.created = [...result.created];
+  if (result.run !== undefined) reply.run = result.run;
   return { ok: true, result: reply };
 }

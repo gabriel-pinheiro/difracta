@@ -2,28 +2,42 @@ import { z } from "zod";
 
 import { actionProblem } from "../address/fire.ts";
 import { accepted, defineCommand, rejected } from "../command/command.ts";
-import { AddressValueSchema, type MacroAction } from "../document/document.ts";
+import {
+  AddressValueSchema,
+  ChanceSchema,
+  type MacroAction,
+} from "../document/document.ts";
 
 /**
- * Changes one action's value, or switches it between set and toggle (a
- * switch Address can be set on, set off or toggled). Value edits coalesce
- * per action, so a slider drag undoes as one step.
+ * Changes one action's value, its Chance, or switches it between set and
+ * toggle (a switch Address can be set on, set off or toggled). A trigger
+ * action only has a Chance to change. Value edits coalesce per action, and
+ * Chance edits separately, so a slider drag undoes as one step.
  */
 export const macroActionUpdate = defineCommand({
   name: "macro.action.update",
   kind: "authoring",
-  description: "Change a Macro action's value, or its kind.",
+  description:
+    "Change a Macro action's value, its kind, or its chance (0 to 1; null for always).",
   payload: z
     .object({
       macroId: z.string().min(1),
       actionId: z.string().min(1),
       kind: z.enum(["set", "toggle"]).optional(),
       value: AddressValueSchema.optional(),
+      chance: ChanceSchema.nullable().optional(),
     })
     .strict(),
-  label: () => "Change Action",
-  coalesceKey: ({ actionId, kind }) =>
-    kind === undefined ? `macro.action.update:${actionId}` : undefined,
+  label: ({ chance, kind, value }) =>
+    chance !== undefined && kind === undefined && value === undefined
+      ? "Change Chance"
+      : "Change Action",
+  coalesceKey: ({ actionId, kind, value, chance }) => {
+    if (kind !== undefined) return undefined;
+    if (chance !== undefined && value === undefined)
+      return `macro.action.update:${actionId}:chance`;
+    return `macro.action.update:${actionId}`;
+  },
   apply({ document, catalog, payload }) {
     const macro = document.macros[payload.macroId];
     if (macro?.kind !== "macro")
@@ -34,16 +48,26 @@ export const macroActionUpdate = defineCommand({
     const current = macro.actions[index];
     if (current === undefined)
       return rejected(`Action “${payload.actionId}” is not in the Macro.`);
-    if (current.kind === "trigger")
-      return rejected("A trigger action has nothing to change.");
-    const kind = payload.kind ?? current.kind;
+    const chance =
+      payload.chance === undefined ? current.chance : payload.chance;
+    const base = {
+      id: current.id,
+      address: current.address,
+      ...(chance === null || chance === undefined ? {} : { chance }),
+    };
     let next: MacroAction;
-    if (kind === "toggle")
-      next = { id: current.id, kind, address: current.address };
-    else {
-      const value =
-        payload.value ?? (current.kind === "set" ? current.value : true);
-      next = { id: current.id, kind, address: current.address, value };
+    if (current.kind === "trigger") {
+      if (payload.kind !== undefined || payload.value !== undefined)
+        return rejected("A trigger action has only its chance to change.");
+      next = { ...base, kind: "trigger" };
+    } else {
+      const kind = payload.kind ?? current.kind;
+      if (kind === "toggle") next = { ...base, kind };
+      else {
+        const value =
+          payload.value ?? (current.kind === "set" ? current.value : true);
+        next = { ...base, kind, value };
+      }
     }
     const problem = actionProblem(document, catalog, next);
     if (problem !== undefined && !problem.includes("is controlled by"))

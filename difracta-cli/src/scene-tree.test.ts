@@ -222,4 +222,18 @@ describe("treeNodes", () => {
       "  Macro “Hit”  hit  1 action",
     ]);
   });
+
+  it("names a Macro's Run Mode when it is not All", () => {
+    const hit = stage().macros.hit;
+    if (hit?.kind !== "macro") throw new Error("Expected the Hit Macro.");
+    expect(describeMacro({ ...hit, mode: "one" })).toBe(
+      "Macro “Hit”  hit  1 action  runs one",
+    );
+    expect(describeMacro({ ...hit, mode: "some", count: 3 })).toBe(
+      "Macro “Hit”  hit  1 action  runs some 3",
+    );
+    expect(describeMacro({ ...hit, mode: "sequence" })).toBe(
+      "Macro “Hit”  hit  1 action  runs in sequence",
+    );
+  });
 });

@@ -4,19 +4,37 @@ import { resolveAddress } from "../address/address.ts";
 import { unknownAddress } from "../address/unknown.ts";
 import { actionProblem } from "../address/fire.ts";
 import { accepted, defineCommand, rejected } from "../command/command.ts";
-import { AddressValueSchema, type MacroAction } from "../document/document.ts";
+import {
+  AddressValueSchema,
+  ChanceSchema,
+  type MacroAction,
+} from "../document/document.ts";
 import { generateId } from "../ids.ts";
 
+/** An action as a command receives it: without its id; `chance` absent means always. */
 const ActionInput = z.discriminatedUnion("kind", [
   z
     .object({
       kind: z.literal("set"),
       address: z.string().min(1),
       value: AddressValueSchema,
+      chance: ChanceSchema.optional(),
     })
     .strict(),
-  z.object({ kind: z.literal("toggle"), address: z.string().min(1) }).strict(),
-  z.object({ kind: z.literal("trigger"), address: z.string().min(1) }).strict(),
+  z
+    .object({
+      kind: z.literal("toggle"),
+      address: z.string().min(1),
+      chance: ChanceSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("trigger"),
+      address: z.string().min(1),
+      chance: ChanceSchema.optional(),
+    })
+    .strict(),
 ]);
 
 /**
@@ -24,13 +42,14 @@ const ActionInput = z.discriminatedUnion("kind", [
  * number at once, so a picker that captured fifteen opacities is one
  * command and one undo step. Each action must resolve and fit its Address
  * now; a Link on the Address is not refused, since the Macro may run after
- * the Link goes, and the inspector marks it meanwhile.
+ * the Link goes, and the inspector marks it meanwhile. An action's Chance
+ * is optional and 0 to 1.
  */
 export const macroActionsAdd = defineCommand({
   name: "macro.actions.add",
   kind: "authoring",
   description:
-    "Add actions to a Macro: set an Address, toggle a switch or fire a trigger.",
+    "Add actions to a Macro: set an Address, toggle a switch or fire a trigger, each with an optional chance (0 to 1).",
   payload: z
     .object({
       macroId: z.string().min(1),

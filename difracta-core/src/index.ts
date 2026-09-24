@@ -23,5 +23,6 @@ export * from "./address/unknown.ts";
 export * from "./command/command.ts";
 export * from "./command/registry.ts";
 export * from "./command/execute.ts";
+export * from "./command/random.ts";
 export * from "./commands/index.ts";
 export * from "./history/history.ts";

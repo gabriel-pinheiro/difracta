@@ -246,10 +246,27 @@ frozen at the last effective value, when the Link goes.
 An Installation-owned, named, ordered list of actions run as one performance
 step from its trigger Address `macro/<id>/run`. Each action sets an Address,
 toggles a switch Address, or fires a trigger Address: a Layer's Cue, a Scene's
-play, another Macro's run. Actions run in order, each seeing the effects of the
-ones before, best-effort: an action that cannot run is skipped and reported, the
-rest run. A Macro runs at most once per firing, however many Macros run it.
-Macros are arranged in Groups like Controllers. Macro is not a synonym for Cue.
+play, another Macro's run. A run performs the actions its Run Mode picks, in
+list order, each seeing the effects of the ones before, best-effort: an action
+that cannot run is skipped and reported, the rest run. Each action may have a
+Chance. A Macro runs at most once per firing, however many Macros run it. Macros
+are arranged in Groups like Controllers. Macro is not a synonym for Cue.
+
+### Run Mode
+
+How a Macro's run chooses among its actions. All runs every action; One runs one
+picked at random; Some runs a count of them picked at random; Sequence runs the
+next action in list order each time and starts over after the last. A Sequence's
+position is show state, kept while the Installation is open and never saved, so
+it starts at the top when the Installation opens. Picking is not a synonym for
+skipping: an action a run did not pick is not reported.
+
+### Chance
+
+The probability, from 0 to 1 and shown as a percent, that an action fires once
+its Macro's Run Mode picked it. An action without a Chance always fires. An
+action that loses its roll does nothing, silently; in a Sequence the position
+still moves on. Chance is per action; there is no Chance on a Macro.
 
 ### Macro Group
 

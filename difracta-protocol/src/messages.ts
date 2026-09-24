@@ -176,6 +176,14 @@ export const CommandResultSchema = z
     warnings: z.array(z.string()).optional(),
     /** Entities the command created, derived from its patches; empty is omitted. */
     created: z.array(CreatedEntitySchema).optional(),
+    /** After a Macro run: how many actions its Run Mode picked, and how many passed their Chance. */
+    run: z
+      .object({
+        picked: z.number().int().nonnegative(),
+        fired: z.number().int().nonnegative(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 export type CommandResult = z.infer<typeof CommandResultSchema>;

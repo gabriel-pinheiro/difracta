@@ -14,8 +14,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Control } from "@/inspector/fields/address-row";
+import { cn } from "@/lib/utils";
 import { useLatestWins } from "@/lib/use-latest-wins";
 
+import { ChanceReadout } from "./chance-readout";
 import { actionIcons } from "./macro-icons";
 
 const BOOLEAN_KINDS = [
@@ -24,25 +26,31 @@ const BOOLEAN_KINDS = [
 ] as const;
 
 /**
- * One action of a Macro: what it does to which Address, the value it sets
- * with the same control the Address has in its own inspector, and why it
- * would be skipped, if it would. A switch Address chooses between Set and
- * Toggle. The grip at the left is where a drag starts.
+ * One action of a Macro: what it does to which Address, its Chance, the
+ * value it sets with the same control the Address has in its own
+ * inspector, and why it would be skipped, if it would. A switch Address
+ * chooses between Set and Toggle. In Sequence the action the next run
+ * fires is marked. The grip at the left is where a drag starts.
  */
 export function ActionRow({
   action,
   resolved,
   problem,
+  next,
   onValue,
   onKind,
+  onChance,
   onRemove,
 }: {
   readonly action: MacroAction;
   /** Undefined when the target no longer exists. */
   readonly resolved: ResolvedAddress | undefined;
   readonly problem: string | undefined;
+  /** True for the action a Sequence fires next. */
+  readonly next: boolean;
   readonly onValue: (value: AddressValue) => Promise<unknown>;
   readonly onKind: (kind: "set" | "toggle") => void;
+  readonly onChance: (chance: number | null) => void;
   readonly onRemove: () => void;
 }) {
   const send = useLatestWins(onValue);
@@ -53,8 +61,12 @@ export function ActionRow({
       : `${resolved.owner === undefined ? "" : `${resolved.owner} · `}${resolved.label}`;
   return (
     <div
-      className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-1.5 rounded-sm py-1 pr-0.5"
+      className={cn(
+        "grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-1.5 rounded-sm py-1 pr-0.5",
+        next && "bg-accent/40",
+      )}
       data-testid="macro-action"
+      data-next={next ? "true" : undefined}
     >
       <span
         data-drag-handle
@@ -69,7 +81,18 @@ export function ActionRow({
           title={`${action.kind} ${action.address}`}
         >
           <Icon className="size-3 shrink-0 text-muted-foreground" />
-          <span className="line-clamp-2 min-w-0 wrap-anywhere">{target}</span>
+          <span className="line-clamp-2 min-w-0 flex-1 wrap-anywhere">
+            {target}
+          </span>
+          {next && (
+            <span
+              className="shrink-0 rounded-sm bg-primary/20 px-1 text-[0.625rem] font-medium text-primary"
+              title="The next run fires this action"
+            >
+              Next
+            </span>
+          )}
+          <ChanceReadout chance={action.chance} onChance={onChance} />
         </div>
         {action.kind !== "trigger" && resolved !== undefined && (
           <div className="flex min-w-0 items-center gap-1.5">

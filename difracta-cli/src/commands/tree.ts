@@ -120,7 +120,9 @@ export function registerTree(program: Command, cli: Cli): void {
 
   program
     .command("macros")
-    .description("List the Macros in their Groups, with their action counts.")
+    .description(
+      "List the Macros in their Groups, with their action counts and, when not All, their Run Mode.",
+    )
     .action(() =>
       cli.withDocument(async (client, summary) => {
         const { document } = await cli.replica(client, summary.id);

@@ -1,5 +1,5 @@
 import { CommandError } from "@difracta/client";
-import { linkAt } from "@difracta/core";
+import { linkAt, type RunMode } from "@difracta/core";
 import type { CommandResult } from "@difracta/protocol";
 import type { Command } from "commander";
 
@@ -16,15 +16,38 @@ export interface TriggerOutcome {
   readonly ok: boolean;
   /** How many actions the Macro holds, when the Address is a Macro's run. */
   readonly actions?: number;
+  /** The Macro's Run Mode, when it is not All. */
+  readonly mode?: RunMode;
+  /** How many actions the Run Mode picked, when it is not All. */
+  readonly picked?: number;
+  /** How many picked actions passed their Chance, when the Run Mode is not All. */
+  readonly fired?: number;
   readonly warnings: readonly string[];
   readonly error?: string;
 }
 
-/** "(5 actions, 1 skipped)" after a Macro run; nothing for a Cue or a Scene. */
-function firedDetail(outcome: TriggerOutcome): string {
+/**
+ * "(5 actions, 1 skipped)" after a Macro run in All; with another Run
+ * Mode, "(12 actions, some 3: 3 picked, 2 fired, 1 skipped)". Nothing for
+ * a Cue or a Scene.
+ */
+export function firedDetail(outcome: TriggerOutcome): string {
   if (outcome.actions === undefined) return "";
   const skipped = outcome.warnings.length;
-  return ` (${String(outcome.actions)} ${outcome.actions === 1 ? "action" : "actions"}${skipped === 0 ? "" : `, ${String(skipped)} skipped`})`;
+  const parts = [
+    `${String(outcome.actions)} ${outcome.actions === 1 ? "action" : "actions"}`,
+  ];
+  if (outcome.mode !== undefined && outcome.mode !== "all") {
+    const mode =
+      outcome.mode === "some"
+        ? `some ${String(outcome.picked ?? 0)}`
+        : outcome.mode;
+    parts.push(
+      `${mode}: ${String(outcome.picked ?? 0)} picked, ${String(outcome.fired ?? 0)} fired`,
+    );
+  }
+  if (skipped > 0) parts.push(`${String(skipped)} skipped`);
+  return ` (${parts.join(", ")})`;
 }
 
 export function registerAddress(program: Command, cli: Cli): void {
@@ -137,7 +160,7 @@ export function registerAddress(program: Command, cli: Cli): void {
   program
     .command("trigger <address...>")
     .description(
-      "Fire trigger Addresses, one command each: layer/<id|name>/cue/<key>, scene/<id|name>/play or macro/<id|name>/run. A Macro run says how many actions it holds and lists what it skipped; a refused Address fails the exit code. `addresses` lists every trigger.",
+      "Fire trigger Addresses, one command each: layer/<id|name>/cue/<key>, scene/<id|name>/play or macro/<id|name>/run. A Macro run says how many actions it holds, in a Run Mode other than All how many it picked and how many passed their Chance, and lists what it skipped; a refused Address fails the exit code. `addresses` lists every trigger.",
     )
     .action((addresses: string[]) =>
       cli.withDocument(async (client, summary) => {
@@ -159,6 +182,13 @@ export function registerAddress(program: Command, cli: Cli): void {
               ok: true,
               ...(macro?.kind === "macro"
                 ? { actions: macro.actions.length }
+                : {}),
+              ...(macro?.kind === "macro" && macro.mode !== "all"
+                ? {
+                    mode: macro.mode,
+                    picked: result.run?.picked ?? 0,
+                    fired: result.run?.fired ?? 0,
+                  }
                 : {}),
               warnings: result.warnings ?? [],
             });

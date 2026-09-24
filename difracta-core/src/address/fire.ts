@@ -1,5 +1,10 @@
 import type { Catalog } from "../catalog/catalog.ts";
-import type { Document, MacroAction } from "../document/document.ts";
+import type { MacroRun } from "../command/command.ts";
+import type {
+  Document,
+  MacroAction,
+  RunnableMacro,
+} from "../document/document.ts";
 import { applyPatches, type Patch } from "../document/patch.ts";
 import { addressValueProblem, resolveAddress } from "./address.ts";
 import { linkAt } from "./links.ts";
@@ -12,75 +17,89 @@ export interface Fired {
   readonly events: readonly string[];
   /** One line per skipped Macro action: which Macro, which action, why. */
   readonly warnings: readonly string[];
+  /** The count of the Macro run, when the Address was a Macro's run. */
+  readonly run?: MacroRun;
 }
 
 export type FireOutcome =
   | ({ readonly ok: true } & Fired)
   | { readonly ok: false; readonly error: string };
 
+const NOTHING: Fired = { patches: [], events: [], warnings: [] };
+
 /**
  * Firing a trigger Address. A Layer's Cue is an event for the Outputs; a
- * Scene's play cuts the Outputs to it; a Macro's run performs its actions
- * in order, each against the document as the previous ones left it, and
- * best-effort: an action that cannot run (its target gone, its Address
- * driven by a Controller) is skipped with a warning and the rest go on.
- * Every Macro runs at most once per firing, so Macros may run Macros
- * without a loop.
+ * Scene's play cuts the Outputs to it; a Macro's run performs the actions
+ * its Run Mode picks, in list order, each against the document as the
+ * previous ones left it, and best-effort: an action that cannot run (its
+ * target gone, its Address driven by a Controller) is skipped with a
+ * warning and the rest go on. `random` decides the picks and the Chance
+ * rolls. Every Macro runs at most once per firing, so Macros may run
+ * Macros without a loop.
  */
 export function fireAddress(
   document: Document,
   catalog: Catalog,
   address: string,
+  random: () => number,
 ): FireOutcome {
   const resolved = resolveAddress(document, address, catalog);
   if (resolved === undefined)
     return { ok: false, error: unknownAddress(document, address, catalog) };
   if (resolved.type !== "trigger")
     return { ok: false, error: `Address “${address}” is not a trigger.` };
-  return { ok: true, ...fireResolved(document, catalog, address, new Set()) };
+  const firing: Firing = { catalog, random, ran: new Set() };
+  return { ok: true, ...fireResolved(document, address, firing) };
+}
+
+/** What one firing carries down through the Macros it runs. */
+interface Firing {
+  readonly catalog: Catalog;
+  readonly random: () => number;
+  /** Macros that ran during this firing, so none runs twice. */
+  readonly ran: Set<string>;
 }
 
 function fireResolved(
   document: Document,
-  catalog: Catalog,
   address: string,
-  ran: Set<string>,
+  firing: Firing,
 ): Fired {
   const [kind, id = ""] = address.split("/");
   if (kind === "scene")
     return {
+      ...NOTHING,
       patches:
         document.installation.activeScene === id
           ? []
           : [{ op: "set", path: ["installation", "activeScene"], value: id }],
-      events: [],
-      warnings: [],
     };
-  if (kind === "macro") return runMacro(document, catalog, id, ran);
-  return { patches: [], events: [address], warnings: [] };
+  if (kind === "macro") return runMacro(document, id, firing);
+  return { ...NOTHING, events: [address] };
 }
 
-function runMacro(
-  document: Document,
-  catalog: Catalog,
-  macroId: string,
-  ran: Set<string>,
-): Fired {
+function runMacro(document: Document, macroId: string, firing: Firing): Fired {
   const macro = document.macros[macroId];
-  if (macro?.kind !== "macro") return { patches: [], events: [], warnings: [] };
-  if (ran.has(macroId))
+  if (macro?.kind !== "macro") return NOTHING;
+  if (firing.ran.has(macroId))
     return {
-      patches: [],
-      events: [],
+      ...NOTHING,
       warnings: [`${macro.name}: already ran during this run.`],
     };
-  ran.add(macroId);
-  const patches: Patch[] = [];
+  firing.ran.add(macroId);
+  const picked = pickActions(document, macro, firing.random);
+  const patches: Patch[] = [...picked.patches];
   const events: string[] = [];
   const warnings: string[] = [];
-  let working = document;
-  for (const action of macro.actions) {
-    const outcome = performAction(working, catalog, action, ran);
+  let fired = 0;
+  let working = applyPatches(document, picked.patches);
+  for (const index of picked.indices) {
+    const action = macro.actions[index];
+    if (action === undefined) continue;
+    if (action.chance !== undefined && firing.random() >= action.chance)
+      continue;
+    fired += 1;
+    const outcome = performAction(working, action, firing);
     if (typeof outcome === "string") {
       warnings.push(`${macro.name}: ${outcome}`);
       continue;
@@ -90,16 +109,72 @@ function runMacro(
     warnings.push(...outcome.warnings);
     working = applyPatches(working, outcome.patches);
   }
-  return { patches, events, warnings };
+  return {
+    patches,
+    events,
+    warnings,
+    run: { picked: picked.indices.length, fired },
+  };
+}
+
+/**
+ * The indices of the actions a run performs, ascending so they run in list
+ * order whatever the mode drew, and the patches the mode itself makes: a
+ * Sequence moves its position on. The position is read modulo the action
+ * count, so a list edited since still lands on an action.
+ */
+function pickActions(
+  document: Document,
+  macro: RunnableMacro,
+  random: () => number,
+): { readonly indices: readonly number[]; readonly patches: readonly Patch[] } {
+  const total = macro.actions.length;
+  if (total === 0) return { indices: [], patches: [] };
+  switch (macro.mode) {
+    case "all":
+      return { indices: macro.actions.map((_, index) => index), patches: [] };
+    case "one":
+      return { indices: [Math.floor(random() * total)], patches: [] };
+    case "some":
+      return { indices: sample(total, macro.count, random), patches: [] };
+    case "sequence": {
+      const index = (document.operational.sequence[macro.id] ?? 0) % total;
+      return {
+        indices: [index],
+        patches: [
+          {
+            op: "set",
+            path: ["operational", "sequence", macro.id],
+            value: (index + 1) % total,
+          },
+        ],
+      };
+    }
+  }
+}
+
+/** `count` distinct indices below `total` drawn at random, ascending; all of them when `count` is not smaller. */
+function sample(
+  total: number,
+  count: number,
+  random: () => number,
+): readonly number[] {
+  const indices = Array.from({ length: total }, (_, index) => index);
+  const drawn = Math.min(count, total);
+  for (let at = 0; at < drawn; at += 1) {
+    const swap = at + Math.floor(random() * (total - at));
+    [indices[at], indices[swap]] = [indices[swap] ?? 0, indices[at] ?? 0];
+  }
+  return indices.slice(0, drawn).sort((a, b) => a - b);
 }
 
 /** One action against `document`; a string says why it could not run. */
 function performAction(
   document: Document,
-  catalog: Catalog,
   action: MacroAction,
-  ran: Set<string>,
+  firing: Firing,
 ): Fired | string {
+  const { catalog } = firing;
   const resolved = resolveAddress(document, action.address, catalog);
   if (resolved === undefined) return `${action.address} no longer exists.`;
   const name = `${resolved.owner ?? ""} ${resolved.label}`.trim();
@@ -112,18 +187,18 @@ function performAction(
         action.value,
       );
       return written.ok
-        ? { patches: written.patches, events: [], warnings: [] }
+        ? { ...NOTHING, patches: written.patches }
         : written.error;
     }
     case "toggle": {
       const written = toggleAddress(document, catalog, action.address);
       return written.ok
-        ? { patches: written.patches, events: [], warnings: [] }
+        ? { ...NOTHING, patches: written.patches }
         : written.error;
     }
     case "trigger":
       if (resolved.type !== "trigger") return `${name} is not a trigger.`;
-      return fireResolved(document, catalog, action.address, ran);
+      return fireResolved(document, action.address, firing);
   }
 }
 

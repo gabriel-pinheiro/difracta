@@ -27,9 +27,9 @@ describe("formatSchema", () => {
     expect(lines[0]).toBe("macroId*  string");
     expect(lines[1]).toBe("actions*  object[]");
     expect(lines.slice(2, 5)).toEqual([
-      '  · kind*: "set"  address*: string  value*: number | boolean | string | [r, g, b, a]',
-      '  · kind*: "toggle"  address*: string',
-      '  · kind*: "trigger"  address*: string',
+      '  · kind*: "set"  address*: string  value*: number | boolean | string | [r, g, b, a]  chance: number 0..1',
+      '  · kind*: "toggle"  address*: string  chance: number 0..1',
+      '  · kind*: "trigger"  address*: string  chance: number 0..1',
     ]);
     expect(fields("layer.update")).toContain("opacity  number 0..1");
     expect(fields("layer.visual")).toContain(

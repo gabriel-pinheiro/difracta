@@ -90,10 +90,14 @@ describe("unknown addresses", () => {
   });
 
   it("lists the Cues when a trigger names one the Visual does not declare", () => {
-    expect(error(fireAddress(document, catalog, "layer/k/cue/burst"))).toBe(
+    expect(
+      error(fireAddress(document, catalog, "layer/k/cue/burst", Math.random)),
+    ).toBe(
       "Unknown address “layer/k/cue/burst”: Koi Pond declares the Cues scatter. See `difracta catalog koi-pond`.",
     );
-    expect(error(fireAddress(document, catalog, "layer/q/cue/burst"))).toBe(
+    expect(
+      error(fireAddress(document, catalog, "layer/q/cue/burst", Math.random)),
+    ).toBe(
       "Unknown address “layer/q/cue/burst”: Still declares no Cues. See `difracta catalog still`.",
     );
   });
@@ -102,7 +106,9 @@ describe("unknown addresses", () => {
     expect(error(writeAddress(document, catalog, "layer/e/param/x", 1))).toBe(
       "Unknown address “layer/e/param/x”: Layer “Empty” has no Visual yet.",
     );
-    expect(error(fireAddress(document, catalog, "layer/g/cue/x"))).toBe(
+    expect(
+      error(fireAddress(document, catalog, "layer/g/cue/x", Math.random)),
+    ).toBe(
       "Unknown address “layer/g/cue/x”: Layer “Pack” is a Group; it has no Parameters or Cues.",
     );
   });
@@ -111,8 +117,8 @@ describe("unknown addresses", () => {
     expect(error(writeAddress(document, catalog, "layer/k/nope", 1))).toBe(
       "Unknown address “layer/k/nope”.",
     );
-    expect(error(fireAddress(document, catalog, "scene/zz/play"))).toBe(
-      "Unknown address “scene/zz/play”.",
-    );
+    expect(
+      error(fireAddress(document, catalog, "scene/zz/play", Math.random)),
+    ).toBe("Unknown address “scene/zz/play”.");
   });
 });

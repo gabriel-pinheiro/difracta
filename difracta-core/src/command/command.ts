@@ -6,8 +6,9 @@ import type { Patch } from "../document/patch.ts";
 
 /**
  * A Command is the only way a Document changes. One command lives in one file
- * with its payload schema, its pure `apply`, and its test. The registry turns
- * the same definition into the runtime handler and the CLI subcommand.
+ * with its payload schema, its `apply`, deterministic given its context, and
+ * its test. The registry turns the same definition into the runtime handler
+ * and the CLI subcommand.
  *
  * `authoring` commands enter undo history and mark the document dirty.
  * `performance` commands (Blackout, Controller moves, Cues) are live show
@@ -15,11 +16,19 @@ import type { Patch } from "../document/patch.ts";
  */
 export type CommandKind = "authoring" | "performance";
 
+/** The count of a Macro run: actions the Run Mode picked, and of those the ones that passed their Chance. */
+export interface MacroRun {
+  readonly picked: number;
+  readonly fired: number;
+}
+
 export interface CommandContext<TPayload> {
   readonly document: Document;
   readonly payload: TPayload;
   /** The Visuals and Filters this runtime knows, for commands that refer to them. */
   readonly catalog: Catalog;
+  /** A number in [0, 1) each call, for a Macro run's picks and Chance rolls; seeded in tests. */
+  readonly random: () => number;
 }
 
 export type CommandOutcome =
@@ -30,6 +39,8 @@ export type CommandOutcome =
       readonly events?: readonly string[];
       /** What a best-effort command could not do, one line each, for the caller to show. */
       readonly warnings?: readonly string[];
+      /** How a Macro run went: how many actions its Run Mode picked and how many passed their Chance. */
+      readonly run?: MacroRun;
     }
   | { readonly ok: false; readonly error: string };
 
@@ -67,11 +78,13 @@ export function accepted(
   patches: readonly Patch[],
   events?: readonly string[],
   warnings?: readonly string[],
+  run?: MacroRun,
 ): CommandOutcome {
   return {
     ok: true,
     patches,
     ...(events === undefined ? {} : { events }),
     ...(warnings === undefined ? {} : { warnings }),
+    ...(run === undefined ? {} : { run }),
   };
 }

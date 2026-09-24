@@ -31,6 +31,7 @@ import { macroActionUpdate } from "./macro.action.update.ts";
 import { macroActionsAdd } from "./macro.actions.add.ts";
 import { macroCreate } from "./macro.create.ts";
 import { macroDuplicate } from "./macro.duplicate.ts";
+import { macroModeSet } from "./macro.mode.set.ts";
 import { macroMove } from "./macro.move.ts";
 import { macroRemove } from "./macro.remove.ts";
 import { macroRename } from "./macro.rename.ts";
@@ -133,6 +134,7 @@ export const builtInCommands: readonly CommandDefinition<never>[] = [
   macroMove,
   macroUngroup,
   macroDuplicate,
+  macroModeSet,
   macroRemove,
   macroActionsAdd,
   macroActionUpdate,

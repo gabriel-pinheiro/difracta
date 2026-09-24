@@ -342,7 +342,7 @@ describe("DocumentStore", () => {
         controllers: {},
         links: {},
         macros: {},
-        operational: { blackout: true, calibration: null },
+        operational: { blackout: true, calibration: null, sequence: {} },
       }),
     );
     expect(round.ok && round.document.operational.blackout).toBe(false);

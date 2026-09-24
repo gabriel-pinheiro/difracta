@@ -72,8 +72,8 @@ Document
 │                                     filter: filter, parameters, mix
 ├── controllers { [id]: Controller }  kind, parentId, order; number: value 0..1; color: value
 ├── links { [id]: Link }              controllerId, address, anchors
-├── macros { [id]: Macro }            kind, parentId, order; macro: actions [set|toggle|trigger]
-└── operational { blackout, calibration }   replicated, never saved
+├── macros { [id]: Macro }            kind, parentId, order; macro: actions [set|toggle|trigger, chance?], mode, count
+└── operational { blackout, calibration, sequence }   replicated, never saved
 ```
 
 Entity names inside one table are unique, or, for child entities such as Masks,
@@ -270,15 +270,31 @@ way. Actions live inside the Macro as an array with their own ids; a Macro is a
 short list edited as a whole, not a table.
 
 Running is `address.trigger` on `macro/<id>/run`, the same path OSC or the CLI
-takes. The actions run in order against the document as the previous ones left
-it, so a later action sees an earlier one's effect, and best-effort: an action
-that cannot run (its target gone, its Address driven by a Controller) is
-skipped, the rest run, and the command's result carries one warning per skipped
-action, which Studio toasts and the CLI prints. One run is one commit, one
-revision, never undone, dirtying like any performance write. Every Macro runs at
-most once per firing, so Macros may run each other in any graph without a loop.
-`actionProblem` tells the inspector which actions would be skipped today, so a
-broken one is seen at rehearsal rather than heard at the show.
+takes. The Macro's Run Mode (`mode`, with `count` for Some) picks which actions
+the run performs: all of them, one at random, `count` distinct ones at random,
+or the next one in Sequence. The picked actions run in list order against the
+document as the previous ones left it, so a later action sees an earlier one's
+effect, and best-effort: an action that cannot run (its target gone, its Address
+driven by a Controller) is skipped, the rest run, and the command's result
+carries one warning per skipped action, which Studio toasts and the CLI prints.
+Each picked action then rolls its Chance (`chance`, 0 to 1, absent for always);
+a loser does nothing and says nothing. The result also carries `run`, how many
+actions were picked and how many passed their Chance, which the CLI prints for a
+mode other than All. One run is one commit, one revision, never undone, dirtying
+like any performance write. Every Macro runs at most once per firing, so Macros
+may run each other in any graph without a loop. `actionProblem` tells the
+inspector which actions would be skipped today, so a broken one is seen at
+rehearsal rather than heard at the show.
+
+A Sequence's position is `operational.sequence[macroId]`, the index of the
+action the next run fires: show state like Blackout, replicated to every client
+and never saved, so every Sequence starts at the top when the document opens.
+The run reads it modulo the action count and writes the next index, so a list
+edited since the last run still lands on an action, and a Macro removed leaves
+an entry nothing reads. Randomness comes from `random` in the command context:
+`executeCommand` takes a source, `Math.random` by default, so a test passes a
+seeded one and asserts what a run picked. Only the runtime executes commands,
+which is why a source in the context is enough.
 
 Adding actions takes any number of Addresses at once (`macro.actions.add`), each
 captured with what the Address holds now, so ticking fifteen opacities records
@@ -296,7 +312,14 @@ Pad; refusing the whole run because one Layer was deleted yesterday takes the
 performer's hit away. Skipping with a warning keeps the show going and tells the
 truth afterwards. **Why once per run rather than a depth limit:** a diamond (A
 runs B and C, both run D) should run D once, and a cycle should stop without
-counting; a visited set does both.
+counting; a visited set does both. **Why the mode picks before the Chance rolls,
+not after:** One with every action at 20% means one flash a fifth of the time,
+which is what a shimmer wants; rolling first and picking a survivor would make
+One always fire something, and a Sequence that re-rolled until an action passed
+would stall unpredictably. **Why Chance is per action only:** a Macro that fires
+the whole list a fraction of the time is a different thing, and the shimmer case
+(a Blink Cue on many Surfaces at 40% each) needs the per-action one; a
+Macro-wide value would be a second concept for the same effect.
 
 ### Catalog and Parameters
 
@@ -362,10 +385,12 @@ mid-alignment would otherwise leave a pattern on stage.
 
 ## Commands and patches
 
-Every change is a command: name, Zod payload schema, pure
-`apply({document, payload}) → patches | error`, and a kind. `executeCommand`
-validates the payload, runs apply, applies the patches, validates only the
-touched entities (`document/validate.ts`), and computes the inverse patches.
+Every change is a command: name, Zod payload schema,
+`apply({document, payload, catalog, random}) → patches | error`, deterministic
+given its context, and a kind. `executeCommand` validates the payload, runs
+apply, applies the patches, validates only the touched entities
+(`document/validate.ts`), and computes the inverse patches. `random` is the one
+source of chance, consulted only by a Macro run.
 
 - `authoring` commands enter undo history.
 - `performance` commands are show input: replicated, never undoable.
@@ -390,8 +415,9 @@ for any command, `documents` for the requests, and shortcuts for the everyday
 ones (`get`, `addresses`, `edit`, `set`, `catalog`, `undo`).
 
 **Why:** with one definition per command there is nothing central to edit when a
-feature is added, and the reducer is pure and shared, so any client can run it
-too if optimistic application is ever wanted.
+feature is added, and the reducer is shared and deterministic given its context,
+so any client could run it too if optimistic application is ever wanted, handing
+it the runtime's draws.
 
 ## Addresses
 
@@ -1475,14 +1501,16 @@ is linked shows a link glyph in place of its eye.
 
 The Macros section has the same shape, each Macro row with its action count and
 a Run button, and starts closed unless it is empty. The Macro inspector has the
-name, Run, and the actions in the order they run: each with its target, the
-value it sets edited with the same control the Address has in its own inspector,
-a Set or Toggle choice on switches, a grip to drag it elsewhere in the list, and
-the reason it would be skipped, if any. "Add action…" opens the same picker as
-Links, now over every Address in the Installation under its Scene, Controllers,
-Macros, Scenes and Installation headings; each pick becomes a set of the current
-value, or a trigger. A run that skipped anything shows a toast naming what and
-why.
+name, Run, the Run Mode with its count when Some, and the actions in the order
+they run: each with its target, its Chance as a percent readout clicked to type
+(100 clears it), the value it sets edited with the same control the Address has
+in its own inspector, a Set or Toggle choice on switches, a grip to drag it
+elsewhere in the list, the reason it would be skipped, if any, and in Sequence a
+Next mark on the action the next run fires. "Add action…" opens the same picker
+as Links, now over every Address in the Installation under its Scene,
+Controllers, Macros, Scenes and Installation headings; each pick becomes a set
+of the current value, or a trigger. A run that skipped anything shows a toast
+naming what and why.
 
 The Library is the picker for Visuals and Filters. It is bound to one Visual or
 Filter Layer and takes over the center column while open: a search box, three
