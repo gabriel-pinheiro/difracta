@@ -27,9 +27,9 @@ function visual(visualId: string | null, target: string | null): Layer {
 
 describe("layerWarning", () => {
   it("names the missing Visual before the missing Target", () => {
-    expect(layerWarning(visual(null, null))?.label).toBe("no Visual");
-    expect(layerWarning(visual("stars", null))?.label).toBe("no Target");
-    expect(layerWarning(visual(null, "wall"))?.label).toBe("no Visual");
+    expect(layerWarning(visual(null, null))?.label).toBe("No Visual");
+    expect(layerWarning(visual("stars", null))?.label).toBe("No Target");
+    expect(layerWarning(visual(null, "wall"))?.label).toBe("No Visual");
     expect(layerWarning(visual("stars", "wall"))).toBeUndefined();
   });
 
@@ -41,7 +41,7 @@ describe("layerWarning", () => {
       parameters: {},
       mix: 1,
     };
-    expect(layerWarning(filter)?.label).toBe("no Filter");
+    expect(layerWarning(filter)?.label).toBe("No Filter");
     expect(
       layerWarning({
         ...base,

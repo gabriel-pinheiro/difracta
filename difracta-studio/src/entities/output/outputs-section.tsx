@@ -154,7 +154,7 @@ function OutputRow({
       >
         {unassigned && (
           <NavigatorWarning
-            label="no Surface"
+            label="No Surface"
             explanation="Nothing renders on this Output until a Surface is assigned to it."
           />
         )}

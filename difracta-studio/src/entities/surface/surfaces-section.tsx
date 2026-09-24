@@ -115,7 +115,7 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
                     >
                       {output === undefined ? (
                         <NavigatorWarning
-                          label="no Output"
+                          label="No Output"
                           explanation="This Surface has no Output, so nothing projects it. Pick one in the inspector."
                         />
                       ) : (

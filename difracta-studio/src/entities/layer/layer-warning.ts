@@ -15,20 +15,20 @@ export function layerWarning(layer: Layer): LayerWarning | undefined {
   if (layer.kind === "visual") {
     if (layer.visual === null)
       return {
-        label: "no Visual",
+        label: "No Visual",
         explanation:
           "This Layer draws nothing until a Visual is picked from the Library.",
       };
     if (layer.target === null)
       return {
-        label: "no Target",
+        label: "No Target",
         explanation:
           "This Layer renders nowhere. Pick a Target in the inspector.",
       };
   }
   if (layer.kind === "filter" && layer.filter === null)
     return {
-      label: "no Filter",
+      label: "No Filter",
       explanation:
         "This Layer does nothing until a Filter is picked from the Library.",
     };
