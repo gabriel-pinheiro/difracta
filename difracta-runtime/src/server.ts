@@ -15,6 +15,7 @@ import {
 import { BonjourAnnouncer } from "./discovery/bonjour-announcer.ts";
 import { registerDocumentRoutes } from "./documents/document-routes.ts";
 import { DocumentStore } from "./documents/document-store.ts";
+import { registerMediaRoutes } from "./documents/media-routes.ts";
 import { LiveServer } from "./live/live-server.ts";
 import { OscServer } from "./osc/osc-server.ts";
 
@@ -23,6 +24,7 @@ export const RUNTIME_VERSION = "0.2.0";
 export interface Runtime {
   readonly app: FastifyInstance;
   readonly store: DocumentStore;
+  readonly live: LiveServer;
   listen(): Promise<string>;
   close(): Promise<void>;
 }
@@ -64,6 +66,7 @@ export async function buildRuntime(
     runtimeName: "Difracta Runtime",
     runtimeVersion: RUNTIME_VERSION,
     documents: config.documents,
+    mediaAnywhere: config.mediaAnywhere,
     log,
     osc,
   });
@@ -82,6 +85,9 @@ export async function buildRuntime(
     live.accept(socket, request.socket.remoteAddress);
   });
   registerDocumentRoutes(app, store);
+  registerMediaRoutes(app, store, {
+    allowOutsideShowFolder: config.mediaAnywhere,
+  });
 
   // Thumbnails of the Catalog, one per definition, for Studio's browser.
   await app.register(fastifyStatic, {
@@ -111,6 +117,7 @@ export async function buildRuntime(
   return {
     app,
     store,
+    live,
     async listen() {
       if (config.openPath !== undefined) {
         const opened =

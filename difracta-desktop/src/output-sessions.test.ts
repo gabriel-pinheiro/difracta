@@ -27,7 +27,12 @@ function live(...sessions: OutputSessionLive[]): LiveState {
   for (const entry of sessions)
     (outputs[entry.outputId] ??= { sessions: {} }).sessions[entry.sessionId] =
       entry;
-  return { osc: { port: null, listeners: 0 }, outputs, displayHosts: {} };
+  return {
+    osc: { port: null, listeners: 0 },
+    outputs,
+    displayHosts: {},
+    media: {},
+  };
 }
 
 describe("Output Sessions attached to the runtime", () => {

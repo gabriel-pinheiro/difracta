@@ -53,6 +53,7 @@ beforeEach(async () => {
     autosaveIntervalMs: 60_000,
     oscPort: undefined,
     discovery: false,
+    mediaAnywhere: false,
   });
   const address = await runtime.listen();
   url = `${address.replace("http", "ws")}/live`;
@@ -257,6 +258,7 @@ describe("live protocol", () => {
       osc: { port: null, listeners: 0 },
       outputs: {},
       displayHosts: {},
+      media: {},
     });
 
     // Removing the Output drops its sessions; closing the page drops the rest.

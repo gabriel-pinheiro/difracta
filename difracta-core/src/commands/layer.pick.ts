@@ -22,6 +22,7 @@ import { dropActions } from "../document/macros.ts";
 import type { FilterLayer, VisualLayer } from "../document/document.ts";
 import { childLayers, LAYER_LABELS } from "../document/layers.ts";
 import { uniqueName } from "../document/names.ts";
+import { mediaValueProblem } from "../document/media.ts";
 import { applyPatches, type Patch } from "../document/patch.ts";
 import { fitPaths } from "../document/paths.ts";
 
@@ -70,7 +71,9 @@ function pick(
       ? (values ?? {})
       : { ...defaultParameterValues(next.parameters), ...values };
   if (next !== undefined) {
-    const problem = validateParameterValues(next.parameters, parameters);
+    const problem =
+      validateParameterValues(next.parameters, parameters) ??
+      mediaValuesProblem(document, next, parameters);
     if (problem !== undefined)
       return rejected(`${problem} ${catalogHint(next.id)}`);
   } else if (Object.keys(parameters).length > 0) {
@@ -147,6 +150,24 @@ function pick(
       });
   }
   return accepted(patches);
+}
+
+/** A media Parameter's value must be an existing item of the kind it accepts; the schema alone cannot tell. */
+function mediaValuesProblem(
+  document: CommandContext<unknown>["document"],
+  definition: Definition,
+  values: ParameterValues,
+): string | undefined {
+  for (const [name, parameter] of Object.entries(definition.parameters)) {
+    if (parameter.kind !== "media") continue;
+    const problem = mediaValueProblem(
+      document,
+      parameter.accepts,
+      values[name],
+    );
+    if (problem !== undefined) return `Parameter “${name}” ${problem}.`;
+  }
+  return undefined;
 }
 
 export const layerVisual = defineCommand({

@@ -55,6 +55,7 @@ describe("reachable from the network", () => {
       autosaveIntervalMs: 60_000,
       oscPort: undefined,
       discovery: true,
+      mediaAnywhere: false,
     });
     const address = await runtime.listen();
     const health = (await (await fetch(`${address}/health`)).json()) as {

@@ -73,5 +73,7 @@ function describeParameter(parameter: ParameterDefinition): string {
       return `${parameter.label.padEnd(16)} choice   default ${parameter.default}  one of ${parameter.options.map((option) => option.value).join(", ")}${tail}`;
     case "boolean":
       return `${parameter.label.padEnd(16)} boolean  default ${String(parameter.default)}${tail}`;
+    case "media":
+      return `${parameter.label.padEnd(16)} media    default "" (none)  the id of ${parameter.accepts === "image" ? "an image" : "a video"} Media item (\`difracta media list\`)${tail}`;
   }
 }

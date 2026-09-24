@@ -15,6 +15,7 @@ export type LayerId = Id<"layer">;
 export type ControllerId = Id<"controller">;
 export type LinkId = Id<"link">;
 export type MacroId = Id<"macro">;
+export type MediaId = Id<"media">;
 export type SessionId = Id<"session">;
 export type DocumentId = Id<"document">;
 

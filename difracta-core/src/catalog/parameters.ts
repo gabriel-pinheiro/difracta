@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import type { MediaKind } from "../document/media.ts";
 import { settings } from "../settings.ts";
 
 /**
@@ -74,8 +75,23 @@ export interface BooleanParameter extends ParameterBase {
   readonly default: boolean;
 }
 
+/**
+ * A Media item to show, by id, or `""` for none; only items of the accepted
+ * kind fit. Its value is a reference into the Installation, so the
+ * Address is not linkable and removing the item clears the value.
+ */
+export interface MediaParameter extends ParameterBase {
+  readonly kind: "media";
+  readonly accepts: MediaKind;
+  readonly default: "";
+}
+
 export type ParameterDefinition =
-  NumberParameter | ColorParameter | ChoiceParameter | BooleanParameter;
+  | NumberParameter
+  | ColorParameter
+  | ChoiceParameter
+  | BooleanParameter
+  | MediaParameter;
 
 export type ParameterKind = ParameterDefinition["kind"];
 
@@ -136,6 +152,10 @@ export function validateParameterValue(
         : `must be one of ${definition.options.map((option) => option.value).join(", ")}`;
     case "boolean":
       return typeof value === "boolean" ? undefined : "must be true or false";
+    case "media":
+      return typeof value === "string"
+        ? undefined
+        : `must be the id of ${definition.accepts === "image" ? "an image" : "a video"} Media item, or "" for none`;
   }
 }
 

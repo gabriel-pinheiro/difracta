@@ -44,6 +44,17 @@ Working from a shell
              <display> <Output>" puts an Output on one, "displays hide <host>
              <display>" takes it off. Works from any machine.
 
+  Media      Images (png, jpg, jpeg, webp, gif, svg) and videos (mp4, webm,
+             mov) are Media items, files stored by a path relative to the
+             Installation file's folder. "media add <file> [--name N]" adds
+             one from a path on this machine (the Installation must be
+             saved; ".." paths are fine, and served only with the runtime's
+             --media-anywhere). "media list" shows each with its status:
+             ok, missing, outside, unsaved. A Visual's media Parameter takes
+             an item's id or name, or "" for none:
+             edit layer/Wall/param/media Logo. The runtime serves a file at
+             GET /media/<id>.
+
   Order      A create lands first in its Group (a Layer: on top). Pass
              "after": <sibling id|name> to place it below that sibling, or
              null for first; entity.move, layer.move and the others rearrange.

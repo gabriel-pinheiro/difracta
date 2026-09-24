@@ -8,6 +8,7 @@ export * from "./document/document.ts";
 export * from "./document/geometry.ts";
 export * from "./document/layers.ts";
 export * from "./document/macros.ts";
+export * from "./document/media.ts";
 export * from "./document/tree.ts";
 export * from "./document/names.ts";
 export * from "./document/order.ts";

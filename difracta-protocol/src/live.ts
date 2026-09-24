@@ -6,8 +6,8 @@ import { DisplayHostLiveSchema } from "./display-hosts.ts";
  * Live state: what is happening right now around a document, replicated to
  * subscribers that ask for it (`subscribe` with `live: true`) but never
  * written to the file, never in undo history, and never versioned by the
- * document revision. Today it holds the OSC door, the Output Sessions and the
- * connected Display Hosts.
+ * document revision. Today it holds the OSC door, the Output Sessions, the
+ * connected Display Hosts and whether each Media item's file is there.
  */
 const Count = z
   .object({
@@ -80,6 +80,19 @@ export const OscLiveSchema = z
   .strict();
 export type OscLive = z.infer<typeof OscLiveSchema>;
 
+export const MEDIA_STATUSES = ["ok", "missing", "outside", "unsaved"] as const;
+export type MediaStatus = (typeof MEDIA_STATUSES)[number];
+
+/**
+ * Whether a Media item's file can be served: `ok`, `missing` on disk,
+ * `outside` the Installation file's folder while the runtime refuses that,
+ * or `unsaved` because the Installation has no file yet, so nothing resolves.
+ */
+export const MediaLiveSchema = z
+  .object({ status: z.enum(MEDIA_STATUSES) })
+  .strict();
+export type MediaLive = z.infer<typeof MediaLiveSchema>;
+
 export const LiveStateSchema = z
   .object({
     osc: OscLiveSchema,
@@ -91,6 +104,8 @@ export const LiveStateSchema = z
     ),
     /** Connected Display Hosts by id; they belong to connections, not to the document. */
     displayHosts: z.record(z.string(), DisplayHostLiveSchema),
+    /** Each Media item of the open document by id, with whether its file is there. */
+    media: z.record(z.string(), MediaLiveSchema),
   })
   .strict();
 export type LiveState = z.infer<typeof LiveStateSchema>;
@@ -99,4 +114,5 @@ export const EMPTY_LIVE_STATE: LiveState = {
   osc: { port: null, listeners: 0 },
   outputs: {},
   displayHosts: {},
+  media: {},
 };

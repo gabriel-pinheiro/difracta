@@ -74,10 +74,10 @@ export function uniformName(name: string): string {
   return `u_${name}`;
 }
 
-/** The GLSL type a Parameter is handed to the fragment as. */
+/** The GLSL type a Parameter is handed to the fragment as; a media Parameter has no uniform of its own. */
 export function uniformType(
   definition: ParameterDefinition,
-): "float" | "vec4" | "int" | "bool" {
+): "float" | "vec4" | "int" | "bool" | undefined {
   switch (definition.kind) {
     case "number":
       return "float";
@@ -87,15 +87,19 @@ export function uniformType(
       return "int";
     case "boolean":
       return "bool";
+    case "media":
+      return undefined;
   }
 }
 
 export function parameterDeclarations(schema: ParameterSchema): string {
   return Object.entries(schema)
-    .map(
-      ([name, definition]) =>
-        `uniform ${uniformType(definition)} ${uniformName(name)};`,
-    )
+    .flatMap(([name, definition]) => {
+      const type = uniformType(definition);
+      return type === undefined
+        ? []
+        : [`uniform ${type} ${uniformName(name)};`];
+    })
     .join("\n");
 }
 

@@ -114,6 +114,7 @@ beforeEach(async () => {
     autosaveIntervalMs: 60_000,
     oscPort: undefined,
     discovery: false,
+    mediaAnywhere: false,
   });
   const address = await runtime.listen();
   url = `${address.replace("http", "ws")}/live`;

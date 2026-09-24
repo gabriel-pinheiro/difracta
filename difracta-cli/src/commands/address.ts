@@ -4,8 +4,13 @@ import type { CommandResult } from "@difracta/protocol";
 import type { Command } from "commander";
 
 import type { Cli } from "../cli.ts";
-import { parseValue } from "../connection.ts";
-import { inTypedTerms, resolveAddressNames, resolveId } from "../names.ts";
+import { fetchCatalog, parseValue } from "../connection.ts";
+import {
+  inTypedTerms,
+  resolveAddressNames,
+  resolveId,
+  resolveMediaValue,
+} from "../names.ts";
 import { formatWarnings } from "../result.ts";
 
 /** What one `trigger` Address came to: fired with what its Macro skipped, or refused. */
@@ -70,10 +75,21 @@ export function registerAddress(program: Command, cli: Cli): void {
         cli.withDocument(async (client, summary) => {
           const { document } = await cli.replica(client, summary.id);
           const resolved = resolveAddressNames(document, address);
+          const parsed = parseValue(value);
+          // Only a Parameter can take a Media item, so only then is the Catalog needed.
+          const written =
+            typeof parsed === "string" && resolved.includes("/param/")
+              ? resolveMediaValue(
+                  document,
+                  await fetchCatalog(client),
+                  resolved,
+                  parsed,
+                )
+              : parsed;
           const result = await client
             .command<CommandResult>(summary.id, command, {
               address: resolved,
-              value: parseValue(value),
+              value: written,
             })
             .catch((error: unknown) => {
               throw inTypedTerms(error, resolved, address);

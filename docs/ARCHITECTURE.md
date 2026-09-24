@@ -66,6 +66,7 @@ Document
 ├── surfaces { [id]: Surface }        output, mappings per Output
 ├── masks { [id]: Mask }              surfaceId, mode, points, feather
 ├── paths { [id]: Path }              surfaceId, points, closed
+├── media { [id]: Media }             name, path (relative to the file's folder)
 ├── scenes { [id]: Scene }            name, order
 ├── layers { [id]: Layer }            kind, sceneId, parentId, enabled, order, + per kind
 │                                     visual: visual, parameters, target, paths, opacity, blendMode
@@ -168,6 +169,38 @@ is a next step. **Why one order across two tables:** the navigator shows a
 Surface's Masks and Paths as one list, and an order the operator cannot arrange
 the way they read it is a small daily annoyance for no invariant gained; the
 Masks still apply in their own sequence among Masks.
+
+### Media
+
+A Media item is one image or video file the Installation shows: a name, unique
+in the table, and a `path` relative to the Installation file's folder, POSIX
+separators, `..` allowed. Its kind, image or video, is read from the extension
+(`settings.media` lists them; `document/media.ts` derives it) and never stored;
+a path with any other extension is refused. `media.create` names the item after
+its file unless told otherwise, `media.rename`, `media.path` and `media.remove`
+are the rest, all authoring, and `entity.move` orders them. The path helpers in
+`document/media.ts` are pure and run in the browser too: one relativizes an
+absolute path against the document's folder, which Desktop's picker and the CLI
+use, and one says whether a resolved path stays under that folder.
+
+A Visual refers to an item through a Parameter of kind `media`
+(`{ kind: "media", accepts: "image" | "video", default: "" }`), whose value is
+an item's id or `""` for none. Its Address is of type `media`: the options are
+none plus the items of the accepted kind, `address.set` and `address.edit`
+refuse anything else, a Macro `set` action swaps artwork, and a Link is refused.
+`layer.visual` checks the value the same way; `layer.reset` puts `""` back.
+`media.remove` clears every Parameter holding the item to `""`, as removing a
+Surface clears Targets, and drops the Macro actions that would set it;
+`media.path` does the same when the new extension changes the kind, since the
+Parameters that held it accept only the kind it was. The file on disk is never
+touched.
+
+**Why a table and a reference rather than a path on the Layer:** the same file
+is shown by several Layers and swapped by Macros; one entity gives it a name, a
+status and one place to change the path. **Why relative paths:** a show folder
+is copied to the stage machine or mounted into a container, and the file must
+still be found beside the Installation. **Why the kind is derived:** the
+extension already says it; storing it would be one more thing to keep in step.
 
 **Why a table rather than an array on the Surface:** Masks are selected,
 renamed, reordered and inspected like any entity, and the navigator and
@@ -350,14 +383,14 @@ ring shows displacements a checkerboard alone would hide. Every command's
 `apply` receives it, so `layer.visual` and `layer.filter` can refuse an unknown
 id and check values.
 
-A Parameter is declared once, in the definition, as one of four kinds: number
+A Parameter is declared once, in the definition, as one of five kinds: number
 (with min, max, step and unit), color (four components from 0 to 1), choice
-(named options) or boolean. Values live on the Layer in `parameters`, keyed by
-Parameter name; picking a definition writes its id and the defaults in one
-command, and a complete set of values can come along instead, which is how a
-pick is put back. A Layer whose id the Catalog no longer has keeps it: the
-inspector shows the id as unavailable and the Output draws nothing for that
-Layer.
+(named options), boolean or media (a Media item's id, of the accepted kind, or
+`""`; see Media). Values live on the Layer in `parameters`, keyed by Parameter
+name; picking a definition writes its id and the defaults in one command, and a
+complete set of values can come along instead, which is how a pick is put back.
+A Layer whose id the Catalog no longer has keeps it: the inspector shows the id
+as unavailable and the Output draws nothing for that Layer.
 
 **Why the Catalog is injected rather than imported by core:** the same commands
 run wherever the registry does, including a CLI with no Visuals at hand, and a
@@ -423,13 +456,13 @@ it the runtime's draws.
 
 An Address names a controllable property or trigger, such as
 `installation/blackout` or `layer/<id>/opacity`. `resolveAddress` maps it to a
-document path, a value type (boolean, number, color, choice or trigger), a
-default, and for numbers a range and for choices the options; `listAddresses`
-enumerates every reachable one. The entries today are Blackout, a Scene's
-`play`, a Macro's `run`, a Surface's `render-scale`, a Controller's `value`,
-and, per Layer, `enabled`, `opacity` and `blend` (Visual Layers), `mix` (Filter
-Layers), `param/<name>` for every Parameter of the Layer's definition and
-`cue/<key>` for every Cue it declares, typed from the Catalog. Controllers,
+document path, a value type (boolean, number, color, choice, media or trigger),
+a default, and for numbers a range and for choices and media the options;
+`listAddresses` enumerates every reachable one. The entries today are Blackout,
+a Scene's `play`, a Macro's `run`, a Surface's `render-scale`, a Controller's
+`value`, and, per Layer, `enabled`, `opacity` and `blend` (Visual Layers), `mix`
+(Filter Layers), `param/<name>` for every Parameter of the Layer's definition
+and `cue/<key>` for every Cue it declares, typed from the Catalog. Controllers,
 Macros, OSC and the CLI all read and write Addresses.
 
 Two commands write one: `address.edit` is the authoring write the inspector
@@ -474,10 +507,11 @@ they could not notice, so the runtime sends each of them a new `snapshot`.
 - `subscribe` with `live: true` adds the **live state** to the snapshot and
   sends `live` messages afterwards: patches relative to the live root, with no
   revision. Live state is what is happening right now around the document, today
-  the OSC door, the Output Sessions and the connected Display Hosts; it is never
-  saved, never undone, and never changes the document revision. Studio reads it
-  under the `live` path root (`["live", "outputs", id, "sessions"]`) with the
-  same subscriptions as the document. Output pages never ask for it.
+  the OSC door, the Output Sessions, the connected Display Hosts and the status
+  of each Media item's file; it is never saved, never undone, and never changes
+  the document revision. Studio reads it under the `live` path root
+  (`["live", "outputs", id, "sessions"]`) with the same subscriptions as the
+  document. Output pages never ask for it.
 - `attach` declares the connection an Output page showing one Output; the
   runtime keeps an **Output Session** per attached connection. `telemetry`
   reports frame interval, render work, resolution, pixel ratio and workload once
@@ -524,6 +558,23 @@ runs commands, and `runtime-requests.ts` validates a `request`, applies the
 pinned refusal and calls the request's handler. Handlers come by feature
 (`document-requests.ts`, `catalog-requests.ts`, `display-requests.ts`) and the
 table's type makes a request without a handler a compile error.
+
+### Media status
+
+`["live", "media", <id>]` holds `{ status }` for every Media item of the open
+document: `ok`, `missing` (no file at the resolved path), `outside` (the path
+leaves the Installation file's folder and the runtime does not allow that) or
+`unsaved` (the Installation has no path yet, so nothing resolves). The runtime
+(`live/media-status.ts`) stats every file when a document opens or is replaced,
+when it is saved to a new path and after any command that touches `media`, and
+replicates only the entries that changed; there is no file watcher, so a file
+that appears later is noticed at the next of those moments.
+`difracta media list` prints it beside each item.
+
+**Why stat on those moments and not watch:** the moments are when the answer can
+change from the document's side, which is what an operator asks about; a watcher
+would cost a handle per file across the show folder for a status that Studio
+shows and nothing acts on.
 
 ### Display Hosts
 
@@ -741,6 +792,26 @@ JSON and parsed twice, and a frame past the socket's limit closes the connection
 instead of answering an error, where HTTP answers 413. PUT, unlike a form POST,
 is preflighted by browsers when it comes from another origin, and the runtime
 answers no preflight, so a web page elsewhere cannot replace the show.
+
+A Media item's file travels the same way, by id: `GET /media/<id>` resolves the
+item's path against the open document's folder and streams the file
+(`documents/media-routes.ts`) with the content type from its extension,
+`Cache-Control: no-cache` and an ETag from size and modification time, so an
+Output page revalidates cheaply and sees a replaced file, and with Range
+requests honoured (206, `Content-Range`, 416), which video seeking needs. 404
+for an unknown id, a missing file or a document without a path; 403 when the
+resolved path leaves the folder, unless the runtime was started with
+`--media-anywhere` (or `DIFRACTA_MEDIA_ANYWHERE=1`), which turns
+`settings.media.allowOutsideShowFolder` on for that runtime alone: a machine
+setting, never in the file. In a container the show folder is mounted for the
+file already, so media beside it is reachable and `scp` puts files there.
+
+**Why by id and not by path:** the URL then says nothing about the runtime's
+disk, and renaming or moving the file is one `media.path` with every Output
+following. **Why the folder boundary:** the Installation names files, so a file
+anywhere on the machine would be one command away from any client; inside the
+show folder is what a show carries with it, and the flag is for the rig that
+keeps its footage elsewhere.
 
 Save is explicit and atomic: the content is written to a sibling temporary file,
 flushed to disk, then renamed over the target, so a crash leaves either the old
@@ -1180,11 +1251,12 @@ attaches the packages to the tag's GitHub Release.
 
 `difracta-core/src/settings.ts` holds every tunable in one object: history
 coalesce window and limit, autosave delay, default host, port and document mode,
-the discovery service and its delays, how long a Display Host gets to answer,
-client reconnect backoff, CLI connect timeout, Desktop's waits for its runtime
-to start and stop and for a runtime elsewhere to answer, its window sizes and
-how many runtimes it remembers. Packages import from there instead of carrying
-their own literals.
+the Media extensions and whether files outside the show folder are served, the
+discovery service and its delays, how long a Display Host gets to answer, client
+reconnect backoff, CLI connect timeout, Desktop's waits for its runtime to start
+and stop and for a runtime elsewhere to answer, its window sizes and how many
+runtimes it remembers. Packages import from there instead of carrying their own
+literals.
 
 ## Rendering
 

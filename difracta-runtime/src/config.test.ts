@@ -53,6 +53,21 @@ describe("runtime config", () => {
     ).toMatchObject({ oscPort: undefined, discovery: true });
   });
 
+  it("serves Media only under the show folder unless --media-anywhere or DIFRACTA_MEDIA_ANYWHERE=1", () => {
+    expect(configFromEnvironment(["show.difracta"], {}).mediaAnywhere).toBe(
+      false,
+    );
+    expect(
+      configFromEnvironment(["show.difracta", "--media-anywhere"], {})
+        .mediaAnywhere,
+    ).toBe(true);
+    expect(
+      configFromEnvironment(["show.difracta"], {
+        DIFRACTA_MEDIA_ANYWHERE: "1",
+      }).mediaAnywhere,
+    ).toBe(true);
+  });
+
   it("rejects an unknown mode and a second file", () => {
     expect(() => configFromEnvironment(["--documents", "open"], {})).toThrow(
       /pinned.*free/,

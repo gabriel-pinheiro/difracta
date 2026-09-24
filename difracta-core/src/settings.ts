@@ -17,6 +17,8 @@ export const settings = {
     documentPath: "/document",
     /** The largest `.difracta` file a PUT there may carry. */
     maxDocumentBytes: 64 * 1024 * 1024,
+    /** Where a Media item's file is served, by id: `GET /media/<id>`. */
+    mediaPath: "/media",
     /**
      * Document mode when `--documents` is not given. `pinned` keeps the file
      * the runtime was started with; `free` lets loopback clients create, open
@@ -61,6 +63,17 @@ export const settings = {
      * between steps.
      */
     stepTolerance: 1e-9,
+  },
+  media: {
+    /** File extensions a Media item may have; the kind is read from the extension, never stored. */
+    imageExtensions: ["png", "jpg", "jpeg", "webp", "gif", "svg"],
+    videoExtensions: ["mp4", "webm", "mov"],
+    /**
+     * Whether the runtime serves a Media file whose path leaves the
+     * Installation file's folder. Off, such an item is `outside` and its
+     * file is refused; `--media-anywhere` turns it on for one runtime.
+     */
+    allowOutsideShowFolder: false,
   },
   masks: {
     /** A new Mask is the Surface minus this fraction on each side. */

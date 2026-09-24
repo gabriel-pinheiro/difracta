@@ -1,4 +1,4 @@
-import type { Catalog, Patch } from "@difracta/core";
+import { settings, type Catalog, type Patch } from "@difracta/core";
 import {
   ClientMessageSchema,
   EMPTY_LIVE_STATE,
@@ -20,6 +20,7 @@ import { DisplayRequests } from "./display-requests.ts";
 import { commandOutcome, executeCommand } from "./document-commands.ts";
 import { documentRequests } from "./document-requests.ts";
 import { documentsModeFor } from "./documents-mode.ts";
+import { MediaStatuses } from "./media-status.ts";
 import { OutputPresence } from "./output-presence.ts";
 import { RuntimeRequests } from "./runtime-requests.ts";
 
@@ -37,6 +38,8 @@ export interface LiveServerOptions {
   readonly runtimeVersion: string;
   /** How the runtime was started; each connection's mode derives from it. */
   readonly documents: DocumentsMode;
+  /** Serve Media files from outside the Installation's folder; `settings.media.allowOutsideShowFolder` when absent. */
+  readonly mediaAnywhere?: boolean | undefined;
   readonly log: (message: string) => void;
   /** The OSC door's state, part of the live state Studio shows. */
   readonly osc?:
@@ -59,6 +62,7 @@ export class LiveServer {
   readonly #options: LiveServerOptions;
   readonly #presence = new OutputPresence();
   readonly #hosts = new DisplayHosts();
+  readonly #media: MediaStatuses;
   readonly #displayRequests: DisplayRequests;
   readonly #requests: RuntimeRequests;
   readonly #unsubscribe: readonly (() => void)[];
@@ -66,11 +70,17 @@ export class LiveServer {
 
   constructor(options: LiveServerOptions) {
     this.#options = options;
+    this.#media = new MediaStatuses({
+      allowOutsideShowFolder:
+        options.mediaAnywhere ?? settings.media.allowOutsideShowFolder,
+    });
     this.#attached = new AttachedSession({
       onEvent: (event) => this.#sessions.fanOutEvent(event),
       onDelta: (delta) => {
         this.#sessions.fanOutDelta(delta);
         this.#reconcilePresence();
+        if (delta.patches.some((patch) => patch.path[0] === "media"))
+          this.#refreshMedia();
       },
     });
     this.#displayRequests = new DisplayRequests({
@@ -89,6 +99,8 @@ export class LiveServer {
       options.store.onChange(() => {
         const swapped = this.#attached.follow(options.store.currentSession());
         this.#reconcilePresence();
+        // A document opened, replaced or saved to a new path resolves its Media anew.
+        this.#refreshMedia();
         this.#sessions.broadcast({
           type: "document",
           summary: options.store.current(),
@@ -97,11 +109,13 @@ export class LiveServer {
       }),
       this.#presence.onChange(fanOutLive),
       this.#hosts.onChange(fanOutLive),
+      this.#media.onChange(fanOutLive),
       options.osc?.onChange((state) =>
         fanOutLive([{ op: "set", path: ["osc"], value: state }]),
       ) ?? (() => undefined),
     ];
     this.#attached.follow(options.store.currentSession());
+    this.#refreshMedia();
   }
 
   /** The whole live state, for a snapshot. */
@@ -110,7 +124,17 @@ export class LiveServer {
       osc: this.#options.osc?.state() ?? EMPTY_LIVE_STATE.osc,
       ...this.#presence.state(),
       ...this.#hosts.state(),
+      ...this.#media.state(),
     };
+  }
+
+  /** Resolves once the Media statuses reflect the open document; the live patches go out meanwhile. */
+  mediaSettled(): Promise<void> {
+    return this.#media.refresh(this.#options.store.currentSession());
+  }
+
+  #refreshMedia(): void {
+    void this.#media.refresh(this.#options.store.currentSession());
   }
 
   close(): void {
@@ -119,6 +143,7 @@ export class LiveServer {
     this.#presence.close();
     this.#displayRequests.close();
     this.#hosts.close();
+    this.#media.close();
     this.#sessions.disconnectAll();
   }
 

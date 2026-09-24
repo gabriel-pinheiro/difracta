@@ -46,6 +46,7 @@ const telemetry: OutputTelemetry = {
 const live: LiveState = {
   osc: { port: 9000, listeners: 2 },
   displayHosts: {},
+  media: {},
   outputs: {
     out_tv: {
       sessions: {
@@ -113,6 +114,7 @@ describe("liveStatus", () => {
     const quiet: LiveState = {
       osc: { port: null, listeners: 0 },
       displayHosts: {},
+      media: {},
       outputs: {
         out_tv: {
           sessions: {

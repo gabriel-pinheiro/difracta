@@ -20,6 +20,7 @@ const labels: Record<OrderedTableName, string> = {
   surfaces: "Surface",
   masks: "Mask",
   paths: "Path",
+  media: "Media",
   scenes: "Scene",
   layers: "Layer",
   controllers: "Controller",

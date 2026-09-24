@@ -10,6 +10,7 @@ import { z } from "zod";
 
 import type { Cli } from "../cli.ts";
 import { parseJsonArgument } from "../connection.ts";
+import { relativizeMediaPayload } from "../media-paths.ts";
 import { resolvePayloadNames } from "../names.ts";
 import {
   formatCommandResult,
@@ -104,7 +105,7 @@ export function registerRun(program: Command, cli: Cli): void {
   program
     .command("run <command> [payload]")
     .description(
-      'Run any command with a JSON payload, e.g. run output.create \'{"name":"TV"}\'. Entity fields take names as well as ids. `commands` lists the commands, `describe <command>` shows its payload; a create\'s reply lists what it made, with the name it got.',
+      'Run any command with a JSON payload, e.g. run output.create \'{"name":"TV"}\'. Entity fields take names as well as ids; a Media path is taken from this shell. `commands` lists the commands, `describe <command>` shows its payload; a create\'s reply lists what it made, with the name it got.',
     )
     .action((name: string, payload: string | undefined) =>
       cli.withDocument(async (client, summary) => {
@@ -112,7 +113,11 @@ export function registerRun(program: Command, cli: Cli): void {
         const reply = await client.command<CommandResult>(
           summary.id,
           name,
-          resolvePayloadNames(document, name, parseJsonArgument(payload)),
+          relativizeMediaPayload(
+            summary,
+            name,
+            resolvePayloadNames(document, name, parseJsonArgument(payload)),
+          ),
         );
         const result: NamedResult =
           reply.created === undefined

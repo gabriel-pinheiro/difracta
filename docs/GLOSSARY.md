@@ -206,9 +206,27 @@ future behavior that is neither a Visual nor a Filter.
 ### Parameter
 
 A typed, definition-specific adjustable value such as color, speed, density, or
-bolt width. A Parameter is one of four kinds: number, color, choice or boolean.
-Each Visual Layer and Filter Layer stores its own Parameter Values, keyed by
-Parameter name; picking a definition sets them to the definition's defaults.
+bolt width. A Parameter is one of five kinds: number, color, choice, boolean or
+media. Each Visual Layer and Filter Layer stores its own Parameter Values, keyed
+by Parameter name; picking a definition sets them to the definition's defaults.
+
+### Media
+
+One image or video file the Installation refers to, as an entity in the `media`
+table: a name, unique in the table, and a `path` relative to the Installation
+File's folder, with POSIX separators and `..` allowed. Its kind, image or video,
+is read from the file's extension (png, jpg, jpeg, webp, gif, svg; mp4, webm,
+mov) and never stored. The Runtime serves the file at `GET /media/<id>` and
+reports in the live state whether it is there: `ok`, `missing`, `outside` the
+folder, or `unsaved` while the Installation has no file for the path to be
+relative to.
+
+### Media Parameter
+
+A Parameter of kind `media` a Visual declares, holding a Media id or `""` for
+none, restricted to one kind (`accepts: "image" | "video"`). Its Address lists
+the Media items of that kind as its options, so a Macro can swap artwork; it is
+not linkable. Removing the Media item clears every Media Parameter holding it.
 
 ### Controller
 
@@ -477,10 +495,10 @@ resubscribes. Revision is distinct from the file format version.
 
 The name of one controllable property or trigger in an Installation, such as
 `installation/blackout` or `layer/<id>/opacity`. An Address resolves to a value
-type, a default and, for numbers, a range. Layer enabled, opacity, blend mode,
-mix and every Parameter have one. Controllers, Parameter Links, Macros, OSC and
-the CLI all read and write Addresses; the Inspector edits them through undoable
-commands.
+type (boolean, number, color, choice, media or trigger), a default and, for
+numbers, a range. Layer enabled, opacity, blend mode, mix and every Parameter
+have one. Controllers, Parameter Links, Macros, OSC and the CLI all read and
+write Addresses; the Inspector edits them through undoable commands.
 
 ### Command
 

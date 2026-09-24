@@ -1,7 +1,9 @@
 import { CommandError } from "@difracta/client";
 import {
+  resolveAddress,
   sameName,
   TABLE_SCHEMAS,
+  type Catalog,
   type Document,
   type TableName,
 } from "@difracta/core";
@@ -19,6 +21,7 @@ const NOUNS: Record<TableName, string> = {
   surfaces: "Surface",
   masks: "Mask",
   paths: "Path",
+  media: "Media",
   scenes: "Scene",
   layers: "Layer",
   controllers: "Controller",
@@ -43,6 +46,7 @@ const KEY_TABLES: Readonly<Record<string, TableName>> = {
   target: "surfaces",
   maskId: "masks",
   pathId: "paths",
+  mediaId: "media",
   sceneId: "scenes",
   layerId: "layers",
   controllerId: "controllers",
@@ -226,6 +230,23 @@ function resolveField(
   if (Array.isArray(value))
     return resolvePayloadNames(document, `${prefix}.`, value);
   return value;
+}
+
+/**
+ * A value written to a media Address may name the Media item instead of
+ * giving its id, like any other entity reference at the shell; a string
+ * that names nothing goes through as typed and the runtime says why.
+ */
+export function resolveMediaValue(
+  document: Document,
+  catalog: Catalog,
+  address: string,
+  value: unknown,
+): unknown {
+  if (typeof value !== "string" || value === "") return value;
+  if (resolveAddress(document, address, catalog)?.type !== "media")
+    return value;
+  return findId(document, "media", value) ?? value;
 }
 
 /**

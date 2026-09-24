@@ -112,6 +112,7 @@ export function Control({
         />
       );
     case "choice":
+    case "media":
       return (
         <Select
           value={typeof value === "string" ? value : null}

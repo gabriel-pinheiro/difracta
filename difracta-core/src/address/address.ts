@@ -15,6 +15,7 @@ import {
   type Layer,
   type Surface,
 } from "../document/document.ts";
+import { mediaKindOf, type MediaKind } from "../document/media.ts";
 import { orderedEntries } from "../document/order.ts";
 import { flattenTree } from "../document/tree.ts";
 import type { PatchPath } from "../document/patch.ts";
@@ -31,7 +32,7 @@ import type { PatchPath } from "../document/patch.ts";
  * opacity and a Visual's Parameter look and behave the same.
  */
 export type AddressValueType =
-  "boolean" | "number" | "color" | "choice" | "trigger";
+  "boolean" | "number" | "color" | "choice" | "media" | "trigger";
 
 export type AddressValue = ParameterValue;
 
@@ -57,13 +58,16 @@ export interface ResolvedAddress {
   /** What the property starts at; a trigger has none. */
   readonly default?: AddressValue;
   readonly range?: NumberRange;
+  /** A choice's values, or for a media Address none (`""`) and the Media items of the accepted kind. */
   readonly options?: readonly ChoiceOption[];
+  /** The kind of Media item a media Address takes. */
+  readonly accepts?: MediaKind;
 }
 
 /** What resolving needs from a Document: the tables that own Addresses. */
 export type AddressSource = Pick<
   Document,
-  "layers" | "surfaces" | "controllers" | "scenes" | "macros"
+  "layers" | "surfaces" | "controllers" | "scenes" | "macros" | "media"
 >;
 
 /** A source with nothing but the given entities, for resolving one entity's own Addresses. */
@@ -74,6 +78,7 @@ export function addressSource(partial: Partial<AddressSource>): AddressSource {
     controllers: {},
     scenes: {},
     macros: {},
+    media: {},
     ...partial,
   };
 }
@@ -102,7 +107,21 @@ export function layerDefinition(layer: Layer, catalog: Catalog) {
   return undefined;
 }
 
+/** None first, then the Media items of `kind` in their order, so a control lists them as they are. */
+function mediaOptions(
+  source: AddressSource,
+  kind: MediaKind,
+): readonly ChoiceOption[] {
+  return [
+    { value: "", label: "None" },
+    ...orderedEntries(source.media)
+      .filter((item) => mediaKindOf(item.path) === kind)
+      .map((item) => ({ value: item.id, label: item.name })),
+  ];
+}
+
 function fromParameter(
+  source: AddressSource,
   layer: Layer,
   name: string,
   definition: ParameterDefinition,
@@ -130,6 +149,13 @@ function fromParameter(
       return { ...base, type: "choice", options: definition.options };
     case "boolean":
       return { ...base, type: "boolean" };
+    case "media":
+      return {
+        ...base,
+        type: "media",
+        accepts: definition.accepts,
+        options: mediaOptions(source, definition.accepts),
+      };
   }
 }
 
@@ -301,7 +327,7 @@ const patterns: readonly AddressPattern[] = [
       const parameter = layerDefinition(layer, catalog)?.parameters[name];
       return parameter === undefined
         ? undefined
-        : fromParameter(layer, name, parameter);
+        : fromParameter(document, layer, name, parameter);
     },
     list: (document, catalog) =>
       orderedEntries(document.layers).flatMap((layer) =>
@@ -386,12 +412,17 @@ export function listAddresses(
   return result;
 }
 
-/** The Addresses of one Layer, in inspector order: its own settings, its Parameters, then its Cues. */
+/**
+ * The Addresses of one Layer, in inspector order: its own settings, its
+ * Parameters, then its Cues. `media` is the Installation's Media table,
+ * which a media Parameter lists as its options.
+ */
 export function layerAddresses(
   layer: Layer,
   catalog: Catalog = emptyCatalog,
+  media: AddressSource["media"] = {},
 ): readonly ResolvedAddress[] {
-  const document = addressSource({ layers: { [layer.id]: layer } });
+  const document = addressSource({ layers: { [layer.id]: layer }, media });
   const own = ["enabled", "opacity", "blend", "mix"].map((field) =>
     resolveAddress(
       document,
@@ -444,7 +475,8 @@ export function controllerAddress(
 /**
  * Whether a Controller of `kind` can drive `resolved`: Layer Addresses only,
  * a Number Controller onto numbers and booleans, a Color Controller onto
- * colors. Choices have no scale to map onto.
+ * colors. Choices have no scale to map onto, and a media Address is a
+ * reference into the Installation, not a value.
  */
 export function linkable(
   resolved: ResolvedAddress,
@@ -478,6 +510,17 @@ export function addressValueProblem(
       return resolved.options?.some((option) => option.value === value)
         ? undefined
         : `must be one of ${(resolved.options ?? []).map((option) => option.value).join(", ")}`;
+    case "media":
+      return resolved.options?.some((option) => option.value === value)
+        ? undefined
+        : `must be "" for none or the id of ${resolved.accepts === "video" ? "a video" : "an image"} Media item${
+            (resolved.options?.length ?? 0) > 1
+              ? `: ${(resolved.options ?? [])
+                  .filter((option) => option.value !== "")
+                  .map((option) => option.value)
+                  .join(", ")}`
+              : "; the Installation has none"
+          }`;
     case "trigger":
       return value === undefined || value === null
         ? undefined

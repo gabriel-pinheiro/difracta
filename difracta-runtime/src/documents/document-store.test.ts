@@ -337,6 +337,7 @@ describe("DocumentStore", () => {
         surfaces: {},
         masks: {},
         paths: {},
+        media: {},
         scenes: {},
         layers: {},
         controllers: {},

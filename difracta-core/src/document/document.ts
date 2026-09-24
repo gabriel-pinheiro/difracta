@@ -9,6 +9,7 @@ import {
   type LayerId,
   type MacroId,
   type MaskId,
+  type MediaId,
   type PathId,
   type SceneId,
   type OutputId,
@@ -169,6 +170,23 @@ export const PathSchema = z
   })
   .strict();
 export type Path = Entity<typeof PathSchema, PathId>;
+
+/**
+ * One image or video file the Installation refers to. `path` is relative to
+ * the Installation file's folder, POSIX separators, `..` allowed; the kind
+ * (image or video) is read from its extension (`document/media.ts`) and
+ * never stored. Names are unique in the table.
+ */
+export const MediaSchema = z
+  .object({
+    id: z.string().min(1),
+    name: EntityName,
+    path: z.string().min(1),
+    /** Position among Media items; see `order.ts`. */
+    order: z.string().min(1).default(DEFAULT_ORDER_KEY),
+  })
+  .strict();
+export type Media = Entity<typeof MediaSchema, MediaId>;
 
 export const CALIBRATION_VIEWS = ["selected", "outlines", "patterns"] as const;
 export const CalibrationViewSchema = z.enum(CALIBRATION_VIEWS);
@@ -436,6 +454,7 @@ export const DocumentSchema = z
     surfaces: z.record(z.string(), SurfaceSchema),
     masks: z.record(z.string(), MaskSchema),
     paths: z.record(z.string(), PathSchema),
+    media: z.record(z.string(), MediaSchema),
     scenes: z.record(z.string(), SceneSchema),
     layers: z.record(z.string(), LayerSchema),
     controllers: z.record(z.string(), ControllerSchema),
@@ -451,6 +470,7 @@ export interface Document {
   readonly surfaces: Table<Surface>;
   readonly masks: Table<Mask>;
   readonly paths: Table<Path>;
+  readonly media: Table<Media>;
   readonly scenes: Table<Scene>;
   readonly layers: Table<Layer>;
   readonly controllers: Table<Controller>;
@@ -465,6 +485,7 @@ export const TABLE_SCHEMAS = {
   surfaces: SurfaceSchema,
   masks: MaskSchema,
   paths: PathSchema,
+  media: MediaSchema,
   scenes: SceneSchema,
   layers: LayerSchema,
   controllers: ControllerSchema,
@@ -479,6 +500,7 @@ export const ORDERED_TABLES = [
   "surfaces",
   "masks",
   "paths",
+  "media",
   "scenes",
   "layers",
   "controllers",
@@ -532,6 +554,7 @@ export function emptyDocument(name: string): Document {
     surfaces: {},
     masks: {},
     paths: {},
+    media: {},
     scenes: {},
     layers: {},
     controllers: {},

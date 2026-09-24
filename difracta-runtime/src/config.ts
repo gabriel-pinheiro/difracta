@@ -24,6 +24,12 @@ export interface RuntimeConfig {
   readonly oscPort: number | undefined;
   /** Announce the runtime on the local network with Zeroconf; one bound to loopback never is. */
   readonly discovery: boolean;
+  /**
+   * Serve Media files from outside the Installation file's folder
+   * (`--media-anywhere`, `DIFRACTA_MEDIA_ANYWHERE=1`); a machine setting,
+   * never in the file. Off, such an item is `outside` and refused.
+   */
+  readonly mediaAnywhere: boolean;
 }
 
 function nonEmpty(value: string | undefined): string | undefined {
@@ -46,6 +52,7 @@ export function configFromEnvironment(
       "osc-port": { type: "string" },
       "no-osc": { type: "boolean" },
       "no-discovery": { type: "boolean" },
+      "media-anywhere": { type: "boolean" },
     },
   });
   if (positionals.length > 1)
@@ -92,5 +99,9 @@ export function configFromEnvironment(
     discovery: !(
       values["no-discovery"] === true || env.DIFRACTA_NO_DISCOVERY === "1"
     ),
+    mediaAnywhere:
+      values["media-anywhere"] === true ||
+      env.DIFRACTA_MEDIA_ANYWHERE === "1" ||
+      settings.media.allowOutsideShowFolder,
   };
 }

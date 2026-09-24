@@ -138,6 +138,7 @@ describe("DifractaClient subscriptions", () => {
         osc: { port: null, listeners: 0 },
         outputs: {},
         displayHosts: {},
+        media: {},
       },
     });
     const seen: unknown[] = [];

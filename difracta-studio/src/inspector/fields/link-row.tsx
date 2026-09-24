@@ -75,7 +75,11 @@ export function LinkMenu({
         </DropdownMenuContent>
       </DropdownMenu>
     );
-  if (resolved.type === "choice" || resolved.type === "trigger")
+  if (
+    resolved.type === "choice" ||
+    resolved.type === "media" ||
+    resolved.type === "trigger"
+  )
     return <span className="size-5" />;
   const kind = resolved.type === "color" ? "color" : "number";
   return (
