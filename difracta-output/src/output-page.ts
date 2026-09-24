@@ -7,25 +7,31 @@ import {
 } from "@difracta/protocol";
 
 import { FrameCanvas } from "./frame-canvas.ts";
+import { chooseOutput } from "./output-choice.ts";
 
 interface OutputPageOptions {
   readonly client: DifractaClient;
   readonly canvas: HTMLCanvasElement;
   readonly overlay: HTMLDivElement;
-  readonly outputId: string | null;
+  /** The `?output=` value: an Output id or name, or null to pick one. */
+  readonly output: string | null;
 }
 
 /**
  * One Output: waits for the runtime's open Installation to contain the
- * Output id, subscribes to the document (without live state, which this page
+ * Output its `?output=` id or name picks, subscribes to the document (without live state, which this page
  * never needs), attaches as an Output Session and drives the frame. Without
  * an id it lists every Output of the Installation so a display can be paired
- * by clicking. Telemetry goes out once a second while attached.
+ * by clicking, and it lists them under the message too when the value names
+ * no Output or several. Everything shown is built as DOM nodes and text,
+ * never as HTML, since the query and the names come from outside. Telemetry goes out once a second while attached.
  */
 export class OutputPage {
   readonly #options: OutputPageOptions;
   readonly #frame: FrameCanvas;
   #view: DocumentView | undefined;
+  /** The Output being drawn; a name may resolve to another id later. */
+  #outputId: string | undefined;
   #unsubscribeView: (() => void) | undefined;
   #telemetryTimer: number | undefined;
 
@@ -38,48 +44,66 @@ export class OutputPage {
   }
 
   #refresh(): void {
-    const { client, outputId } = this.#options;
+    const { client, output } = this.#options;
     if (client.phase.get() !== "connected") {
-      this.#showOverlay(
-        `<p>${client.phase.get() === "reconnecting" ? "Reconnecting to the runtime…" : "Connecting to the runtime…"}</p>`,
-      );
+      this.#showOverlay([
+        paragraph(
+          client.phase.get() === "reconnecting"
+            ? "Reconnecting to the runtime…"
+            : "Connecting to the runtime…",
+        ),
+      ]);
       this.#pause();
       return;
     }
     const summary = client.document.get();
     if (summary === null) {
-      this.#showOverlay("<p>No Installation is open on this runtime.</p>");
+      this.#showOverlay([
+        paragraph("No Installation is open on this runtime."),
+      ]);
       this.#pause();
       this.#detach();
       return;
     }
-    if (outputId === null) {
-      this.#showPicker(summary);
+    if (output === null) {
+      this.#showOverlay(picker(summary));
       return;
     }
-    if (!summary.outputs.some((output) => output.id === outputId)) {
-      this.#showOverlay(
-        `<p>Output <code>${outputId}</code> is not part of “${summary.name}”.</p>`,
-      );
-      this.#pause();
-      this.#detach();
+    const choice = chooseOutput(summary.outputs, output);
+    if (choice.kind === "found") {
+      this.#attach(summary, choice.id);
       return;
     }
-    this.#attach(summary, outputId);
+    const problem =
+      choice.kind === "unknown"
+        ? paragraph(
+            "No Output of “",
+            summary.name,
+            "” is called or identified “",
+            code(output),
+            "”.",
+          )
+        : paragraph(
+            `${choice.matches.length} Outputs of “`,
+            summary.name,
+            "” are called “",
+            code(output),
+            "”; open one by its id.",
+          );
+    this.#showOverlay([problem, ...picker(summary)]);
+    this.#pause();
+    this.#detach();
   }
 
   #attach(summary: DocumentSummary, outputId: string): void {
     const { client } = this.#options;
+    const moved = this.#outputId !== outputId;
+    this.#outputId = outputId;
     if (this.#view?.documentId !== summary.id) {
       this.#detach();
       const view = client.openDocument(summary.id);
       this.#view = view;
-      const render = (): void => {
-        const document = view.get();
-        if (document === undefined) return;
-        this.#frame.update({ document, outputId });
-      };
-      const unsubscribeRender = view.subscribePath([], render);
+      const unsubscribeRender = view.subscribePath([], () => this.#render());
       const unsubscribeEvents = view.subscribeEvents((address) => {
         const [entity, layerId, field, key] = address.split("/");
         if (entity === "layer" && field === "cue" && layerId && key)
@@ -89,8 +113,8 @@ export class OutputPage {
         unsubscribeRender();
         unsubscribeEvents();
       };
-      render();
-    }
+      this.#render();
+    } else if (moved) this.#render();
     client.attach(outputId);
     this.#options.overlay.hidden = true;
     this.#frame.start();
@@ -98,6 +122,13 @@ export class OutputPage {
       () => this.#report(),
       settings.live.telemetryIntervalMs,
     );
+  }
+
+  #render(): void {
+    const document = this.#view?.get();
+    const outputId = this.#outputId;
+    if (document === undefined || outputId === undefined) return;
+    this.#frame.update({ document, outputId });
   }
 
   #report(): void {
@@ -144,20 +175,40 @@ export class OutputPage {
     this.#view = undefined;
   }
 
-  #showPicker(summary: DocumentSummary): void {
-    const items = summary.outputs.map(
-      (output) =>
-        `<li><a href="?output=${encodeURIComponent(output.id)}">${output.name}</a></li>`,
-    );
-    this.#showOverlay(
-      items.length === 0
-        ? `<p>“${summary.name}” has no Outputs yet.</p>`
-        : `<p>Pick the Output for this display</p><ul>${items.join("")}</ul>`,
-    );
-  }
-
-  #showOverlay(html: string): void {
-    this.#options.overlay.innerHTML = html;
+  #showOverlay(content: readonly Node[]): void {
+    const box = document.createElement("div");
+    box.append(...content);
+    this.#options.overlay.replaceChildren(box);
     this.#options.overlay.hidden = false;
   }
+}
+
+/** A paragraph of text and inline nodes; strings are only ever text. */
+function paragraph(...parts: readonly (string | Node)[]): HTMLParagraphElement {
+  const element = document.createElement("p");
+  element.append(...parts);
+  return element;
+}
+
+function code(text: string): HTMLElement {
+  const element = document.createElement("code");
+  element.textContent = text;
+  return element;
+}
+
+/** Every Output of the Installation as a link that opens this page on it. */
+function picker(summary: DocumentSummary): Node[] {
+  if (summary.outputs.length === 0)
+    return [paragraph("“", summary.name, "” has no Outputs yet.")];
+  const list = document.createElement("ul");
+  list.className = "picker";
+  for (const output of summary.outputs) {
+    const link = document.createElement("a");
+    link.href = `?output=${encodeURIComponent(output.id)}`;
+    link.textContent = output.name;
+    const item = document.createElement("li");
+    item.append(link);
+    list.append(item);
+  }
+  return [paragraph("Pick the Output for this display"), list];
 }

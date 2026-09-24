@@ -11,11 +11,11 @@ const params = new URLSearchParams(location.search);
 const liveUrl =
   params.get("runtime") ??
   `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/live`;
-const outputId = params.get("output");
+const output = params.get("output");
 
 const client = new DifractaClient({
   url: liveUrl,
   kind: "output",
-  name: outputId ?? "picker",
+  name: output ?? "picker",
 });
-new OutputPage({ client, canvas, overlay, outputId });
+new OutputPage({ client, canvas, overlay, output });
