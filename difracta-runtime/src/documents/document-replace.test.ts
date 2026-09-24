@@ -1,4 +1,5 @@
 import { createBuiltInRegistry, emptyDocument } from "@difracta/core";
+import { builtInCatalog } from "@difracta/visuals";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -16,7 +17,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 beforeEach(async () => {
   dir = await mkdtemp(path.join(tmpdir(), "difracta-"));
   store = new DocumentStore({
-    registry: createBuiltInRegistry(),
+    registry: createBuiltInRegistry(builtInCatalog),
     autosaveIntervalMs: 10,
   });
 });
@@ -34,7 +35,7 @@ async function savedShow(): Promise<{
   readonly copy: string;
 }> {
   const file = path.join(dir, "show.difracta");
-  const created = await store.create("Show");
+  const created = await store.create("Show", { blank: true });
   const documentId = created.ok ? created.result.id : "";
   const session = store.session(documentId)!;
   session.execute("output.create", { id: "out_a", name: "TV" }, "test");

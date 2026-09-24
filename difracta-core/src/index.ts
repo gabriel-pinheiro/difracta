@@ -12,6 +12,7 @@ export * from "./document/tree.ts";
 export * from "./document/names.ts";
 export * from "./document/order.ts";
 export * from "./document/paths.ts";
+export * from "./document/starter.ts";
 export * from "./document/patch.ts";
 export * from "./document/validate.ts";
 export * from "./address/address.ts";

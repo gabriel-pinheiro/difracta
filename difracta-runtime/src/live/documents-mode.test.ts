@@ -1,5 +1,6 @@
 import { DifractaClient } from "@difracta/client";
 import { createBuiltInRegistry, emptyCatalog } from "@difracta/core";
+import { builtInCatalog } from "@difracta/visuals";
 import { PROTOCOL_VERSION, type DocumentsMode } from "@difracta/protocol";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -25,7 +26,9 @@ afterEach(async () => {
 
 /** A store holding `living.difracta`, and a peer of a runtime in `mode`. */
 async function connect(mode: DocumentsMode, remoteAddress: string | undefined) {
-  const store = new DocumentStore({ registry: createBuiltInRegistry() });
+  const store = new DocumentStore({
+    registry: createBuiltInRegistry(builtInCatalog),
+  });
   const filePath = path.join(dir, "living.difracta");
   const opened = await store.openOrCreate(filePath);
   const documentId = opened.ok ? opened.result.id : "";

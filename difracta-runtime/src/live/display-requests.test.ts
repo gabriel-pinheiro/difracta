@@ -1,5 +1,6 @@
 import { DifractaClient } from "@difracta/client";
 import { createBuiltInRegistry } from "@difracta/core";
+import { builtInCatalog } from "@difracta/visuals";
 import type {
   ClientKind,
   DisplayAction,
@@ -296,7 +297,9 @@ describe("Display Hosts over the live socket", () => {
 
 describe("a Display Host that does not answer", () => {
   it("fails the request after the timeout and ignores a late or foreign reply", async () => {
-    const store = new DocumentStore({ registry: createBuiltInRegistry() });
+    const store = new DocumentStore({
+      registry: createBuiltInRegistry(builtInCatalog),
+    });
     const created = await store.create("Living");
     if (!created.ok) throw new Error(created.error);
     store

@@ -1,4 +1,5 @@
 import { createBuiltInRegistry } from "@difracta/core";
+import { builtInCatalog } from "@difracta/visuals";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DocumentStore } from "../documents/document-store.ts";
@@ -97,7 +98,9 @@ describe("runtime advertisement", () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
-    store = new DocumentStore({ registry: createBuiltInRegistry() });
+    store = new DocumentStore({
+      registry: createBuiltInRegistry(builtInCatalog),
+    });
     announcer = new FakeAnnouncer();
     advertisement = new RuntimeAdvertisement({
       store,

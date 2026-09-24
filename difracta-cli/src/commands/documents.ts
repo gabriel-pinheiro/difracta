@@ -16,13 +16,21 @@ export function registerDocuments(program: Command, cli: Cli): void {
 
   documents
     .command("new <name>")
-    .description("Replace the open Installation with a new, unsaved one.")
+    .description(
+      "Replace the open Installation with a new, unsaved one: the starter, with Output 1, a Full Frame Surface on it and Scene 1, whose one Visual Layer shows Zoom Rush on that Surface.",
+    )
     .option("--discard", "drop unsaved changes of the current one", false)
-    .action((name: string, local: { discard: boolean }) =>
+    .option(
+      "--blank",
+      "start with no entities instead of the starter Output, Surface, Scene and Layer",
+      false,
+    )
+    .action((name: string, local: { discard: boolean; blank: boolean }) =>
       cli.withClient(async (client) => {
         const summary = await client.request<DocumentSummary>("documents.new", {
           name,
           discard: local.discard,
+          blank: local.blank,
         });
         cli.print(summary, () => `Created ${summary.name} (${summary.id}).`);
       }),

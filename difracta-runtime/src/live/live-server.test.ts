@@ -5,6 +5,7 @@ import {
   emptyCatalog,
   type CommandDefinition,
 } from "@difracta/core";
+import { builtInCatalog } from "@difracta/visuals";
 import { PROTOCOL_VERSION } from "@difracta/protocol";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -84,6 +85,7 @@ describe("live protocol", () => {
 
     const created = await studio.request<{ id: string }>("documents.new", {
       name: "Living",
+      blank: true,
     });
     await waitFor(() => output.document.get() ?? undefined);
 
@@ -347,7 +349,7 @@ describe("live protocol", () => {
   });
 
   it("answers a command whose apply throws with ok:false and keeps serving", async () => {
-    const registry = createBuiltInRegistry();
+    const registry = createBuiltInRegistry(builtInCatalog);
     registry.register(
       defineCommand({
         name: "test.explode",
@@ -413,7 +415,9 @@ describe("live protocol", () => {
   });
 
   it("replies with every payload issue, for commands and requests alike", async () => {
-    const store = new DocumentStore({ registry: createBuiltInRegistry() });
+    const store = new DocumentStore({
+      registry: createBuiltInRegistry(builtInCatalog),
+    });
     const live = new LiveServer({
       store,
       catalog: emptyCatalog,

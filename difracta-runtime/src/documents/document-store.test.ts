@@ -1,4 +1,5 @@
 import { createBuiltInRegistry } from "@difracta/core";
+import { builtInCatalog } from "@difracta/visuals";
 import { mkdtemp, readFile, rm, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -41,7 +42,7 @@ async function autosaveSaying(
 beforeEach(async () => {
   dir = await mkdtemp(path.join(tmpdir(), "difracta-"));
   store = new DocumentStore({
-    registry: createBuiltInRegistry(),
+    registry: createBuiltInRegistry(builtInCatalog),
     autosaveIntervalMs: 10,
   });
 });
@@ -52,7 +53,7 @@ afterEach(async () => {
 
 describe("DocumentStore", () => {
   it("creates, saves as a .difracta file, and reopens it", async () => {
-    const created = await store.create("Living");
+    const created = await store.create("Living", { blank: true });
     expect(created.ok).toBe(true);
     const documentId = created.ok ? created.result.id : "";
     store
@@ -87,7 +88,7 @@ describe("DocumentStore", () => {
       .execute("output.create", { id: "out_a", name: "TV" }, "test");
     expect((await store.close(documentId)).ok).toBe(false);
     expect((await store.create("Y")).ok).toBe(false);
-    const replaced = await store.create("Y", true);
+    const replaced = await store.create("Y", { discard: true });
     expect(replaced.ok && replaced.result.name).toBe("Y");
     expect(store.session(documentId)).toBeUndefined();
     expect(store.current()?.name).toBe("Y");
@@ -97,6 +98,24 @@ describe("DocumentStore", () => {
     );
     const opened = await store.open(path.join(dir, "y"));
     expect(opened.ok && opened.result.id).toBe(store.current()?.id);
+  });
+
+  it("a new Installation is the starter with nothing to undo, or empty when blank", async () => {
+    const created = await store.create("Living");
+    expect(created.ok && created.result).toMatchObject({ dirty: false });
+    const session = store.currentSession()!;
+    const { outputs, surfaces, scenes, layers } = session.document;
+    const names = (table: Readonly<Record<string, { name: string }>>) =>
+      Object.values(table).map((entity) => entity.name);
+    expect(names(outputs)).toEqual(["Output 1"]);
+    expect(names(surfaces)).toEqual(["Full Frame"]);
+    expect(names(scenes)).toEqual(["Scene 1"]);
+    expect(names(layers)).toEqual(["Zoom Rush"]);
+    expect(session.execute("history.undo", {}, "test").ok).toBe(false);
+
+    const blank = await store.create("Empty", { blank: true });
+    expect(blank.ok && blank.result.outputs).toEqual([]);
+    expect(Object.keys(store.currentSession()!.document.layers)).toEqual([]);
   });
 
   it("a new Installation is clean until something changes it, and still needs a path to save", async () => {
@@ -140,13 +159,16 @@ describe("DocumentStore", () => {
     });
     const parsed = parseDocumentFile(await readFile(filePath, "utf8"));
     expect(parsed.ok && parsed.document.installation.name).toBe("living");
+    expect(parsed.ok && Object.keys(parsed.document.layers)).toHaveLength(1);
 
     // An existing file is opened as it is.
     store
       .currentSession()!
       .execute("installation.rename", { name: "Living Room" }, "test");
     await store.save(opened.ok ? opened.result.id : "");
-    store = new DocumentStore({ registry: createBuiltInRegistry() });
+    store = new DocumentStore({
+      registry: createBuiltInRegistry(builtInCatalog),
+    });
     const reopened = await store.openOrCreate(filePath);
     expect(reopened.ok && reopened.result.name).toBe("Living Room");
   });
@@ -160,12 +182,12 @@ describe("DocumentStore", () => {
       .execute("installation.rename", { name: "Changed" }, "test");
     const filePath = path.join(dir, "living.difracta");
     expect(await autosaveSaying(filePath, "Changed")).toHaveLength(1);
-    await store.create("Other", true);
+    await store.create("Other", { discard: true });
     expect(await listAutosaves(filePath)).toEqual([]);
   });
 
   it("autosaves dirty documents, recovers on open, and reverts to the file", async () => {
-    const created = await store.create("Living");
+    const created = await store.create("Living", { blank: true });
     const documentId = created.ok ? created.result.id : "";
     await store.save(documentId, path.join(dir, "living"));
     const filePath = path.join(dir, "living.difracta");
@@ -183,7 +205,7 @@ describe("DocumentStore", () => {
 
     // A runtime that died leaves the sidecar behind; the next one recovers it.
     store = new DocumentStore({
-      registry: createBuiltInRegistry(),
+      registry: createBuiltInRegistry(builtInCatalog),
       autosaveIntervalMs: 10,
     });
     const recovered = await store.open(path.join(dir, "living"));
@@ -272,7 +294,7 @@ describe("DocumentStore", () => {
 
   it("writes by the max wait while changes keep coming", async () => {
     store = new DocumentStore({
-      registry: createBuiltInRegistry(),
+      registry: createBuiltInRegistry(builtInCatalog),
       autosaveIntervalMs: 60,
       autosaveMaxWaitMs: 120,
     });

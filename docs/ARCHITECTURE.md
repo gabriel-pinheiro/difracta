@@ -673,6 +673,18 @@ CLI resolves a relative path against its own working directory before sending
 it. Studio shows New, Open, Save As and Close only to a free connection;
 Download a Copy and Replace from File are there for both.
 
+A new Installation, from `documents.new` or a missing file the runtime creates,
+is the starter (`starterDocument` in `difracta-core/src/document/starter.ts`):
+Output 1, a Full Frame Surface assigned to it, and Scene 1, active, whose one
+Visual Layer targets that Surface and shows Zoom Rush at its default Parameters,
+so opening the Output is the only step left before something shows. It is built
+by running `output.create`, `surface.create`, `scene.create`, `layer.create` and
+`layer.visual` on an empty Document, so it follows their defaults, gets fresh
+ids and takes the Parameter values from the Catalog of the moment. None of it is
+in the undo history. `documents.new` with `blank: true`
+(`difracta documents new --blank`) gives an Installation with no entities
+instead.
+
 A new Installation starts clean and becomes dirty with its first change.
 Replacing a document with unsaved changes needs an explicit discard, which also
 removes that file's autosaves so the discarded state does not come back as a

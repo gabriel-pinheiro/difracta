@@ -16,8 +16,11 @@ export function documentRequests(
   | "documents.close"
 > {
   return {
-    "documents.new": ({ name, discard }) =>
-      store.create(name, discard ?? false),
+    "documents.new": ({ name, discard, blank }) =>
+      store.create(name, {
+        discard: discard ?? false,
+        blank: blank ?? false,
+      }),
     "documents.open": ({ path, discard }) => store.open(path, discard ?? false),
     "documents.save": ({ documentId, path }) => store.save(documentId, path),
     "documents.revert": ({ documentId }) => store.revert(documentId),

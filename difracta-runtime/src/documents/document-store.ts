@@ -1,4 +1,9 @@
-import { emptyDocument, settings, type CommandRegistry } from "@difracta/core";
+import {
+  emptyDocument,
+  settings,
+  starterDocument,
+  type CommandRegistry,
+} from "@difracta/core";
 import type { DocumentSummary } from "@difracta/protocol";
 import path from "node:path";
 
@@ -18,12 +23,20 @@ import { DocumentSession } from "./document-session.ts";
 import { followWithAutosave } from "./session-autosave.ts";
 
 export interface DocumentStoreOptions {
+  /** Its Catalog must hold the starter Visual, which new Installations show. */
   readonly registry: CommandRegistry;
   /** Overrides `settings.autosave.delayMs`. */
   readonly autosaveIntervalMs?: number;
   /** Overrides `settings.autosave.maxWaitMs`. */
   readonly autosaveMaxWaitMs?: number;
   readonly log?: (message: string) => void;
+}
+
+export interface CreateOptions {
+  /** Replace a document with unsaved changes. */
+  readonly discard?: boolean;
+  /** Start with no entities instead of the starter Installation. */
+  readonly blank?: boolean;
 }
 
 export type StoreResult<TResult> =
@@ -41,7 +54,8 @@ export const UNSAVED_CHANGES =
  * New and open replace the current document. They refuse while it has
  * unsaved changes unless told to discard, in which case its autosaves go
  * too, so a discarded state does not resurface as a recovery. A new
- * document starts clean: it is dirty once something changes it.
+ * document is the starter Installation (`starterDocument`), or empty when
+ * asked for blank, and starts clean: it is dirty once something changes it.
  *
  * Opening a file whose newest autosave is younger than the file loads the
  * autosave: the document starts dirty and `recovered`, so nothing is lost by
@@ -96,12 +110,14 @@ export class DocumentStore {
 
   async create(
     name: string,
-    discard = false,
+    { discard = false, blank = false }: CreateOptions = {},
   ): Promise<StoreResult<DocumentSummary>> {
     if (this.#session?.dirty === true && !discard)
       return { ok: false, error: UNSAVED_CHANGES };
     const session = new DocumentSession(
-      emptyDocument(name),
+      blank
+        ? emptyDocument(name)
+        : starterDocument(name, this.#options.registry),
       this.#options.registry,
     );
     await this.#replace(session);
@@ -109,7 +125,7 @@ export class DocumentStore {
   }
 
   /**
-   * Opens the file, first writing a new Installation named after it when it
+   * Opens the file, first writing a starter Installation named after it when it
    * does not exist, parent folders included. A missing file that left an
    * autosave behind is recovered from it instead.
    */
@@ -125,7 +141,7 @@ export class DocumentStore {
       try {
         await writeFileAtomically(
           filePath,
-          serializeDocument(emptyDocument(name)),
+          serializeDocument(starterDocument(name, this.#options.registry)),
         );
       } catch (error) {
         return {

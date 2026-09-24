@@ -1,4 +1,5 @@
 import { createBuiltInRegistry, emptyDocument, settings } from "@difracta/core";
+import { builtInCatalog } from "@difracta/visuals";
 import Fastify, { type FastifyInstance } from "fastify";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -16,7 +17,9 @@ let app: FastifyInstance;
 
 beforeEach(async () => {
   dir = await mkdtemp(path.join(tmpdir(), "difracta-"));
-  store = new DocumentStore({ registry: createBuiltInRegistry() });
+  store = new DocumentStore({
+    registry: createBuiltInRegistry(builtInCatalog),
+  });
   app = Fastify();
   registerDocumentRoutes(app, store);
   await app.ready();

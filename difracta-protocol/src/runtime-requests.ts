@@ -12,12 +12,18 @@ import { z } from "zod";
  * `documents.save` to another path.
  */
 export const RuntimeRequestSchemas = {
-  /** Replaces the open document with a new, unsaved one. */
+  /**
+   * Replaces the open document with a new, unsaved one: the starter
+   * Installation (an Output, a Surface, a Scene and a Visual Layer), or no
+   * entities at all when `blank`.
+   */
   "documents.new": z
     .object({
       name: z.string().trim().min(1).max(120),
       /** Drop unsaved changes of the current document instead of failing. */
       discard: z.boolean().optional(),
+      /** Start with no entities instead of the starter. */
+      blank: z.boolean().optional(),
     })
     .strict(),
   /** Replaces the open document with a file. */
