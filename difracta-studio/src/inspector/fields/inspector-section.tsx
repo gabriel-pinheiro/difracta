@@ -44,7 +44,9 @@ export function InspectorSection({
         {expanded && actions}
       </div>
       {expanded && (
-        <div className="grid gap-1.5 px-3 pt-0.5 pb-3">{children}</div>
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-1.5 px-3 pt-0.5 pb-3">
+          {children}
+        </div>
       )}
     </section>
   );

@@ -44,7 +44,7 @@ export function OutputInspector({
   return (
     <>
       <InspectorHeading name={output.name} id={output.id} />
-      <div className="grid gap-4 p-3">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 p-3">
         <NameField
           label="Name"
           value={output.name}
@@ -80,14 +80,14 @@ export function OutputInspector({
             void command("output.update", { outputId: id, limitPixelRatio })
           }
         />
-        <div className="grid gap-1">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-1">
           <span className="text-xs text-muted-foreground">Surfaces</span>
           {mapped.length === 0 ? (
             <p className="text-[0.6875rem]/relaxed text-muted-foreground">
               No Surface renders through this Output.
             </p>
           ) : (
-            <ul className="grid gap-px">
+            <ul className="grid grid-cols-[minmax(0,1fr)] gap-px">
               {mapped.map((surface) => (
                 <li key={surface.id}>
                   <button

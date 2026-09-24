@@ -4,6 +4,7 @@ import {
   type ReadonlySignal,
 } from "@difracta/client";
 import { generateId, type PatchPath } from "@difracta/core";
+import type { CommandResult } from "@difracta/protocol";
 import {
   createContext,
   useCallback,
@@ -21,6 +22,23 @@ function liveUrl(): string {
   const configured = params.get("runtime");
   if (configured !== null) return configured;
   return `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/live`;
+}
+
+/**
+ * The runtime this Studio talks to, as "host:port": the `?runtime=` URL,
+ * else the runtime the dev server proxies to, else the page's own host,
+ * which serves Studio and the runtime together.
+ */
+export function runtimeHost(): string {
+  const configured = new URLSearchParams(location.search).get("runtime");
+  const proxied: unknown = import.meta.env.VITE_DIFRACTA_PROXIED_RUNTIME;
+  const url =
+    configured ?? (typeof proxied === "string" ? proxied : location.href);
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
 }
 
 /** One undo owner per browser, so Ctrl+Z ownership survives reloads. */
@@ -82,7 +100,11 @@ export function useDocumentPath<TValue>(
   return useSignal(signal);
 }
 
-/** Sends a command against `view`'s document; a rejection surfaces as a toast, never throws. */
+/**
+ * Sends a command against `view`'s document; a rejection surfaces as an
+ * error toast and never throws, and what the command reports as warnings (a
+ * removal that unassigned Surfaces, say) as one warning toast.
+ */
 export function useCommand(
   view: DocumentView,
 ): (name: string, payload: unknown) => Promise<void> {
@@ -90,8 +112,8 @@ export function useCommand(
   const { documentId } = view;
   return useCallback(
     (name, payload) =>
-      client.command(documentId, name, payload).then(
-        () => undefined,
+      client.command<CommandResult>(documentId, name, payload).then(
+        (result) => showWarnings(result.warnings ?? []),
         (failure: unknown) => {
           toast.error(
             failure instanceof Error ? failure.message : String(failure),
@@ -100,4 +122,15 @@ export function useCommand(
       ),
     [client, documentId],
   );
+}
+
+/** One toast for a command's warnings: the warning itself, or a count and the list. */
+function showWarnings(warnings: readonly string[]): void {
+  const [first] = warnings;
+  if (first === undefined) return;
+  if (warnings.length === 1) toast.warning(first);
+  else
+    toast.warning(`${String(warnings.length)} warnings`, {
+      description: warnings.join("\n"),
+    });
 }

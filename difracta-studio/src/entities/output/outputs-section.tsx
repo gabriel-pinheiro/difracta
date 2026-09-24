@@ -60,6 +60,7 @@ export function OutputsSection({ view }: { readonly view: DocumentView }) {
     <>
       <NavigatorSection
         storageKey="output"
+        holds={["output"]}
         label="Outputs"
         empty={ordered.length === 0 ? "No Outputs yet." : undefined}
         onCreate={() => setNaming(true)}

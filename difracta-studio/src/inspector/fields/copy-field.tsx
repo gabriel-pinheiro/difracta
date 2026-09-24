@@ -1,10 +1,10 @@
 import { Link } from "lucide-react";
 import type { ReactNode } from "react";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { copyWithToast } from "@/lib/copy-text";
 
 /** A read-only value with a copy button and, when given, more actions beside it. */
 export function CopyField({
@@ -19,10 +19,7 @@ export function CopyField({
   readonly actions?: ReactNode;
 }) {
   function copy(): void {
-    void navigator.clipboard
-      .writeText(value)
-      .then(() => toast.success(`${label} copied`))
-      .catch(() => toast.error(`Could not copy the ${label.toLowerCase()}.`));
+    copyWithToast(value, `${label} copied`);
   }
   return (
     <div className="grid gap-1">

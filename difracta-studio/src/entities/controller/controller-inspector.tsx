@@ -66,7 +66,7 @@ export function ControllerInspector({
   return (
     <>
       <InspectorHeading name={controller.name} id={controller.id} />
-      <div className="grid gap-3 p-3">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-3 p-3">
         <NameField
           label="Name"
           value={controller.name}
@@ -100,7 +100,10 @@ export function ControllerInspector({
               from a Parameter row's link menu.
             </p>
           ) : (
-            <ul className="grid gap-1" aria-label="Links">
+            <ul
+              className="grid grid-cols-[minmax(0,1fr)] gap-1"
+              aria-label="Links"
+            >
               {own.map(({ link, target }) => (
                 <li
                   key={link.id}

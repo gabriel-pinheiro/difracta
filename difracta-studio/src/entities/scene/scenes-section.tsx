@@ -56,6 +56,7 @@ export function ScenesSection({ view }: { readonly view: DocumentView }) {
     <>
       <NavigatorSection
         storageKey="scene"
+        holds={["scene", "layer"]}
         label="Scenes"
         empty={ordered.length === 0 ? "No Scenes yet." : undefined}
         onCreate={() => setNaming(true)}
@@ -144,11 +145,6 @@ export function ScenesSection({ view }: { readonly view: DocumentView }) {
                     <ContextMenuItem
                       variant="destructive"
                       disabled={active}
-                      title={
-                        active
-                          ? "The active Scene cannot be removed. Play another first."
-                          : undefined
-                      }
                       onClick={() =>
                         removeFocusingNeighbour(scene.id, () =>
                           command("scene.remove", { sceneId: scene.id }),
@@ -157,6 +153,12 @@ export function ScenesSection({ view }: { readonly view: DocumentView }) {
                     >
                       <Trash2 /> Remove
                     </ContextMenuItem>
+                    {active && (
+                      // A disabled item shows no tooltip, so the reason is a line of its own.
+                      <p className="px-2 pb-1 text-[0.625rem] text-muted-foreground">
+                        Active Scene: play another first
+                      </p>
+                    )}
                   </ContextMenuContent>
                 </ContextMenu>
                 {expanded && (

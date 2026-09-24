@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import {
   DropdownMenu,
@@ -7,17 +7,24 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import type { EntityKind } from "@/entities";
 import { isBoolean, useStoredState } from "@/lib/storage";
+import { useSelection } from "@/selection/selection";
 
 import { NavigatorEmptyRow, type CreateItem } from "./navigator-row";
 
 /**
  * Collapsible group of rows with a create button; the open state is
- * remembered per browser, starting from `defaultExpanded`.
+ * remembered per browser, starting from `defaultExpanded`. A collapsed
+ * section still shows while the selection is an entity of a kind it `holds`,
+ * so a created or chip-selected entity is never hidden; that reveal is not
+ * remembered, and collapsing by hand hides it again until the selection
+ * moves.
  */
 export function NavigatorSection({
   storageKey,
   label,
+  holds,
   defaultExpanded = true,
   empty,
   onCreate,
@@ -26,6 +33,8 @@ export function NavigatorSection({
 }: {
   readonly storageKey: string;
   readonly label: string;
+  /** Entity kinds whose rows live in this section, its own and nested ones. */
+  readonly holds: readonly EntityKind[];
   readonly defaultExpanded?: boolean | undefined;
   /** Shown in place of rows while the section has none. */
   readonly empty?: string | undefined;
@@ -34,11 +43,17 @@ export function NavigatorSection({
   readonly createItems?: readonly CreateItem[] | undefined;
   readonly children: ReactNode;
 }) {
-  const [expanded, setExpanded] = useStoredState(
+  const [stored, setStored] = useStoredState(
     `difracta.navigator.${storageKey}`,
     defaultExpanded,
     isBoolean,
   );
+  const revealing = useRevealFor(holds);
+  const expanded = stored || revealing.active;
+  const setExpanded = (next: boolean): void => {
+    setStored(next);
+    if (!next) revealing.dismiss();
+  };
   return (
     <section>
       <div className="flex h-6 items-center pr-1 pl-2">
@@ -95,6 +110,33 @@ export function NavigatorSection({
         ))}
     </section>
   );
+}
+
+/**
+ * Whether the selection is an entity of a kind in `holds` that has not been
+ * dismissed by collapsing the section; a new selection clears the dismissal.
+ */
+function useRevealFor(holds: readonly EntityKind[]): {
+  readonly active: boolean;
+  readonly dismiss: () => void;
+} {
+  const { selection } = useSelection();
+  const key =
+    selection !== undefined &&
+    selection.kind !== "installation" &&
+    holds.includes(selection.kind)
+      ? `${selection.kind}:${selection.id}`
+      : undefined;
+  const [dismissed, setDismissed] = useState<string | undefined>(undefined);
+  const [seen, setSeen] = useState(key);
+  if (seen !== key) {
+    setSeen(key);
+    setDismissed(undefined);
+  }
+  return {
+    active: key !== undefined && key !== dismissed,
+    dismiss: () => setDismissed(key),
+  };
 }
 
 const createButtonClass =

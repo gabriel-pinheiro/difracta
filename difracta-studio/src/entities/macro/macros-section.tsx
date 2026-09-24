@@ -64,6 +64,7 @@ export function MacrosSection({ view }: { readonly view: DocumentView }) {
     <>
       <NavigatorSection
         storageKey="macro"
+        holds={["macro"]}
         label="Macros"
         defaultExpanded={roots.length === 0}
         empty={roots.length === 0 ? "No Macros yet." : undefined}

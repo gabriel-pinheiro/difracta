@@ -31,15 +31,15 @@ export function SelectField({
       ? options
       : [{ value: null, label: noneLabel }, ...options];
   return (
-    <Label className="grid gap-1">
+    <Label className="grid grid-cols-[minmax(0,1fr)] gap-1">
       <span className="text-xs text-muted-foreground">{label}</span>
       <Select
         value={value}
         items={items}
         onValueChange={(next: string | null) => onValueChange(next)}
       >
-        <SelectTrigger className="w-full">
-          <SelectValue />
+        <SelectTrigger className="w-full min-w-0">
+          <SelectValue className="block min-w-0 truncate" />
         </SelectTrigger>
         <SelectContent>
           {items.map((item) => (

@@ -66,7 +66,7 @@ export function MaskInspector({
   return (
     <>
       <InspectorHeading name={mask.name} id={mask.id} />
-      <div className="grid gap-4 p-3">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 p-3">
         <NameField
           label="Name"
           value={mask.name}
@@ -92,7 +92,7 @@ export function MaskInspector({
             })
           }
         />
-        <div className="grid gap-1">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-1">
           <span className="text-xs text-muted-foreground">
             Points, in {surface?.name ?? "the Surface"}
           </span>

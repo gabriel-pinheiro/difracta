@@ -57,11 +57,7 @@ export function CalibrationControls({
         size="sm"
         aria-pressed={active !== undefined}
         disabled={disabled}
-        title={
-          disabled
-            ? "Assign an Output first"
-            : "Show a pattern on the Output while aligning"
-        }
+        title="Show a pattern on the Output while aligning"
         onClick={() => {
           if (active !== undefined) exit();
           else set({ ...selection, view: calibration?.view ?? "selected" });
@@ -70,6 +66,12 @@ export function CalibrationControls({
         <Crosshair data-icon="inline-start" />
         {active === undefined ? "Calibrate" : "Stop calibrating"}
       </Button>
+      {disabled && (
+        // A disabled button shows no tooltip, so the reason is written out.
+        <p className="text-[0.6875rem]/relaxed text-muted-foreground">
+          Calibrating needs the Surface on an Output.
+        </p>
+      )}
       {active !== undefined && (
         <SelectField
           label="Other Surfaces meanwhile"

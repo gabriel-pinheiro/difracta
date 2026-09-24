@@ -54,7 +54,7 @@ export function MacroInspector({
   return (
     <>
       <InspectorHeading name={macro.name} id={macro.id} />
-      <div className="grid gap-3 p-3">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-3 p-3">
         <NameField
           label="Name"
           value={macro.name}
@@ -102,7 +102,11 @@ export function MacroInspector({
                 })
               }
             >
-              <div className="grid gap-px" role="list" aria-label="Actions">
+              <div
+                className="grid grid-cols-[minmax(0,1fr)] gap-px"
+                role="list"
+                aria-label="Actions"
+              >
                 {macro.actions.map((action) => {
                   const { resolved, problem } = describe(action);
                   return (

@@ -2,7 +2,6 @@ import type { DocumentView } from "@difracta/client";
 import type { Output } from "@difracta/core";
 import { AppWindow, Link } from "lucide-react";
 import type { ReactNode } from "react";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { copyWithToast } from "@/lib/copy-text";
 
 import { DisplayHostsList } from "./display-hosts-list";
 import { outputPageUrl } from "./output-url";
@@ -37,10 +37,7 @@ export function OpenOutputDialog({
   const url = outputPageUrl(output.id);
 
   function copy(): void {
-    void navigator.clipboard
-      .writeText(url)
-      .then(() => toast.success("Output page URL copied"))
-      .catch(() => toast.error("Could not copy the URL."));
+    copyWithToast(url, "Output page URL copied");
   }
 
   return (
@@ -57,6 +54,7 @@ export function OpenOutputDialog({
           <Button
             variant="outline"
             className="justify-self-start"
+            nativeButton={false}
             render={<a href={url} target="_blank" rel="noreferrer" />}
             onClick={() => onOpenChange(false)}
           >

@@ -42,7 +42,7 @@ export function SceneInspector({
   return (
     <>
       <InspectorHeading name={scene.name} id={scene.id} />
-      <div className="grid gap-4 p-3">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 p-3">
         <NameField
           label="Name"
           value={scene.name}

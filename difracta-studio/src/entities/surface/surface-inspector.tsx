@@ -60,7 +60,7 @@ export function SurfaceInspector({
   return (
     <>
       <InspectorHeading name={surface.name} id={surface.id} />
-      <div className="grid gap-4 p-3">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 p-3">
         <NameField
           label="Name"
           value={surface.name}
@@ -81,7 +81,7 @@ export function SurfaceInspector({
           }
         />
         {surface.output === null ? (
-          <div className="grid gap-2">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
             <p className="text-[0.6875rem]/relaxed text-muted-foreground">
               Assign an Output to place this Surface in its frame.
             </p>
@@ -98,7 +98,7 @@ export function SurfaceInspector({
           <Mapping view={view} surface={surface} outputId={surface.output} />
         )}
         <Rendering view={view} surface={surface} />
-        <div className="grid gap-1">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-1">
           <span className="text-xs text-muted-foreground">Masks and Paths</span>
           {children.length === 0 ? (
             <p className="text-[0.6875rem]/relaxed text-muted-foreground">
@@ -106,7 +106,7 @@ export function SurfaceInspector({
               from the Surface's row in the navigator.
             </p>
           ) : (
-            <ul className="grid gap-px">
+            <ul className="grid grid-cols-[minmax(0,1fr)] gap-px">
               {children.map(({ table, entity }) => (
                 <li key={entity.id}>
                   <button
@@ -158,7 +158,7 @@ function Rendering({
 }) {
   const command = useCommand(view);
   return (
-    <div className="grid gap-1.5">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-1.5">
       <span className="text-xs text-muted-foreground">Rendering</span>
       <SizeField
         surface={surface}
@@ -218,7 +218,7 @@ function Mapping({
       : [];
   });
   return (
-    <div className="grid gap-1">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-1">
       <span className="text-xs text-muted-foreground">Corners</span>
       <QuadEditor
         corners={mapping.corners}

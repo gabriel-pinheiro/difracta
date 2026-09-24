@@ -70,6 +70,7 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
     <>
       <NavigatorSection
         storageKey="surface"
+        holds={["surface", "mask", "path"]}
         label="Surfaces"
         empty={ordered.length === 0 ? "No Surfaces yet." : undefined}
         onCreate={() => setNaming({ kind: "surface" })}

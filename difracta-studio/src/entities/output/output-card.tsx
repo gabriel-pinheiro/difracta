@@ -3,7 +3,6 @@ import type { Output } from "@difracta/core";
 import type { WorkloadCount } from "@difracta/protocol";
 import { Link, MonitorUp } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -12,6 +11,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useDocumentPath } from "@/lib/client";
+import { copyWithToast } from "@/lib/copy-text";
 import { useNow } from "@/lib/use-now";
 import { cn } from "@/lib/utils";
 
@@ -72,10 +72,7 @@ export function OutputCard({
   const now = useNow(sessions.some((session) => session.stale));
 
   function copyUrl(): void {
-    void navigator.clipboard
-      .writeText(url)
-      .then(() => toast.success("Output page URL copied"))
-      .catch(() => toast.error("Could not copy the URL."));
+    copyWithToast(url, "Output page URL copied");
   }
 
   return (

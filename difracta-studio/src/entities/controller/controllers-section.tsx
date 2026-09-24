@@ -68,6 +68,7 @@ export function ControllersSection({ view }: { readonly view: DocumentView }) {
     <>
       <NavigatorSection
         storageKey="controller"
+        holds={["controller"]}
         label="Controllers"
         defaultExpanded={roots.length === 0}
         empty={roots.length === 0 ? "No Controllers yet." : undefined}

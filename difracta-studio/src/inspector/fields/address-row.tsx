@@ -5,9 +5,8 @@ import {
   type NumberRange,
   type ResolvedAddress,
 } from "@difracta/core";
-import { useState, type KeyboardEvent } from "react";
+import { useState } from "react";
 
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -26,6 +25,7 @@ import {
   hexToColor,
   parseNumber,
 } from "./address-format";
+import { EditableReadout } from "./editable-readout";
 import { FieldRow } from "./field-row";
 import { LinkedControl, LinkMenu, type RowLinks } from "./link-row";
 
@@ -179,7 +179,8 @@ function NumberControl({
         label={label}
         text={formatNumber(shown, range)}
         unit={displayUnit(range)}
-        className="w-14"
+        className="min-w-14"
+        inputClassName="w-14"
         parse={(text) => parseNumber(text, range)}
         commit={send}
       />
@@ -225,6 +226,7 @@ function ColorControl({
           label={`${label} hex`}
           text={hex.toUpperCase()}
           className="w-[4.25rem]"
+          inputClassName="w-[4.25rem]"
           parse={(text) => hexToColor(text, alpha)}
           commit={send}
         />
@@ -250,67 +252,5 @@ function ColorControl({
         </span>
       </div>
     </div>
-  );
-}
-
-/**
- * A value shown as text that turns into an input when clicked. Enter or
- * blur commits what `parse` accepts, Escape cancels; text `parse` refuses
- * is dropped and the readout returns.
- */
-function EditableReadout<TValue>({
-  label,
-  text,
-  unit = "",
-  className,
-  parse,
-  commit,
-}: {
-  readonly label: string;
-  readonly text: string;
-  readonly unit?: string;
-  readonly className: string;
-  readonly parse: (text: string) => TValue | undefined;
-  readonly commit: (value: TValue) => void;
-}) {
-  const [draft, setDraft] = useState<string | undefined>(undefined);
-  if (draft === undefined) {
-    return (
-      <button
-        type="button"
-        aria-label={`Edit ${label}`}
-        title="Click to type a value"
-        className={`${className} shrink-0 truncate rounded-sm px-1 text-right text-[0.6875rem] text-muted-foreground tabular-nums hover:bg-input/50 hover:text-foreground`}
-        onClick={() => setDraft(text)}
-      >
-        {text}
-        {unit}
-      </button>
-    );
-  }
-  const finish = (cancel: boolean): void => {
-    if (!cancel) {
-      const parsed = parse(draft);
-      if (parsed !== undefined) commit(parsed);
-    }
-    setDraft(undefined);
-  };
-  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
-    if (event.key === "Enter") finish(false);
-    else if (event.key === "Escape") finish(true);
-    else return;
-    event.preventDefault();
-    event.stopPropagation();
-  };
-  return (
-    <Input
-      autoFocus
-      aria-label={label}
-      className={`${className} h-5 shrink-0 px-1 text-right text-[0.6875rem] tabular-nums`}
-      value={draft}
-      onChange={(event) => setDraft(event.currentTarget.value)}
-      onBlur={() => finish(false)}
-      onKeyDown={onKeyDown}
-    />
   );
 }

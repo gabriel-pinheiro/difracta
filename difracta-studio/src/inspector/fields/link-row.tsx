@@ -22,6 +22,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 
 import { colorToHex, displayUnit, formatNumber } from "./address-format";
+import { unitGap, ValueWithUnit } from "./editable-readout";
 
 /** How a row takes part in Parameter Links: its Link, if any, and the Controllers it could take. */
 export interface RowLinks {
@@ -128,13 +129,14 @@ export function LinkedControl({
   return (
     <>
       {resolved.type === "number" && (
-        <span
-          aria-label={resolved.label}
-          className="w-14 shrink-0 truncate px-1 text-right text-[0.6875rem] text-muted-foreground tabular-nums"
-        >
-          {formatNumber(typeof effective === "number" ? effective : 0, range)}
-          {displayUnit(range)}
-        </span>
+        <NumberReadout
+          label={resolved.label}
+          text={formatNumber(
+            typeof effective === "number" ? effective : 0,
+            range,
+          )}
+          unit={displayUnit(range)}
+        />
       )}
       {resolved.type === "boolean" && (
         <Switch
@@ -185,4 +187,24 @@ function cssColor(value: AddressValue): string {
   if (typeof value !== "object") return "transparent";
   const [r, g, b, a] = value;
   return `rgba(${String(Math.round(r * 255))}, ${String(Math.round(g * 255))}, ${String(Math.round(b * 255))}, ${String(a)})`;
+}
+
+function NumberReadout({
+  label,
+  text,
+  unit,
+}: {
+  readonly label: string;
+  readonly text: string;
+  readonly unit: string;
+}) {
+  return (
+    <span
+      aria-label={label}
+      title={`${text}${unitGap(unit)}${unit}`}
+      className="min-w-14 shrink-0 px-1 text-right text-[0.6875rem] whitespace-nowrap text-muted-foreground tabular-nums"
+    >
+      <ValueWithUnit text={text} unit={unit} />
+    </span>
+  );
 }

@@ -1,10 +1,15 @@
-import type { DocumentView } from "@difracta/client";
+import type { ConnectionPhase, DocumentView } from "@difracta/client";
 import type { Mask, Output, Path, Surface, Table } from "@difracta/core";
-import type { LiveState } from "@difracta/protocol";
+import type { DocumentSummary, LiveState } from "@difracta/protocol";
 
 import { useDocumentCommands } from "@/documents/document-commands";
 import { useCalibration } from "@/lib/calibration";
-import { useClient, useDocumentPath, useSignal } from "@/lib/client";
+import {
+  runtimeHost,
+  useClient,
+  useDocumentPath,
+  useSignal,
+} from "@/lib/client";
 import { cn } from "@/lib/utils";
 import { BlackoutToggle } from "@/menu/blackout-toggle";
 import { useInPageBar } from "@/menu/use-in-page-bar";
@@ -30,7 +35,7 @@ export function StatusStrip() {
             connected ? "bg-emerald-400" : "bg-amber-400",
           )}
         />
-        {connected ? `Connected to ${location.host}` : `Runtime ${phase}`}
+        {connectionText(phase)}
       </span>
       <span className="min-w-0 flex-1 truncate">
         {selected?.recovered === true ? (
@@ -45,10 +50,8 @@ export function StatusStrip() {
             </button>
             .
           </span>
-        ) : selected === undefined ? null : selected.dirty ? (
-          "Unsaved changes"
-        ) : (
-          "Saved"
+        ) : selected === undefined ? null : (
+          saveText(selected)
         )}
       </span>
       {view !== undefined && <DocumentStatus view={view} />}
@@ -57,6 +60,25 @@ export function StatusStrip() {
       )}
     </footer>
   );
+}
+
+function connectionText(phase: ConnectionPhase): string {
+  switch (phase) {
+    case "connected":
+      return `Connected to ${runtimeHost()}`;
+    case "connecting":
+      return `Connecting to ${runtimeHost()}…`;
+    case "reconnecting":
+      return "Reconnecting to the runtime…";
+    case "closed":
+      return "Runtime closed";
+  }
+}
+
+/** A never-saved Installation has no file to be in step with, dirty or not. */
+function saveText(document: DocumentSummary): string {
+  if (document.path === null) return "Not saved yet";
+  return document.dirty ? "Unsaved changes" : "Saved";
 }
 
 function DocumentStatus({ view }: { readonly view: DocumentView }) {

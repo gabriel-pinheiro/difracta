@@ -7,8 +7,17 @@ const runtime = process.env.DIFRACTA_RUNTIME_URL ?? "http://127.0.0.1:4800";
 /** The Output dev server, proxied under /output/ so "Open page" links work in dev. */
 const output = process.env.DIFRACTA_OUTPUT_DEV_URL ?? "http://127.0.0.1:4801";
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   base: "/studio/",
+  // The dev server proxies /live, so the page's own host is not the
+  // runtime's; the status strip names this one instead.
+  define:
+    command === "serve"
+      ? {
+          "import.meta.env.VITE_DIFRACTA_PROXIED_RUNTIME":
+            JSON.stringify(runtime),
+        }
+      : {},
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: { "@": path.resolve(import.meta.dirname, "src") },
@@ -32,4 +41,4 @@ export default defineConfig({
       "/output": { target: output, ws: true },
     },
   },
-});
+}));
