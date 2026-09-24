@@ -20,6 +20,7 @@ import { LayerRows } from "@/entities/layer/layer-rows";
 import { useLayerActions } from "@/entities/layer/use-layer-actions";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useExpansion } from "@/navigator/expansion";
+import { removeFocusingNeighbour } from "@/navigator/focus-row";
 import { NavigatorRow, RowAction } from "@/navigator/navigator-row";
 import { NavigatorSection } from "@/navigator/navigator-section";
 import { SortableItem, SortableList } from "@/navigator/sortable";
@@ -28,7 +29,8 @@ import { isSelected, useSelection } from "@/selection/selection";
 /**
  * Navigator section listing the Scenes, each opening to its Layers. The
  * active Scene carries a green dot; Play cuts the Outputs to a Scene without
- * selecting it, and selecting a Scene never plays it.
+ * selecting it, and selecting a Scene never plays it. The active Scene's
+ * row starts open until the person toggles it.
  */
 export function ScenesSection({ view }: { readonly view: DocumentView }) {
   const command = useCommand(view);
@@ -68,7 +70,8 @@ export function ScenesSection({ view }: { readonly view: DocumentView }) {
         >
           {ordered.map((scene) => {
             const active = scene.id === activeScene;
-            const expanded = isExpanded("scene", scene.id);
+            // The active Scene starts open, so its Layers are in view.
+            const expanded = isExpanded("scene", scene.id, active);
             const items = createItems(scene.id, null);
             return (
               <SortableItem
@@ -88,6 +91,7 @@ export function ScenesSection({ view }: { readonly view: DocumentView }) {
                 <ContextMenu>
                   <ContextMenuTrigger>
                     <NavigatorRow
+                      id={scene.id}
                       icon={Clapperboard}
                       label={scene.name}
                       selected={isSelected(selection, "scene", scene.id)}
@@ -146,7 +150,9 @@ export function ScenesSection({ view }: { readonly view: DocumentView }) {
                           : undefined
                       }
                       onClick={() =>
-                        void command("scene.remove", { sceneId: scene.id })
+                        removeFocusingNeighbour(scene.id, () =>
+                          command("scene.remove", { sceneId: scene.id }),
+                        )
                       }
                     >
                       <Trash2 /> Remove

@@ -9,7 +9,13 @@ import {
 interface BrowserState {
   /** The Visual or Filter Layer the Library is picking for; undefined while closed. */
   readonly bound: string | undefined;
-  readonly open: (layerId: string) => void;
+  /** The browse was opened by creating the bound Layer, so Escape can remove it. */
+  readonly created: boolean;
+  /** Binds the Library to a Layer; `created` when creating it opened the browse. */
+  readonly open: (
+    layerId: string,
+    options?: { readonly created?: boolean },
+  ) => void;
   readonly close: () => void;
 }
 
@@ -21,14 +27,22 @@ export function BrowserProvider({
 }: {
   readonly children: ReactNode;
 }) {
-  const [bound, setBound] = useState<string | undefined>(undefined);
+  const [binding, setBinding] = useState<{
+    readonly bound: string | undefined;
+    readonly created: boolean;
+  }>({ bound: undefined, created: false });
   const state = useMemo<BrowserState>(
     () => ({
-      bound,
-      open: (layerId) => setBound(layerId),
-      close: () => setBound(undefined),
+      ...binding,
+      open: (layerId, options) =>
+        setBinding((previous) =>
+          previous.bound === layerId && options?.created !== true
+            ? previous
+            : { bound: layerId, created: options?.created === true },
+        ),
+      close: () => setBinding({ bound: undefined, created: false }),
     }),
-    [bound],
+    [binding],
   );
   return <Context.Provider value={state}>{children}</Context.Provider>;
 }

@@ -1,5 +1,5 @@
 import type { DifractaClient, DocumentView } from "@difracta/client";
-import type { Document } from "@difracta/core";
+import { settings, type Document } from "@difracta/core";
 import type { DocumentSummary } from "@difracta/protocol";
 import type { Command } from "commander";
 
@@ -54,6 +54,31 @@ export class Cli {
     ) => Promise<TResult>,
   ): Promise<TResult> {
     return this.withClient((client) => action(client, currentDocument(client)));
+  }
+
+  /**
+   * The replica once it holds `revision`, so a reply can be read against
+   * the change it made; after the catch-up timeout, whatever it holds.
+   */
+  caughtUp(
+    view: DocumentView,
+    revision: number,
+  ): Promise<Document | undefined> {
+    return new Promise((resolve) => {
+      if (view.revision.get() >= revision) {
+        resolve(view.get());
+        return;
+      }
+      const done = (): void => {
+        clearTimeout(timer);
+        unsubscribe();
+        resolve(view.get());
+      };
+      const timer = setTimeout(done, settings.cli.replicaCatchUpTimeoutMs);
+      const unsubscribe = view.revision.subscribe((current) => {
+        if (current >= revision) done();
+      });
+    });
   }
 
   /** Subscribes with live state and resolves once the snapshot has landed. */

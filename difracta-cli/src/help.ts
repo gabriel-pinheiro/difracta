@@ -18,15 +18,19 @@ Working from a shell
              osc, get [path|Address], addresses, catalog [id], commands,
              describe <command> (its payload fields; --json for the schema).
 
-  Write      run <command> [json]  any command; ids come back in "created".
+  Write      run <command> [json]  any command; "created" names what it made.
              edit <Address> <value>  authoring change, undoable.
-             set <Address> <value>   show control, never undone.
+             set <Address> <value>   show control, not undoable.
              trigger <Address...>    Cues, a Scene's play, a Macro's run.
              link, unlink, undo, redo.
 
   Save       Authoring (run, edit, link, undo) changes the open Installation
              in memory; "documents save" writes it, and "health" says
-             "unsaved changes" until then. set and trigger are never saved.
+             "unsaved changes" until then. set and trigger are not undoable
+             and not part of history, but a value set on a document Address
+             (layer/Wash/opacity, a Scene played) is saved with the
+             Installation too; Blackout and Cues are performance state and
+             never saved.
              "health" also says "documents pinned" or "documents free": a
              pinned runtime keeps its one file and refuses documents new,
              open, close and save <other path>.
@@ -68,6 +72,6 @@ Working from a shell
              steps, which a value must sit on, and its Cues.)
 
   --json     Every command prints one JSON value; a create's reply has
-             created: [{table, id}]. Errors are one JSON object on stderr,
-             {"error", "issues"?}, with exit code 1.
+             created: [{table, id, name}]. Errors are one JSON object on
+             stderr, {"error", "issues"?}, with exit code 1.
 `;

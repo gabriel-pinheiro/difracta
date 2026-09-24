@@ -9,13 +9,21 @@ import {
 
 import type { EntityKind } from "@/entities";
 
-/** Rows that start open; every other row starts closed. */
+/**
+ * Rows that start open; every other row starts closed unless its section
+ * passes its own default, as the active Scene's row does.
+ */
 const OPEN_BY_DEFAULT: Partial<Record<EntityKind, boolean>> = {
   output: true,
 };
 
 interface ExpansionState {
-  readonly isExpanded: (kind: EntityKind, id: string) => boolean;
+  /** The person's choice for the row once they toggled it, else `byDefault`, else the kind's default. */
+  readonly isExpanded: (
+    kind: EntityKind,
+    id: string,
+    byDefault?: boolean,
+  ) => boolean;
   readonly setExpanded: (kind: EntityKind, id: string, next: boolean) => void;
 }
 
@@ -35,8 +43,11 @@ export function ExpansionProvider({
     () => new Map(),
   );
   const isExpanded = useCallback(
-    (kind: EntityKind, id: string): boolean =>
-      overrides.get(`${kind}:${id}`) ?? OPEN_BY_DEFAULT[kind] ?? false,
+    (kind: EntityKind, id: string, byDefault?: boolean): boolean =>
+      overrides.get(`${kind}:${id}`) ??
+      byDefault ??
+      OPEN_BY_DEFAULT[kind] ??
+      false,
     [overrides],
   );
   const setExpanded = useCallback(

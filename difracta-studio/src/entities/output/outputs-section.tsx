@@ -19,6 +19,7 @@ import {
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useNow } from "@/lib/use-now";
 import { useExpansion } from "@/navigator/expansion";
+import { removeFocusingNeighbour } from "@/navigator/focus-row";
 import { NavigatorEmptyRow, NavigatorRow } from "@/navigator/navigator-row";
 import { NavigatorSection } from "@/navigator/navigator-section";
 import { NavigatorWarning } from "@/navigator/navigator-warning";
@@ -87,7 +88,9 @@ export function OutputsSection({ view }: { readonly view: DocumentView }) {
                   <ContextMenuItem
                     variant="destructive"
                     onClick={() =>
-                      void command("output.remove", { outputId: output.id })
+                      removeFocusingNeighbour(output.id, () =>
+                        command("output.remove", { outputId: output.id }),
+                      )
                     }
                   >
                     <Trash2 /> Remove
@@ -145,6 +148,7 @@ function OutputRow({
   return (
     <>
       <NavigatorRow
+        id={output.id}
         icon={MonitorUp}
         label={output.name}
         selected={selected}

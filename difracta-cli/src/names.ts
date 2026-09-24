@@ -1,3 +1,4 @@
+import { CommandError } from "@difracta/client";
 import {
   sameName,
   TABLE_SCHEMAS,
@@ -225,4 +226,20 @@ function resolveField(
   if (Array.isArray(value))
     return resolvePayloadNames(document, `${prefix}.`, value);
   return value;
+}
+
+/**
+ * An error about the resolved Address retold with the Address as the
+ * person typed it, so a name stays a name in what they read back.
+ */
+export function inTypedTerms(
+  error: unknown,
+  resolved: string,
+  typed: string,
+): unknown {
+  if (!(error instanceof Error) || resolved === typed) return error;
+  const message = error.message.replaceAll(resolved, typed);
+  return error instanceof CommandError
+    ? new CommandError(message, error.issues)
+    : new Error(message);
 }

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { resolveAddress } from "../address/address.ts";
+import { unknownAddress } from "../address/unknown.ts";
 import { actionProblem } from "../address/fire.ts";
 import { accepted, defineCommand, rejected } from "../command/command.ts";
 import { AddressValueSchema, type MacroAction } from "../document/document.ts";
@@ -51,7 +52,7 @@ export const macroActionsAdd = defineCommand({
       const action: MacroAction = { ...input, id: generateId("action") };
       const resolved = resolveAddress(document, action.address, catalog);
       if (resolved === undefined)
-        return rejected(`Unknown address “${action.address}”.`);
+        return rejected(unknownAddress(document, action.address, catalog));
       const problem = actionProblem(document, catalog, action);
       if (problem !== undefined && !problem.includes("is controlled by"))
         return rejected(`${resolved.label}: ${problem}`);

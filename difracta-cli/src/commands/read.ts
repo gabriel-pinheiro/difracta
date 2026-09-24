@@ -4,12 +4,78 @@ import {
   linkAt,
   listAddresses,
   resolveAddress,
+  unknownAddress,
+  type Catalog,
+  type Document,
 } from "@difracta/core";
 import type { Command } from "commander";
 
 import type { Cli } from "../cli.ts";
 import { fetchCatalog } from "../connection.ts";
-import { resolveAddressNames, resolvePathNames } from "../names.ts";
+import {
+  inTypedTerms,
+  resolveAddressNames,
+  resolvePathNames,
+} from "../names.ts";
+
+/** Address heads: a path starting with one is read as an Address. */
+const ADDRESS_HEADS = new Set([
+  "installation",
+  "layer",
+  "scene",
+  "controller",
+  "macro",
+  "surface",
+]);
+
+/**
+ * Why `get` found nothing: for an Address, what is there instead (a
+ * Layer's declared Parameters and Cues), in the words the person typed;
+ * otherwise where to look.
+ */
+function noValue(
+  document: Document,
+  typed: string,
+  address: string,
+  catalog: Catalog,
+): string {
+  if (ADDRESS_HEADS.has(typed.split("/")[0] ?? ""))
+    return (
+      inTypedTerms(
+        new Error(unknownAddress(document, address, catalog)),
+        address,
+        typed,
+      ) as Error
+    ).message;
+  return `No value at “${typed}”: neither a document path nor an Address. \`difracta get\` alone prints the Installation; \`difracta addresses\` lists every Address.`;
+}
+
+/** "Energy 1 · Value": the owner tells same-labelled rows apart. */
+export function addressLabel(entry: {
+  readonly owner?: string | undefined;
+  readonly label: string;
+}): string {
+  return entry.owner === undefined
+    ? entry.label
+    : `${entry.owner} · ${entry.label}`;
+}
+
+/** Rows as columns each as wide as its widest cell, two spaces apart. */
+export function formatTable(rows: readonly (readonly string[])[]): string {
+  const widths: number[] = [];
+  for (const row of rows)
+    row.forEach((cell, index) => {
+      widths[index] = Math.max(widths[index] ?? 0, cell.length);
+    });
+  return rows
+    .map((row) =>
+      row
+        .map((cell, index) => cell.padEnd(widths[index] ?? 0))
+        .join("  ")
+        .trimEnd(),
+    )
+    .join("\n");
+}
 
 export function registerRead(program: Command, cli: Cli): void {
   program
@@ -37,14 +103,14 @@ export function registerRead(program: Command, cli: Cli): void {
         }
         // Not a document path: an Address, read the way a Link or OSC sees it.
         const address = resolveAddressNames(document, path);
-        const entry = resolveAddress(
-          document,
-          address,
-          await fetchCatalog(client),
-        );
-        if (entry === undefined) throw new Error(`No value at “${path}”.`);
+        const catalog = await fetchCatalog(client);
+        const entry = resolveAddress(document, address, catalog);
+        if (entry === undefined)
+          throw new Error(noValue(document, path, address, catalog));
         if (entry.type === "trigger")
-          throw new Error(`“${address}” is a trigger, not a value.`);
+          throw new Error(
+            `“${path}” is a trigger, not a value; fire it with \`difracta trigger\`.`,
+          );
         const value = effectiveValue(document, entry);
         cli.print({ path: address, revision, value }, () =>
           JSON.stringify(value, null, 2),
@@ -86,12 +152,17 @@ export function registerRead(program: Command, cli: Cli): void {
           };
         });
         cli.print(items, () =>
-          items
-            .map(
-              (item) =>
-                `${item.address.padEnd(32)} ${item.type.padEnd(8)} ${item.type === "trigger" ? "-" : JSON.stringify(item.link?.effective ?? item.value)}  ${item.label}${item.controlledBy === undefined ? "" : `  ← ${item.controlledBy}`}`,
-            )
-            .join("\n"),
+          formatTable(
+            items.map((item) => [
+              item.address,
+              item.type,
+              item.type === "trigger"
+                ? "-"
+                : JSON.stringify(item.link?.effective ?? item.value),
+              addressLabel(item),
+              item.controlledBy === undefined ? "" : `← ${item.controlledBy}`,
+            ]),
+          ),
         );
       }),
     );

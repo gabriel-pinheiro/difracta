@@ -13,7 +13,8 @@ import { layerIcons, layerKindLabels } from "./layer-icons";
  * Creating Layers from a Scene row or a Group row: one entry per kind for
  * the "+" menu and the context menu. The new Layer is selected and its
  * parent opened so it is in view; a Visual or Filter Layer also opens the
- * Library, since picking is the next thing to do.
+ * Library, since picking is the next thing to do, marked as opened by
+ * creation so Escape there removes the untouched Layer again.
  */
 export function useLayerActions(view: DocumentView) {
   const command = useCommand(view);
@@ -31,7 +32,7 @@ export function useLayerActions(view: DocumentView) {
       setExpanded("scene", sceneId, true);
       if (parentId !== null) setExpanded("layer", parentId, true);
       select({ kind: "layer", id });
-      if (kind !== "group") browser.open(id);
+      if (kind !== "group") browser.open(id, { created: true });
     });
   }
 

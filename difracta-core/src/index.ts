@@ -19,6 +19,7 @@ export * from "./address/address.ts";
 export * from "./address/links.ts";
 export * from "./address/write.ts";
 export * from "./address/fire.ts";
+export * from "./address/unknown.ts";
 export * from "./command/command.ts";
 export * from "./command/registry.ts";
 export * from "./command/execute.ts";

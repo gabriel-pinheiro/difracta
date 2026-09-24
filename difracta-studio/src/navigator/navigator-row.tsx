@@ -29,6 +29,7 @@ function indent(depth: number): string {
  * Right on a focused row close and open it.
  */
 export function NavigatorRow({
+  id,
   icon: Icon,
   label,
   selected,
@@ -43,6 +44,8 @@ export function NavigatorRow({
   dimmed = false,
   children,
 }: {
+  /** The entity's id, so focus can return to the row (`focus-row.ts`). */
+  readonly id?: string;
   readonly icon: LucideIcon;
   readonly label: string;
   readonly selected: boolean;
@@ -105,6 +108,8 @@ export function NavigatorRow({
         ))}
       <button
         type="button"
+        data-navigator-row={id}
+        data-navigator-depth={id === undefined ? undefined : depth}
         className={cn(
           "flex h-full min-w-0 flex-1 items-center gap-1.5 text-left focus-visible:outline-none",
           onCreate === undefined &&

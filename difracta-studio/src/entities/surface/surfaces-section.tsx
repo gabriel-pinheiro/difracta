@@ -22,6 +22,7 @@ import {
 import { ChildRows } from "@/entities/surface/child-rows";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useExpansion } from "@/navigator/expansion";
+import { removeFocusingNeighbour } from "@/navigator/focus-row";
 import { NavigatorEmptyRow, NavigatorRow } from "@/navigator/navigator-row";
 import { NavigatorSection } from "@/navigator/navigator-section";
 import { NavigatorWarning } from "@/navigator/navigator-warning";
@@ -90,6 +91,7 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
                 <ContextMenu>
                   <ContextMenuTrigger>
                     <NavigatorRow
+                      id={surface.id}
                       icon={Box}
                       label={surface.name}
                       selected={isSelected(selection, "surface", surface.id)}
@@ -140,9 +142,9 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
                     <ContextMenuItem
                       variant="destructive"
                       onClick={() =>
-                        void command("surface.remove", {
-                          surfaceId: surface.id,
-                        })
+                        removeFocusingNeighbour(surface.id, () =>
+                          command("surface.remove", { surfaceId: surface.id }),
+                        )
                       }
                     >
                       <Trash2 /> Remove

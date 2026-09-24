@@ -1,4 +1,5 @@
 import {
+  type Catalog,
   childLayers,
   childrenOf,
   LAYER_LABELS,
@@ -39,16 +40,26 @@ export interface LayerNode {
   readonly level?: LayerLevel;
   /** A Visual Layer's Target Surface, null while it has none. */
   readonly target?: { readonly id: string; readonly name?: string } | null;
+  /** Paths the Visual follows that it cannot use yet, by the Visual's key; absent when none. */
+  readonly missingPaths?: readonly MissingPath[];
   readonly children: readonly LayerNode[];
 }
 
+/** A Path a Visual declares that is unbound, or bound to a Path off the Target. */
+export interface MissingPath {
+  readonly key: string;
+  readonly reason: "unbound" | "not on the Target";
+}
+
+/** Without a Catalog the Layers' Path needs are unknown and go unreported. */
 export function sceneTree(
   document: Document,
   sceneId: string,
+  catalog?: Catalog,
 ): readonly LayerNode[] {
   const build = (parentId: string | null): LayerNode[] =>
     childLayers(document.layers, sceneId, parentId).map((layer) =>
-      layerNode(document, layer, build),
+      layerNode(document, layer, build, catalog),
     );
   return build(null);
 }
@@ -57,6 +68,7 @@ function layerNode(
   document: Document,
   layer: Layer,
   build: (parentId: string) => LayerNode[],
+  catalog: Catalog | undefined,
 ): LayerNode {
   const base = {
     id: layer.id,
@@ -80,6 +92,18 @@ function layerNode(
     return { ...base, definition: layer.filter, level };
   const surface =
     layer.target === null ? undefined : document.surfaces[layer.target];
+  const requirements =
+    layer.visual === null || layer.target === null
+      ? []
+      : (catalog?.visual(layer.visual)?.paths ?? []);
+  const missingPaths = requirements.flatMap((requirement): MissingPath[] => {
+    const pathId = layer.paths[requirement.key];
+    if (pathId === undefined)
+      return [{ key: requirement.key, reason: "unbound" }];
+    return document.paths[pathId]?.surfaceId === layer.target
+      ? []
+      : [{ key: requirement.key, reason: "not on the Target" }];
+  });
   return {
     ...base,
     definition: layer.visual,
@@ -88,6 +112,7 @@ function layerNode(
       layer.target === null
         ? null
         : { id: layer.target, ...(surface ? { name: surface.name } : {}) },
+    ...(missingPaths.length === 0 ? {} : { missingPaths }),
   };
 }
 
@@ -121,6 +146,8 @@ function describeLayer(node: LayerNode): string {
         ? "→ no Target"
         : `→ ${node.target.name ?? node.target.id}`,
     );
+  for (const missing of node.missingPaths ?? [])
+    parts.push(`Path ${missing.key} ${missing.reason}`);
   return parts.join("  ");
 }
 

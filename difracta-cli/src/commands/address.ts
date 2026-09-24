@@ -5,12 +5,14 @@ import type { Command } from "commander";
 
 import type { Cli } from "../cli.ts";
 import { parseValue } from "../connection.ts";
-import { resolveAddressNames, resolveId } from "../names.ts";
+import { inTypedTerms, resolveAddressNames, resolveId } from "../names.ts";
 import { formatWarnings } from "../result.ts";
 
 /** What one `trigger` Address came to: fired with what its Macro skipped, or refused. */
 export interface TriggerOutcome {
   readonly address: string;
+  /** The Address as it was typed, names and all. */
+  readonly typed: string;
   readonly ok: boolean;
   /** How many actions the Macro holds, when the Address is a Macro's run. */
   readonly actions?: number;
@@ -30,12 +32,12 @@ export function registerAddress(program: Command, cli: Cli): void {
     [
       "set",
       "address.set",
-      "Write a performance value to an Address, e.g. set installation/blackout true. Not undoable.",
+      "Write a performance value to an Address, e.g. set installation/blackout true. Not undoable. `addresses` lists every Address with its value.",
     ],
     [
       "edit",
       "address.edit",
-      "Change an Address while authoring, e.g. edit layer/Wash/param/speed 2. Undoable, like the inspector.",
+      "Change an Address while authoring, e.g. edit layer/Wash/param/speed 2. Undoable, like the inspector. `addresses` lists every Address with its value.",
     ],
   ] as const) {
     program
@@ -45,14 +47,17 @@ export function registerAddress(program: Command, cli: Cli): void {
         cli.withDocument(async (client, summary) => {
           const { document } = await cli.replica(client, summary.id);
           const resolved = resolveAddressNames(document, address);
-          const result = await client.command<CommandResult>(
-            summary.id,
-            command,
-            { address: resolved, value: parseValue(value) },
-          );
+          const result = await client
+            .command<CommandResult>(summary.id, command, {
+              address: resolved,
+              value: parseValue(value),
+            })
+            .catch((error: unknown) => {
+              throw inTypedTerms(error, resolved, address);
+            });
           cli.print({ address: resolved, ...result }, () =>
             result.changed
-              ? `${resolved} = ${value} (revision ${String(result.revision)})`
+              ? `${address} = ${value} (revision ${String(result.revision)})`
               : "No change.",
           );
         }),
@@ -132,7 +137,7 @@ export function registerAddress(program: Command, cli: Cli): void {
   program
     .command("trigger <address...>")
     .description(
-      "Fire trigger Addresses, one command each: layer/<id|name>/cue/<key>, scene/<id|name>/play or macro/<id|name>/run. A Macro run says how many actions it holds and lists what it skipped; a refused Address fails the exit code.",
+      "Fire trigger Addresses, one command each: layer/<id|name>/cue/<key>, scene/<id|name>/play or macro/<id|name>/run. A Macro run says how many actions it holds and lists what it skipped; a refused Address fails the exit code. `addresses` lists every trigger.",
     )
     .action((addresses: string[]) =>
       cli.withDocument(async (client, summary) => {
@@ -150,6 +155,7 @@ export function registerAddress(program: Command, cli: Cli): void {
             const macro = kind === "macro" ? document.macros[id] : undefined;
             outcomes.push({
               address,
+              typed,
               ok: true,
               ...(macro?.kind === "macro"
                 ? { actions: macro.actions.length }
@@ -158,11 +164,13 @@ export function registerAddress(program: Command, cli: Cli): void {
             });
           } catch (error) {
             if (!(error instanceof CommandError)) throw error;
+            const retold = inTypedTerms(error, address, typed) as Error;
             outcomes.push({
               address,
+              typed,
               ok: false,
               warnings: [],
-              error: error.message,
+              error: retold.message,
             });
             process.exitCode = 1;
           }
@@ -172,10 +180,10 @@ export function registerAddress(program: Command, cli: Cli): void {
             .flatMap((o) =>
               o.ok
                 ? [
-                    `${o.address} fired${firedDetail(o)}`,
+                    `${o.typed} fired${firedDetail(o)}`,
                     ...formatWarnings(o.warnings),
                   ]
-                : [`${o.address}: ${o.error ?? "refused"}`],
+                : [`${o.typed}: ${o.error ?? "refused"}`],
             )
             .join("\n"),
         );

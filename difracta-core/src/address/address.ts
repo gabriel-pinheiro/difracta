@@ -89,7 +89,8 @@ interface AddressPattern {
   list(source: AddressSource, catalog: Catalog): readonly (readonly string[])[];
 }
 
-function layerDefinition(layer: Layer, catalog: Catalog) {
+/** The Visual or Filter a Layer uses, when it has one the Catalog knows. */
+export function layerDefinition(layer: Layer, catalog: Catalog) {
   if (layer.kind === "visual")
     return layer.visual === null
       ? undefined

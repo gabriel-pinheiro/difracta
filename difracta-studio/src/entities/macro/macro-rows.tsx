@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/context-menu";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useExpansion } from "@/navigator/expansion";
+import { removeFocusingNeighbour } from "@/navigator/focus-row";
 import {
   NavigatorEmptyRow,
   NavigatorRow,
@@ -76,6 +77,7 @@ export function MacroRows({
             <ContextMenu>
               <ContextMenuTrigger>
                 <NavigatorRow
+                  id={macro.id}
                   icon={macroIcons[macro.kind]}
                   label={macro.name}
                   depth={depth}
@@ -142,7 +144,9 @@ export function MacroRows({
                 <ContextMenuItem
                   variant="destructive"
                   onClick={() =>
-                    void command("macro.remove", { macroId: macro.id })
+                    removeFocusingNeighbour(macro.id, () =>
+                      command("macro.remove", { macroId: macro.id }),
+                    )
                   }
                 >
                   <Trash2 /> Remove

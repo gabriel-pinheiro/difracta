@@ -7,6 +7,7 @@ import {
   type Controller,
   type Layer,
   type Link,
+  type Path,
   type Table,
 } from "@difracta/core";
 import {
@@ -26,10 +27,11 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { catalog } from "@/lib/catalog";
+import { catalog, definitionOf } from "@/lib/catalog";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useBrowser } from "@/library/browser-state";
 import { useExpansion } from "@/navigator/expansion";
+import { removeFocusingNeighbour } from "@/navigator/focus-row";
 import {
   NavigatorEmptyRow,
   NavigatorRow,
@@ -71,6 +73,8 @@ export function LayerRows({
   useDocumentPath<Table<Link>>(view, ["links"]);
   const controllers =
     useDocumentPath<Table<Controller>>(view, ["controllers"]) ?? {};
+  // A Visual that follows a Path warns while its Path is missing.
+  const paths = useDocumentPath<Table<Path>>(view, ["paths"]) ?? {};
   const document = view.get();
   const effective =
     document === undefined
@@ -114,7 +118,11 @@ export function LayerRows({
           enabledLink === undefined
             ? undefined
             : controllers[enabledLink.controllerId]?.name;
-        const warning = layerWarning(layer);
+        const warning = layerWarning(layer, {
+          definition:
+            layer.kind === "group" ? undefined : definitionOf(layer).definition,
+          paths,
+        });
         return (
           <SortableItem
             key={layer.id}
@@ -128,6 +136,7 @@ export function LayerRows({
             <ContextMenu>
               <ContextMenuTrigger>
                 <NavigatorRow
+                  id={layer.id}
                   icon={Icon}
                   label={layer.name}
                   depth={depth}
@@ -231,7 +240,9 @@ export function LayerRows({
                 <ContextMenuItem
                   variant="destructive"
                   onClick={() =>
-                    void command("layer.remove", { layerId: layer.id })
+                    removeFocusingNeighbour(layer.id, () =>
+                      command("layer.remove", { layerId: layer.id }),
+                    )
                   }
                 >
                   <Trash2 /> Remove

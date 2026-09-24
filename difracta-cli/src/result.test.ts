@@ -18,6 +18,24 @@ describe("formatCommandResult", () => {
     ).toBe("Create Output “TV” → output_ab12 (revision 3)");
   });
 
+  it("names each created entity as it ended up, which may differ from the label", () => {
+    expect(
+      formatCommandResult(
+        {
+          revision: 4,
+          changed: true,
+          label: "Create Surface “Full Frame”",
+          created: [
+            { table: "surfaces", id: "surface_ab12", name: "Full Frame 1" },
+          ],
+        },
+        "surface.create",
+      ),
+    ).toBe(
+      "Create Surface “Full Frame” → surface_ab12 “Full Frame 1” (revision 4)",
+    );
+  });
+
   it("falls back to the command name and lists warnings underneath", () => {
     expect(
       formatCommandResult(

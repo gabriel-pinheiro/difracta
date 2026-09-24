@@ -47,7 +47,12 @@ export function DefinitionBlock({
           No {labels.singular} yet: {without} until one is picked.
         </p>
       )}
-      <Button variant="outline" size="sm" onClick={() => open(layer.id)}>
+      <Button
+        variant="outline"
+        size="sm"
+        data-library-open={layer.id}
+        onClick={() => open(layer.id)}
+      >
         {definition === undefined
           ? `Pick a ${labels.singular}…`
           : `Swap ${labels.singular}…`}

@@ -139,6 +139,19 @@ export function validateParameterValue(
   }
 }
 
+/** "the declared ones are count, speed", or "none is declared". */
+function declaredKeys(schema: ParameterSchema): string {
+  const keys = Object.keys(schema);
+  return keys.length === 0
+    ? "none is declared"
+    : `the declared ones are ${keys.join(", ")}`;
+}
+
+/** The sentence that ends a message about a definition's Parameters or Cues: where to read them all. */
+export function catalogHint(definitionId: string): string {
+  return `See \`difracta catalog ${definitionId}\`.`;
+}
+
 /**
  * Checks a complete set of values against a schema: every declared Parameter
  * present and valid, nothing undeclared. Returns the first problem.
@@ -148,7 +161,8 @@ export function validateParameterValues(
   values: ParameterValues,
 ): string | undefined {
   for (const name of Object.keys(values)) {
-    if (!(name in schema)) return `Parameter “${name}” is not declared.`;
+    if (!(name in schema))
+      return `Parameter “${name}” is not declared; ${declaredKeys(schema)}.`;
   }
   for (const [name, definition] of Object.entries(schema)) {
     const value = values[name];

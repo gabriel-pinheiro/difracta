@@ -14,6 +14,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { useCommand, useDocumentPath } from "@/lib/client";
+import { removeFocusingNeighbour } from "@/navigator/focus-row";
 import { NavigatorRow } from "@/navigator/navigator-row";
 import { SortableItem, SortableList } from "@/navigator/sortable";
 import { isSelected, useSelection } from "@/selection/selection";
@@ -56,6 +57,7 @@ export function ChildRows({
             <ContextMenu>
               <ContextMenuTrigger>
                 <NavigatorRow
+                  id={child.entity.id}
                   icon={SquareDashed}
                   depth={2}
                   label={child.entity.name}
@@ -73,7 +75,9 @@ export function ChildRows({
                 <ContextMenuItem
                   variant="destructive"
                   onClick={() =>
-                    void command("mask.remove", { maskId: child.entity.id })
+                    removeFocusingNeighbour(child.entity.id, () =>
+                      command("mask.remove", { maskId: child.entity.id }),
+                    )
                   }
                 >
                   <Trash2 /> Remove
@@ -86,6 +90,7 @@ export function ChildRows({
             <ContextMenu>
               <ContextMenuTrigger>
                 <NavigatorRow
+                  id={child.entity.id}
                   icon={Spline}
                   depth={2}
                   label={child.entity.name}
@@ -103,7 +108,9 @@ export function ChildRows({
                 <ContextMenuItem
                   variant="destructive"
                   onClick={() =>
-                    void command("path.remove", { pathId: child.entity.id })
+                    removeFocusingNeighbour(child.entity.id, () =>
+                      command("path.remove", { pathId: child.entity.id }),
+                    )
                   }
                 >
                   <Trash2 /> Remove

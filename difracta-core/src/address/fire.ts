@@ -3,6 +3,7 @@ import type { Document, MacroAction } from "../document/document.ts";
 import { applyPatches, type Patch } from "../document/patch.ts";
 import { addressValueProblem, resolveAddress } from "./address.ts";
 import { linkAt } from "./links.ts";
+import { unknownAddress } from "./unknown.ts";
 import { toggleAddress, writeAddress } from "./write.ts";
 
 /** What firing a trigger Address did: patches to commit, events to announce, actions that could not run. */
@@ -33,7 +34,7 @@ export function fireAddress(
 ): FireOutcome {
   const resolved = resolveAddress(document, address, catalog);
   if (resolved === undefined)
-    return { ok: false, error: `Unknown address “${address}”.` };
+    return { ok: false, error: unknownAddress(document, address, catalog) };
   if (resolved.type !== "trigger")
     return { ok: false, error: `Address “${address}” is not a trigger.` };
   return { ok: true, ...fireResolved(document, catalog, address, new Set()) };

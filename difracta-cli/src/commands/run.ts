@@ -1,12 +1,21 @@
-import { createBuiltInRegistry, type CommandRegistry } from "@difracta/core";
-import type { CommandResult } from "@difracta/protocol";
+import {
+  createBuiltInRegistry,
+  type CommandRegistry,
+  type Document,
+  type TableName,
+} from "@difracta/core";
+import type { CommandResult, CreatedEntity } from "@difracta/protocol";
 import type { Command } from "commander";
 import { z } from "zod";
 
 import type { Cli } from "../cli.ts";
 import { parseJsonArgument } from "../connection.ts";
 import { resolvePayloadNames } from "../names.ts";
-import { formatCommandResult } from "../result.ts";
+import {
+  formatCommandResult,
+  type NamedEntity,
+  type NamedResult,
+} from "../result.ts";
 import { formatSchema } from "../schema.ts";
 
 /** The registry is the only source for `commands`, `describe` and `run`. */
@@ -33,6 +42,23 @@ export function describeCommand(
     description: definition.description,
     payload: z.toJSONSchema(definition.payload as z.ZodType, { io: "input" }),
   };
+}
+
+/**
+ * What a command created, each with the name it ended up with: a create
+ * given a name another entity has gets a numbered one, and the next
+ * name-based call must use that.
+ */
+export function nameCreated(
+  document: Document | undefined,
+  created: readonly CreatedEntity[],
+): NamedEntity[] {
+  return created.map((entity) => {
+    const table = document?.[entity.table as TableName] as
+      Readonly<Record<string, { readonly name?: string }>> | undefined;
+    const name = table?.[entity.id]?.name;
+    return name === undefined ? entity : { ...entity, name };
+  });
 }
 
 export function registerRun(program: Command, cli: Cli): void {
@@ -78,16 +104,26 @@ export function registerRun(program: Command, cli: Cli): void {
   program
     .command("run <command> [payload]")
     .description(
-      'Run any command with a JSON payload, e.g. run output.create \'{"name":"TV"}\'. Entity fields take names as well as ids; the reply lists what was created.',
+      'Run any command with a JSON payload, e.g. run output.create \'{"name":"TV"}\'. Entity fields take names as well as ids. `commands` lists the commands, `describe <command>` shows its payload; a create\'s reply lists what it made, with the name it got.',
     )
     .action((name: string, payload: string | undefined) =>
       cli.withDocument(async (client, summary) => {
-        const { document } = await cli.replica(client, summary.id);
-        const result = await client.command<CommandResult>(
+        const { document, view } = await cli.replica(client, summary.id);
+        const reply = await client.command<CommandResult>(
           summary.id,
           name,
           resolvePayloadNames(document, name, parseJsonArgument(payload)),
         );
+        const result: NamedResult =
+          reply.created === undefined
+            ? reply
+            : {
+                ...reply,
+                created: nameCreated(
+                  await cli.caughtUp(view, reply.revision),
+                  reply.created,
+                ),
+              };
         cli.print(result, () => formatCommandResult(result, name));
       }),
     );

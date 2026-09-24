@@ -200,7 +200,9 @@ describe("layer.visual and layer.filter", () => {
         visual: "stars",
         parameters: { count: 7, glow: 1 },
       }),
-    ).toBe("Parameter “glow” is not declared.");
+    ).toBe(
+      "Parameter “glow” is not declared; the declared ones are count, tint. See `difracta catalog stars`.",
+    );
     expect(
       fails(document, "layer.visual", {
         layerId: "a",

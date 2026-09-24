@@ -1,3 +1,4 @@
+import { CommandError } from "@difracta/client";
 import {
   createBuiltInRegistry,
   emptyDocument,
@@ -7,6 +8,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import {
+  inTypedTerms,
   resolveAddressNames,
   resolveId,
   resolvePathNames,
@@ -218,5 +220,26 @@ describe("resolvePayloadNames", () => {
     expect(() =>
       resolvePayloadNames(document, "layer.remove", { layerId: "Wash" }),
     ).toThrow("matches 2 Layers");
+  });
+});
+
+describe("inTypedTerms", () => {
+  it("retells an error with the Address as typed, keeping its kind and issues", () => {
+    const retold = inTypedTerms(
+      new CommandError("Unknown address “layer/lay_1/param/fish”: …", ["i"]),
+      "layer/lay_1/param/fish",
+      "layer/Wash/param/fish",
+    );
+    expect(retold).toBeInstanceOf(CommandError);
+    expect((retold as CommandError).message).toBe(
+      "Unknown address “layer/Wash/param/fish”: …",
+    );
+    expect((retold as CommandError).issues).toEqual(["i"]);
+  });
+
+  it("leaves an error alone when nothing was resolved", () => {
+    const error = new Error("x");
+    expect(inTypedTerms(error, "a/b", "a/b")).toBe(error);
+    expect(inTypedTerms("boom", "a/b", "a/c")).toBe("boom");
   });
 });

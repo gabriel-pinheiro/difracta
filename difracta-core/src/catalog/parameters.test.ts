@@ -48,7 +48,10 @@ describe("parameters", () => {
       "Parameter “mirrored” must be true or false.",
     );
     expect(validateParameterValues(schema, { ...values, extra: 1 })).toBe(
-      "Parameter “extra” is not declared.",
+      "Parameter “extra” is not declared; the declared ones are speed, tint, shape, mirrored.",
+    );
+    expect(validateParameterValues({}, { extra: 1 })).toBe(
+      "Parameter “extra” is not declared; none is declared.",
     );
     const { speed: _speed, ...missing } = values;
     expect(validateParameterValues(schema, missing)).toBe(

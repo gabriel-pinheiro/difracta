@@ -29,6 +29,15 @@ const catalog = new Catalog({
       backend: "canvas",
       parameters: {},
     },
+    {
+      id: "bolt",
+      kind: "visual",
+      name: "Bolt",
+      description: "Follows a Path.",
+      backend: "canvas",
+      parameters: {},
+      paths: [{ key: "route", label: "Route" }],
+    },
   ],
   filters: [],
 });
@@ -136,6 +145,45 @@ describe("sceneTree", () => {
       "  Filter “Blur”  blur  on (Group off)  (no Filter)  mix 25%",
       "Layer “Wash”  wash  on  solid  opacity 50% ← Energy  → Wall",
     ]);
+  });
+
+  it("names a Path the Visual follows that is unbound or off the Target", () => {
+    let document = stage();
+    const steps: readonly (readonly [string, unknown])[] = [
+      ["surface.create", { id: "floor", name: "Floor", output: null }],
+      ["path.create", { id: "edge", surfaceId: "floor", name: "Edge" }],
+      [
+        "layer.create",
+        { id: "zap", sceneId: "sc2", kind: "visual", name: "Zap" },
+      ],
+      ["layer.visual", { layerId: "zap", visual: "bolt" }],
+      ["layer.update", { layerId: "zap", target: "sur" }],
+    ];
+    for (const [name, payload] of steps) {
+      const result = executeCommand(registry, document, name, payload);
+      if (!result.ok) throw new Error(`${name}: ${result.error}`);
+      document = result.document;
+    }
+    const [zap] = sceneTree(document, "sc2", catalog);
+    expect(zap?.missingPaths).toEqual([{ key: "route", reason: "unbound" }]);
+    expect(formatSceneTree(sceneTree(document, "sc2", catalog))).toEqual([
+      "Layer “Zap”  zap  on  bolt  opacity 100%  → Wall  Path route unbound",
+    ]);
+    // A binding left pointing at another Surface's Path reads as off the Target.
+    const layer = document.layers.zap;
+    if (layer?.kind !== "visual") throw new Error("zap is a Visual Layer");
+    const stale: Document = {
+      ...document,
+      layers: {
+        ...document.layers,
+        zap: { ...layer, paths: { route: "edge" } },
+      },
+    };
+    expect(formatSceneTree(sceneTree(stale, "sc2", catalog))).toEqual([
+      "Layer “Zap”  zap  on  bolt  opacity 100%  → Wall  Path route not on the Target",
+    ]);
+    // Without a Catalog nothing is known about Paths.
+    expect(sceneTree(document, "sc2")[0]?.missingPaths).toBeUndefined();
   });
 
   it("is empty for a Scene without Layers", () => {

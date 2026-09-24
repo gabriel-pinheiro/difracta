@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/context-menu";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useExpansion } from "@/navigator/expansion";
+import { removeFocusingNeighbour } from "@/navigator/focus-row";
 import {
   NavigatorEmptyRow,
   NavigatorRow,
@@ -81,6 +82,7 @@ export function ControllerRows({
             <ContextMenu>
               <ContextMenuTrigger>
                 <NavigatorRow
+                  id={controller.id}
                   icon={controllerIcons[controller.kind]}
                   label={controller.name}
                   depth={depth}
@@ -134,9 +136,11 @@ export function ControllerRows({
                 <ContextMenuItem
                   variant="destructive"
                   onClick={() =>
-                    void command("controller.remove", {
-                      controllerId: controller.id,
-                    })
+                    removeFocusingNeighbour(controller.id, () =>
+                      command("controller.remove", {
+                        controllerId: controller.id,
+                      }),
+                    )
                   }
                 >
                   <Trash2 /> Remove

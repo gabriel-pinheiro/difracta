@@ -2,6 +2,7 @@ import { flattenTree, qualifiedName } from "@difracta/core";
 import type { Command } from "commander";
 
 import type { Cli } from "../cli.ts";
+import { fetchCatalog } from "../connection.ts";
 import { liveStatus } from "../live-status.ts";
 import { resolveId } from "../names.ts";
 import {
@@ -32,15 +33,18 @@ export function registerTree(program: Command, cli: Cli): void {
   program
     .command("scene <scene>")
     .description(
-      "Show a Scene's Layers as a tree, top first: kind, name, id, enabled (gated by its Group), Visual or Filter, opacity or mix with its Controller, Target Surface.",
+      "Show a Scene's Layers as a tree, top first: kind, name, id, enabled (gated by its Group), Visual or Filter, opacity or mix with its Controller, Target Surface, and any Path its Visual follows that is unbound or not on the Target.",
     )
     .action((reference: string) =>
       cli.withDocument(async (client, summary) => {
-        const { document } = await cli.replica(client, summary.id);
+        const [{ document }, catalog] = await Promise.all([
+          cli.replica(client, summary.id),
+          fetchCatalog(client),
+        ]);
         const id = resolveId(document, "scenes", reference);
         const name = document.scenes[id]?.name ?? id;
         const active = document.installation.activeScene === id;
-        const layers = sceneTree(document, id);
+        const layers = sceneTree(document, id, catalog);
         cli.print({ id, name, active, layers }, () =>
           [
             `${active ? "▶ " : ""}Scene “${name}”  ${id}`,

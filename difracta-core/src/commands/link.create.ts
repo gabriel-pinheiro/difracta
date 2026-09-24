@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { resolveAddress } from "../address/address.ts";
+import { unknownAddress } from "../address/unknown.ts";
 import {
   anchorsProblem,
   defaultAnchors,
@@ -29,7 +30,7 @@ export function linkPatches(
   for (const address of new Set(addresses)) {
     const resolved = resolveAddress(document, address, catalog);
     if (resolved === undefined)
-      return { error: `Unknown address “${address}”.` };
+      return { error: unknownAddress(document, address, catalog) };
     const problem = linkProblem(controller, resolved);
     if (problem !== undefined) return { error: problem };
     const anchorProblem =

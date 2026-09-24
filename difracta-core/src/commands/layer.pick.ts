@@ -4,6 +4,7 @@ import type { Definition } from "../catalog/catalog.ts";
 import {
   defaultParameterValues,
   ParameterValuesSchema,
+  catalogHint,
   validateParameterValues,
   type ParameterValues,
 } from "../catalog/parameters.ts";
@@ -70,7 +71,8 @@ function pick(
       : { ...defaultParameterValues(next.parameters), ...values };
   if (next !== undefined) {
     const problem = validateParameterValues(next.parameters, parameters);
-    if (problem !== undefined) return rejected(problem);
+    if (problem !== undefined)
+      return rejected(`${problem} ${catalogHint(next.id)}`);
   } else if (Object.keys(parameters).length > 0) {
     return rejected(`A Layer without a ${label} has no Parameters.`);
   }
