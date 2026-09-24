@@ -34,3 +34,26 @@ export function NavigatorWarning({
     </Tooltip>
   );
 }
+
+/**
+ * The amber mark a collapsed navigator section's header carries while rows
+ * inside it warn, so a closed section never hides one; the count is on
+ * hover. It sits in the header's toggle button, so the trigger is a span.
+ */
+export function SectionWarning({ count }: { readonly count: number }) {
+  const explanation =
+    count === 1
+      ? "1 row needs attention"
+      : `${String(count)} rows need attention`;
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={<span className="flex shrink-0 items-center text-amber-300" />}
+      >
+        <TriangleAlert aria-hidden className="size-3" />
+        <span className="sr-only">{explanation}</span>
+      </TooltipTrigger>
+      <TooltipContent>{explanation}</TooltipContent>
+    </Tooltip>
+  );
+}

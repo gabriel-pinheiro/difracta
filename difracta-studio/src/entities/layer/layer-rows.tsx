@@ -27,11 +27,10 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { catalog, definitionOf } from "@/lib/catalog";
+import { catalog } from "@/lib/catalog";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useBrowser } from "@/library/browser-state";
 import { useExpansion } from "@/navigator/expansion";
-import { removeFocusingNeighbour } from "@/navigator/focus-row";
 import {
   NavigatorEmptyRow,
   NavigatorRow,
@@ -39,10 +38,12 @@ import {
 } from "@/navigator/navigator-row";
 import { NavigatorWarning } from "@/navigator/navigator-warning";
 import { SortableItem, SortableList } from "@/navigator/sortable";
+import { useRemoveEntity } from "@/selection/remove-selection";
 import { isSelected, useSelection } from "@/selection/selection";
 
 import { layerIcons, layerKindLabels } from "./layer-icons";
 import { layerWarning } from "./layer-warning";
+import { layerWarningContext } from "./layer-warning-context";
 import { useLayerActions } from "./use-layer-actions";
 
 /**
@@ -64,6 +65,7 @@ export function LayerRows({
   readonly depth: number;
 }) {
   const command = useCommand(view);
+  const removeEntity = useRemoveEntity();
   const { selection, select } = useSelection();
   const { isExpanded, setExpanded } = useExpansion();
   const { createItems } = useLayerActions(view);
@@ -80,6 +82,7 @@ export function LayerRows({
     document === undefined
       ? layers
       : effectiveDocument(document, catalog).layers;
+  const warningContext = layerWarningContext(paths);
   const rows = childLayers(layers, sceneId, parentId);
   const moveInto = (layerId: string, target: Layer): void =>
     void command("layer.move", {
@@ -92,7 +95,7 @@ export function LayerRows({
   if (rows.length === 0)
     return (
       <NavigatorEmptyRow depth={depth}>
-        {parentId === null ? "No Layers" : "Empty Group"}
+        {parentId === null ? "No Layers yet." : "Empty Group"}
       </NavigatorEmptyRow>
     );
   return (
@@ -118,11 +121,7 @@ export function LayerRows({
           enabledLink === undefined
             ? undefined
             : controllers[enabledLink.controllerId]?.name;
-        const warning = layerWarning(layer, {
-          definition:
-            layer.kind === "group" ? undefined : definitionOf(layer).definition,
-          paths,
-        });
+        const warning = layerWarning(layer, warningContext(layer));
         return (
           <SortableItem
             key={layer.id}
@@ -239,11 +238,7 @@ export function LayerRows({
                 <ContextMenuSeparator />
                 <ContextMenuItem
                   variant="destructive"
-                  onClick={() =>
-                    removeFocusingNeighbour(layer.id, () =>
-                      command("layer.remove", { layerId: layer.id }),
-                    )
-                  }
+                  onClick={() => removeEntity("layer", layer.id)}
                 >
                   <Trash2 /> Remove
                 </ContextMenuItem>

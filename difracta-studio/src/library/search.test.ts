@@ -1,7 +1,12 @@
 import type { VisualDefinition } from "@difracta/core";
 import { describe, expect, it } from "vitest";
 
-import { isSubsequence, matchTier, rankDefinitions } from "./search.ts";
+import {
+  isSubsequence,
+  matchTier,
+  pickOnEnter,
+  rankDefinitions,
+} from "./search.ts";
 
 function visual(
   id: string,
@@ -105,5 +110,19 @@ describe("library search", () => {
         }),
       ),
     ).toEqual([]);
+  });
+});
+
+describe("pickOnEnter", () => {
+  it("picks the first result while nothing is applied", () => {
+    const ranked = rankDefinitions(catalog, "star");
+    expect(pickOnEnter(null, ranked)).toBe("stars");
+    expect(pickOnEnter(null, ranked, "plasma")).toBe("plasma");
+    expect(pickOnEnter(null, [])).toBeUndefined();
+  });
+
+  it("keeps what is applied", () => {
+    expect(pickOnEnter("solid", catalog)).toBeUndefined();
+    expect(pickOnEnter("solid", catalog, "plasma")).toBeUndefined();
   });
 });

@@ -47,6 +47,18 @@ export function neighbourRow(id: string): string | undefined {
   return (after ?? rows[index - 1])?.dataset.navigatorRow;
 }
 
+/**
+ * The header toggle of the section holding the row for `id`, read before
+ * removing it, for focus once the section has no row left to take it.
+ */
+export function sectionHeader(id: string): HTMLElement | null {
+  return (
+    rowButton(id)
+      ?.closest("section")
+      ?.querySelector<HTMLElement>("[data-navigator-section]") ?? null
+  );
+}
+
 /** Runs a removal, then focuses the row that was next to the removed one. */
 export function removeFocusingNeighbour(
   id: string,

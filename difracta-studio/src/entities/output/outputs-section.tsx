@@ -19,11 +19,11 @@ import {
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useNow } from "@/lib/use-now";
 import { useExpansion } from "@/navigator/expansion";
-import { removeFocusingNeighbour } from "@/navigator/focus-row";
 import { NavigatorEmptyRow, NavigatorRow } from "@/navigator/navigator-row";
 import { NavigatorSection } from "@/navigator/navigator-section";
 import { NavigatorWarning } from "@/navigator/navigator-warning";
 import { SortableItem, SortableList } from "@/navigator/sortable";
+import { useRemoveEntity } from "@/selection/remove-selection";
 import { isSelected, useSelection } from "@/selection/selection";
 
 import {
@@ -36,16 +36,15 @@ import {
   toneTitle,
   type SessionTable,
 } from "./output-live";
+import { outputWarningCount, outputWithoutSurface } from "./output-warning";
 
 /** Navigator section listing the Outputs; "+" asks for a name, creates one and selects it. */
 export function OutputsSection({ view }: { readonly view: DocumentView }) {
   const command = useCommand(view);
+  const removeEntity = useRemoveEntity();
   const { selection, select } = useSelection();
   const outputs = useDocumentPath<Table<Output>>(view, ["outputs"]) ?? {};
   const surfaces = useDocumentPath<Table<Surface>>(view, ["surfaces"]) ?? {};
-  const assigned = new Set(
-    Object.values(surfaces).map((surface) => surface.output),
-  );
   const [naming, setNaming] = useState(false);
   const ordered = orderedEntries(outputs);
 
@@ -63,6 +62,7 @@ export function OutputsSection({ view }: { readonly view: DocumentView }) {
         holds={["output"]}
         label="Outputs"
         empty={ordered.length === 0 ? "No Outputs yet." : undefined}
+        warnings={outputWarningCount(outputs, surfaces)}
         onCreate={() => setNaming(true)}
       >
         <SortableList
@@ -80,7 +80,7 @@ export function OutputsSection({ view }: { readonly view: DocumentView }) {
                   <OutputRow
                     view={view}
                     output={output}
-                    unassigned={!assigned.has(output.id)}
+                    unassigned={outputWithoutSurface(output.id, surfaces)}
                     selected={isSelected(selection, "output", output.id)}
                     onSelect={() => select({ kind: "output", id: output.id })}
                   />
@@ -88,11 +88,7 @@ export function OutputsSection({ view }: { readonly view: DocumentView }) {
                 <ContextMenuContent>
                   <ContextMenuItem
                     variant="destructive"
-                    onClick={() =>
-                      removeFocusingNeighbour(output.id, () =>
-                        command("output.remove", { outputId: output.id }),
-                      )
-                    }
+                    onClick={() => removeEntity("output", output.id)}
                   >
                     <Trash2 /> Remove
                   </ContextMenuItem>

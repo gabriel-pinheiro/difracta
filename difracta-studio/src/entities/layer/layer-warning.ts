@@ -57,3 +57,13 @@ export function layerWarning(
     };
   return undefined;
 }
+
+/** How many Layer rows warn, for the collapsed Scenes section. */
+export function layerWarningCount(
+  layers: Table<Layer>,
+  context: (layer: Layer) => LayerWarningContext,
+): number {
+  return Object.values(layers).filter(
+    (layer) => layerWarning(layer, context(layer)) !== undefined,
+  ).length;
+}

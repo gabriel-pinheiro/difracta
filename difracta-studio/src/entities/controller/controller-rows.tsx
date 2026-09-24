@@ -11,13 +11,13 @@ import {
 } from "@/components/ui/context-menu";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useExpansion } from "@/navigator/expansion";
-import { removeFocusingNeighbour } from "@/navigator/focus-row";
 import {
   NavigatorEmptyRow,
   NavigatorRow,
   type CreateItem,
 } from "@/navigator/navigator-row";
 import { SortableItem, SortableList } from "@/navigator/sortable";
+import { useRemoveEntity } from "@/selection/remove-selection";
 import { isSelected, useSelection } from "@/selection/selection";
 
 import { controllerIcons } from "./controller-icons";
@@ -35,6 +35,7 @@ export function ControllerRows({
   readonly createItems: (parentId: string | null) => readonly CreateItem[];
 }) {
   const command = useCommand(view);
+  const removeEntity = useRemoveEntity();
   const { selection, select } = useSelection();
   const { isExpanded, setExpanded } = useExpansion();
   const controllers =
@@ -50,7 +51,7 @@ export function ControllerRows({
   if (rows.length === 0)
     return (
       <NavigatorEmptyRow depth={depth}>
-        {parentId === null ? "No Controllers" : "Empty Group"}
+        {parentId === null ? "No Controllers yet." : "Empty Group"}
       </NavigatorEmptyRow>
     );
   return (
@@ -135,13 +136,7 @@ export function ControllerRows({
                 <ContextMenuSeparator />
                 <ContextMenuItem
                   variant="destructive"
-                  onClick={() =>
-                    removeFocusingNeighbour(controller.id, () =>
-                      command("controller.remove", {
-                        controllerId: controller.id,
-                      }),
-                    )
-                  }
+                  onClick={() => removeEntity("controller", controller.id)}
                 >
                   <Trash2 /> Remove
                 </ContextMenuItem>

@@ -6,7 +6,7 @@ import {
 } from "@difracta/core";
 import { describe, expect, it } from "vitest";
 
-import { layerWarning } from "./layer-warning.ts";
+import { layerWarning, layerWarningCount } from "./layer-warning.ts";
 
 const base = {
   id: id("layer", "l"),
@@ -123,5 +123,19 @@ describe("layerWarning", () => {
         paths: {},
       }),
     ).toBeUndefined();
+  });
+});
+
+describe("layerWarningCount", () => {
+  it("counts the Layers whose rows warn", () => {
+    const layers = {
+      a: { ...visual(null, "wall"), id: id("layer", "a") },
+      b: { ...visual("stars", "wall"), id: id("layer", "b") },
+      c: { ...visual("stars", null), id: id("layer", "c") },
+      g: { ...base, id: id("layer", "g"), kind: "group" as const },
+    };
+    const none = () => ({ definition: undefined, paths: {} });
+    expect(layerWarningCount(layers, none)).toBe(2);
+    expect(layerWarningCount({}, none)).toBe(0);
   });
 });

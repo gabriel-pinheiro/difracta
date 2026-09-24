@@ -14,9 +14,9 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { useCommand, useDocumentPath } from "@/lib/client";
-import { removeFocusingNeighbour } from "@/navigator/focus-row";
 import { NavigatorRow } from "@/navigator/navigator-row";
 import { SortableItem, SortableList } from "@/navigator/sortable";
+import { useRemoveEntity } from "@/selection/remove-selection";
 import { isSelected, useSelection } from "@/selection/selection";
 
 /**
@@ -32,6 +32,7 @@ export function ChildRows({
   readonly surfaceId: string;
 }) {
   const command = useCommand(view);
+  const removeEntity = useRemoveEntity();
   const { selection, select } = useSelection();
   const masks = useDocumentPath<Table<Mask>>(view, ["masks"]) ?? {};
   const paths = useDocumentPath<Table<Path>>(view, ["paths"]) ?? {};
@@ -74,11 +75,7 @@ export function ChildRows({
               <ContextMenuContent>
                 <ContextMenuItem
                   variant="destructive"
-                  onClick={() =>
-                    removeFocusingNeighbour(child.entity.id, () =>
-                      command("mask.remove", { maskId: child.entity.id }),
-                    )
-                  }
+                  onClick={() => removeEntity("mask", child.entity.id)}
                 >
                   <Trash2 /> Remove
                 </ContextMenuItem>
@@ -107,11 +104,7 @@ export function ChildRows({
               <ContextMenuContent>
                 <ContextMenuItem
                   variant="destructive"
-                  onClick={() =>
-                    removeFocusingNeighbour(child.entity.id, () =>
-                      command("path.remove", { pathId: child.entity.id }),
-                    )
-                  }
+                  onClick={() => removeEntity("path", child.entity.id)}
                 >
                   <Trash2 /> Remove
                 </ContextMenuItem>

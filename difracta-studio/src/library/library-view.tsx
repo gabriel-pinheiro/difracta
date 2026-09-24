@@ -30,7 +30,12 @@ import { useBrowser } from "./browser-state";
 import { Description } from "./description";
 import { FacetControl } from "./facet-control";
 import { LibraryTile } from "./library-tile";
-import { ANY_FACETS, rankDefinitions, type Facets } from "./search";
+import {
+  ANY_FACETS,
+  pickOnEnter,
+  rankDefinitions,
+  type Facets,
+} from "./search";
 
 /** What the bound Layer held when the Library opened, so Escape can put it back. */
 interface RestorePoint {
@@ -41,13 +46,14 @@ interface RestorePoint {
 /**
  * The Library: the Catalog as a grid of tiles, bound to one Visual or Filter
  * Layer. Clicking a tile or moving with the arrow keys applies it to the
- * Layer at once, so the Outputs are the preview; Enter keeps the pick and
- * Escape discards the browse, putting back what the Layer had when the
- * Library opened. When creating the Layer opened the Library and the Layer
- * still has its generated name and first Target, Escape removes it instead,
- * so backing out leaves no empty Layer. Either way focus returns to the
- * Layer's navigator row. Selecting another Visual or Filter Layer rebinds
- * the Library to it; selecting anything else closes it.
+ * Layer at once, so the Outputs are the preview; Enter keeps the pick, or
+ * picks the first result while the Layer has none, and Escape discards the
+ * browse, putting back what the Layer had when the Library opened. When
+ * creating the Layer opened the Library and the Layer still has its
+ * generated name and first Target, Escape removes it instead, so backing
+ * out leaves no empty Layer. Either way focus returns to the Layer's
+ * navigator row. Selecting another Visual or Filter Layer rebinds the
+ * Library to it; selecting anything else closes it.
  */
 export function LibraryView({
   view,
@@ -176,9 +182,17 @@ function Browser({
         if (inInput && query !== "") return;
         moveBy(-1);
         break;
-      case "Enter":
+      case "Enter": {
+        const focused =
+          event.target instanceof HTMLElement
+            ? event.target.closest<HTMLElement>("[data-testid='library-tile']")
+                ?.dataset.id
+            : undefined;
+        const pick = pickOnEnter(currentId, ranked, focused);
+        if (pick !== undefined) apply(pick);
         leave();
         break;
+      }
       case "Escape": {
         if (untouched) {
           close();
@@ -215,9 +229,7 @@ function Browser({
         <span className="font-medium">{labels.plural} for</span>
         <span className="min-w-0 truncate">{layer.name}</span>
         <span className="ml-auto truncate text-[0.6875rem] text-muted-foreground">
-          {untouched
-            ? "Enter keeps, Esc removes the new Layer"
-            : "Enter keeps, Esc discards"}
+          {`${currentId === null && ranked.length > 0 ? "Enter picks the first" : "Enter keeps"}, ${untouched ? "Esc removes the new Layer" : "Esc discards"}`}
         </span>
         <Button
           variant="ghost"

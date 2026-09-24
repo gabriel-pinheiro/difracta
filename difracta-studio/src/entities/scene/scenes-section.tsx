@@ -17,13 +17,14 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { LayerRows } from "@/entities/layer/layer-rows";
+import { useLayerWarningCount } from "@/entities/layer/layer-warning-context";
 import { useLayerActions } from "@/entities/layer/use-layer-actions";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useExpansion } from "@/navigator/expansion";
-import { removeFocusingNeighbour } from "@/navigator/focus-row";
 import { NavigatorRow, RowAction } from "@/navigator/navigator-row";
 import { NavigatorSection } from "@/navigator/navigator-section";
 import { SortableItem, SortableList } from "@/navigator/sortable";
+import { useRemoveEntity } from "@/selection/remove-selection";
 import { isSelected, useSelection } from "@/selection/selection";
 
 /**
@@ -34,6 +35,7 @@ import { isSelected, useSelection } from "@/selection/selection";
  */
 export function ScenesSection({ view }: { readonly view: DocumentView }) {
   const command = useCommand(view);
+  const removeEntity = useRemoveEntity();
   const { selection, select } = useSelection();
   const { isExpanded, setExpanded } = useExpansion();
   const { createItems } = useLayerActions(view);
@@ -42,6 +44,7 @@ export function ScenesSection({ view }: { readonly view: DocumentView }) {
     "installation",
     "activeScene",
   ]);
+  const warnings = useLayerWarningCount(view);
   const [naming, setNaming] = useState(false);
   const ordered = orderedEntries(scenes);
 
@@ -59,6 +62,7 @@ export function ScenesSection({ view }: { readonly view: DocumentView }) {
         holds={["scene", "layer"]}
         label="Scenes"
         empty={ordered.length === 0 ? "No Scenes yet." : undefined}
+        warnings={warnings}
         onCreate={() => setNaming(true)}
       >
         <SortableList
@@ -145,11 +149,7 @@ export function ScenesSection({ view }: { readonly view: DocumentView }) {
                     <ContextMenuItem
                       variant="destructive"
                       disabled={active}
-                      onClick={() =>
-                        removeFocusingNeighbour(scene.id, () =>
-                          command("scene.remove", { sceneId: scene.id }),
-                        )
-                      }
+                      onClick={() => removeEntity("scene", scene.id)}
                     >
                       <Trash2 /> Remove
                     </ContextMenuItem>

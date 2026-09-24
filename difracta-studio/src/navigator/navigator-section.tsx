@@ -12,6 +12,7 @@ import { isBoolean, useStoredState } from "@/lib/storage";
 import { useSelection } from "@/selection/selection";
 
 import { NavigatorEmptyRow, type CreateItem } from "./navigator-row";
+import { SectionWarning } from "./navigator-warning";
 
 /**
  * Collapsible group of rows with a create button; the open state is
@@ -19,7 +20,8 @@ import { NavigatorEmptyRow, type CreateItem } from "./navigator-row";
  * section still shows while the selection is an entity of a kind it `holds`,
  * so a created or chip-selected entity is never hidden; that reveal is not
  * remembered, and collapsing by hand hides it again until the selection
- * moves.
+ * moves. While collapsed, the header carries an amber mark for the rows
+ * inside that warn, counted by the section from its rows' own checks.
  */
 export function NavigatorSection({
   storageKey,
@@ -27,6 +29,7 @@ export function NavigatorSection({
   holds,
   defaultExpanded = true,
   empty,
+  warnings = 0,
   onCreate,
   createItems,
   children,
@@ -38,6 +41,8 @@ export function NavigatorSection({
   readonly defaultExpanded?: boolean | undefined;
   /** Shown in place of rows while the section has none. */
   readonly empty?: string | undefined;
+  /** How many rows inside warn; shown on the header only while collapsed. */
+  readonly warnings?: number | undefined;
   readonly onCreate?: (() => void) | undefined;
   /** Several kinds of entries: the "+" opens a menu of these instead. */
   readonly createItems?: readonly CreateItem[] | undefined;
@@ -60,6 +65,7 @@ export function NavigatorSection({
         <button
           type="button"
           aria-expanded={expanded}
+          data-navigator-section={storageKey}
           className="flex h-full min-w-0 flex-1 items-center gap-1 text-[0.625rem] font-medium tracking-wider text-muted-foreground/80 uppercase hover:text-foreground"
           onClick={() => setExpanded(!expanded)}
         >
@@ -69,6 +75,7 @@ export function NavigatorSection({
             <ChevronRight className="size-3" />
           )}
           <span className="truncate">{label}</span>
+          {!expanded && warnings > 0 && <SectionWarning count={warnings} />}
         </button>
         {onCreate !== undefined && (
           <button

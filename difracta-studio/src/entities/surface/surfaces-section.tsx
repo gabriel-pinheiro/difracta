@@ -22,16 +22,19 @@ import {
 import { ChildRows } from "@/entities/surface/child-rows";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useExpansion } from "@/navigator/expansion";
-import { removeFocusingNeighbour } from "@/navigator/focus-row";
 import { NavigatorEmptyRow, NavigatorRow } from "@/navigator/navigator-row";
 import { NavigatorSection } from "@/navigator/navigator-section";
 import { NavigatorWarning } from "@/navigator/navigator-warning";
 import { SortableItem, SortableList } from "@/navigator/sortable";
+import { useRemoveEntity } from "@/selection/remove-selection";
 import { isSelected, useSelection } from "@/selection/selection";
+
+import { surfaceOutput, surfaceWarningCount } from "./surface-warning";
 
 /** Navigator section listing the Surfaces; each row names the Output it renders through. */
 export function SurfacesSection({ view }: { readonly view: DocumentView }) {
   const command = useCommand(view);
+  const removeEntity = useRemoveEntity();
   const { selection, select } = useSelection();
   const { isExpanded, setExpanded } = useExpansion();
   const surfaces = useDocumentPath<Table<Surface>>(view, ["surfaces"]) ?? {};
@@ -73,6 +76,7 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
         holds={["surface", "mask", "path"]}
         label="Surfaces"
         empty={ordered.length === 0 ? "No Surfaces yet." : undefined}
+        warnings={surfaceWarningCount(surfaces, outputs)}
         onCreate={() => setNaming({ kind: "surface" })}
       >
         <SortableList
@@ -84,8 +88,7 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
           }
         >
           {ordered.map((surface) => {
-            const output =
-              surface.output === null ? undefined : outputs[surface.output];
+            const output = surfaceOutput(surface, outputs);
             const expanded = isExpanded("surface", surface.id);
             return (
               <SortableItem key={surface.id} id={surface.id}>
@@ -142,11 +145,7 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
                     <ContextMenuSeparator />
                     <ContextMenuItem
                       variant="destructive"
-                      onClick={() =>
-                        removeFocusingNeighbour(surface.id, () =>
-                          command("surface.remove", { surfaceId: surface.id }),
-                        )
-                      }
+                      onClick={() => removeEntity("surface", surface.id)}
                     >
                       <Trash2 /> Remove
                     </ContextMenuItem>
@@ -155,7 +154,7 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
                 {expanded &&
                   (maskCount(surface) + pathCount(surface) === 0 ? (
                     <NavigatorEmptyRow depth={2}>
-                      No Masks or Paths
+                      No Masks or Paths yet.
                     </NavigatorEmptyRow>
                   ) : (
                     <ChildRows view={view} surfaceId={surface.id} />

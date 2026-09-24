@@ -96,3 +96,17 @@ export function rankDefinitions<TDefinition extends Definition>(
     )
     .map((entry) => entry.definition);
 }
+
+/**
+ * What Enter applies before the Library closes: nothing while the Layer
+ * already holds a pick, since Enter keeps it; otherwise the focused tile, or
+ * else the first result, so typing a name and pressing Enter picks it.
+ */
+export function pickOnEnter(
+  currentId: string | null,
+  ranked: readonly Definition[],
+  focusedId?: string,
+): string | undefined {
+  if (currentId !== null) return undefined;
+  return focusedId ?? ranked[0]?.id;
+}

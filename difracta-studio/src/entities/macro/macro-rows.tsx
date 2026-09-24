@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/context-menu";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useExpansion } from "@/navigator/expansion";
-import { removeFocusingNeighbour } from "@/navigator/focus-row";
 import {
   NavigatorEmptyRow,
   NavigatorRow,
@@ -19,6 +18,7 @@ import {
   type CreateItem,
 } from "@/navigator/navigator-row";
 import { SortableItem, SortableList } from "@/navigator/sortable";
+import { useRemoveEntity } from "@/selection/remove-selection";
 import { isSelected, useSelection } from "@/selection/selection";
 
 import { macroIcons } from "./macro-icons";
@@ -37,6 +37,7 @@ export function MacroRows({
   readonly createItems: (parentId: string | null) => readonly CreateItem[];
 }) {
   const command = useCommand(view);
+  const removeEntity = useRemoveEntity();
   const run = useRunMacro(view);
   const { selection, select } = useSelection();
   const { isExpanded, setExpanded } = useExpansion();
@@ -48,7 +49,7 @@ export function MacroRows({
   if (rows.length === 0)
     return (
       <NavigatorEmptyRow depth={depth}>
-        {parentId === null ? "No Macros" : "Empty Group"}
+        {parentId === null ? "No Macros yet." : "Empty Group"}
       </NavigatorEmptyRow>
     );
   return (
@@ -143,11 +144,7 @@ export function MacroRows({
                 <ContextMenuSeparator />
                 <ContextMenuItem
                   variant="destructive"
-                  onClick={() =>
-                    removeFocusingNeighbour(macro.id, () =>
-                      command("macro.remove", { macroId: macro.id }),
-                    )
-                  }
+                  onClick={() => removeEntity("macro", macro.id)}
                 >
                   <Trash2 /> Remove
                 </ContextMenuItem>
