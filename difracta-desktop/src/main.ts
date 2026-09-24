@@ -4,7 +4,8 @@
  * and the app's life cycle. Each concern has its own file; this one is the
  * order things happen in.
  *
- *   launch → single-instance lock → what to start with (`start-up-mode.ts`)
+ *   launch → on Linux, started again on X11 (`ozone-platform.ts`)
+ *          → single-instance lock → what to start with (`start-up-mode.ts`)
  *     a file, or local last time → fork the runtime → wait for /health
  *                                  → connect as a client → Studio window,
  *                                  unless started without it (`--no-studio`)
@@ -19,12 +20,14 @@
  */
 import { watchRuntimes } from "@difracta/client/discovery";
 import { app, nativeTheme } from "electron";
+import { spawn } from "node:child_process";
 import { hostname, networkInterfaces } from "node:os";
 
 import { DesktopModes } from "./desktop-modes.ts";
 import { DesktopStateStore } from "./desktop-state.ts";
 import { LaunchRuntimes } from "./launch-runtimes.ts";
 import { registerLaunchScheme, serveLaunchScheme } from "./launch-window.ts";
+import { x11Relaunch } from "./ozone-platform.ts";
 import { runtimeLocations, runtimePort } from "./runtime-launch.ts";
 import { RuntimeProcess } from "./runtime-process.ts";
 import { documentFileFromArgv } from "./start-up-file.ts";
@@ -112,19 +115,21 @@ async function start(): Promise<void> {
   await modes.startUp(mode);
 }
 
-// A custom scheme has to be declared before the app is ready.
-registerLaunchScheme();
+function boot(): void {
+  // A custom scheme has to be declared before the app is ready.
+  registerLaunchScheme();
 
-// Studio is dark only, and in Desktop the native menu bar is Studio's menu, so
-// the bar and the native dialogs are dark too, whatever the OS theme is.
-nativeTheme.themeSource = "dark";
+  // Studio is dark only, and in Desktop the native menu bar is Studio's menu, so
+  // the bar and the native dialogs are dark too, whatever the OS theme is.
+  nativeTheme.themeSource = "dark";
 
-// One Desktop per machine: the runtime's port is fixed, so a second launch
-// could not start one. The second instance gets no lock and quits, and
-// Electron hands its command line to the first as "second-instance".
-if (!app.requestSingleInstanceLock()) {
-  app.quit();
-} else {
+  // One Desktop per machine: the runtime's port is fixed, so a second launch
+  // could not start one. The second instance gets no lock and quits, and
+  // Electron hands its command line to the first as "second-instance".
+  if (!app.requestSingleInstanceLock()) {
+    app.quit();
+    return;
+  }
   app.on("second-instance", (_event, argv, workingDirectory) => {
     const file = documentFileFromArgv(argv, workingDirectory);
     if (file !== undefined) openFromOs(file);
@@ -141,4 +146,27 @@ if (!app.requestSingleInstanceLock()) {
     openFromOs(file);
   });
   void app.whenReady().then(start);
+}
+
+// Linux: Display windows need X11 (XWayland), and Electron has already chosen
+// Wayland by the time this runs, so this launch starts itself again with the
+// switch on the command line and exits, before anything else happens and
+// before the single-instance lock, which the new launch takes instead. The
+// launch with the switch, `npm run desktop` and the Desktop suite, which pass
+// it themselves, and a command line that names a platform all go on as they
+// are.
+const relaunch = x11Relaunch({
+  platform: process.platform,
+  argv: process.argv,
+  env: process.env,
+  packaged: app.isPackaged,
+});
+if (relaunch === undefined) {
+  boot();
+} else {
+  spawn(relaunch.command, [...relaunch.args], {
+    detached: true,
+    stdio: "inherit",
+  }).unref();
+  app.exit(0);
 }

@@ -58,13 +58,23 @@ export let env: Record<string, string>;
 export let app: ElectronApplication | undefined;
 export let standalone: ChildProcess | undefined;
 
-/** The app's arguments: its folder, a user data folder of its own, maybe a file, maybe switches. */
+/**
+ * The app's arguments: its folder, a user data folder of its own, maybe a
+ * file, maybe switches. On Linux the app runs on X11 and, given a command
+ * line without the switch, starts itself again to get there
+ * (`src/ozone-platform.ts`); Playwright has to drive the process it started,
+ * so the switch is passed here, unless a test names a platform itself.
+ */
 export const launchArguments = (
   file?: string,
   switches: readonly string[] = [],
 ): string[] => [
   ...(packaged === undefined ? [packageDir] : []),
   `--user-data-dir=${userData}`,
+  ...(process.platform === "linux" &&
+  !switches.some((argument) => argument.startsWith("--ozone-platform"))
+    ? ["--ozone-platform=x11"]
+    : []),
   ...switches,
   ...(file === undefined ? [] : [file]),
 ];

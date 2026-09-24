@@ -4,6 +4,7 @@ import type { DisplayHostLive } from "@difracta/protocol";
 /** One Display of a Display Host as the Open Output dialog lists it. */
 export interface DisplayRow {
   readonly id: string;
+  /** The Display's own label, or "Display <n>" by its place in the host's list when it reports none. */
   readonly label: string;
   /** Device pixels, as a projector's native resolution is quoted. */
   readonly resolution: string;
@@ -29,12 +30,15 @@ export function displayHostRows(
     .map((host) => ({
       id: host.id,
       name: host.name,
-      displays: host.displays.map((display) => {
+      displays: host.displays.map((display, index) => {
         const { width, height } = display.bounds;
         const shown = host.showing[display.id];
         return {
           id: display.id,
-          label: display.label,
+          label:
+            display.label === ""
+              ? `Display ${String(index + 1)}`
+              : display.label,
           resolution: `${String(Math.round(width * display.scaleFactor))}×${String(Math.round(height * display.scaleFactor))}`,
           marks: [
             ...(display.primary ? ["primary"] : []),

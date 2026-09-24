@@ -79,4 +79,17 @@ describe("the Display Hosts of the Open Output dialog", () => {
       },
     ]);
   });
+
+  it("names a Display that reports no label by its place in the host's list", () => {
+    const stage = host("stage", 1);
+    const unlabelled = {
+      ...stage,
+      displays: stage.displays.map((display) => ({ ...display, label: "" })),
+    };
+    const [row] = displayHostRows({ stage: unlabelled }, outputs);
+    expect(row?.displays.map((display) => display.label)).toEqual([
+      "Display 1",
+      "Display 2",
+    ]);
+  });
 });

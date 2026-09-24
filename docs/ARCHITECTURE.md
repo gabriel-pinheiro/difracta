@@ -1096,6 +1096,26 @@ document bridge is three functions:** anything a page can call in main is attack
 surface and is out of the CLI's reach; a file dialog is the one thing that needs
 the OS, and what it returns is only a path for a request the CLI can send too.
 
+**Why Desktop re-executes itself on Linux** (`ozone-platform.ts`, the first
+thing `main.ts` does): a Display window has to land on the Display it was asked
+for and stay above everything there, and the Wayland protocol lets a client ask
+for neither: the compositor puts a full-screen window on the monitor it chooses
+and ignores stacking hints, and XWayland honours both. Electron picks Wayland by
+itself on a Wayland session, and the platform is fixed before main runs, so a
+switch appended there comes too late and only the command line counts: a launch
+without `--ozone-platform` starts its own command line again with
+`--ozone-platform=x11` in front, every argument kept, and exits before taking
+the single-instance lock, which the new launch takes instead. An AppImage runs
+the AppImage file itself again, not its executable, because that executable sits
+in a mount that goes away with the process the AppImage runtime started.
+`npm run desktop` and the Desktop suite pass the switch themselves, so nothing
+starts twice under a script or a driver. An explicit `--ozone-platform` or
+`--ozone-platform-hint` wins, and under Wayland picking a Display and staying on
+top then do not work. The cost: XWayland has one scale factor for every monitor,
+so on a mixed-DPI setup the Studio window can look soft on a HiDPI laptop screen
+while a projector at scale 1 stays pixel-exact; GNOME's XWayland native scaling
+and KDE's scaling of X11 apps by themselves remove that.
+
 **Packaging** (`electron-builder.yml`, `npm run package:desktop`) wraps the
 bundle in each operating system's package: AppImages for Linux x86_64 and arm64,
 a dmg per Mac architecture, a per-user NSIS installer for Windows, all unsigned.

@@ -51,7 +51,16 @@ if (sandboxBlocked()) {
   );
   process.exit(1);
 }
-const child = spawn(electron, [packageDir, ...args], {
+// Linux: the app runs on X11 and, given a command line without the switch,
+// would start itself again to get there (`src/ozone-platform.ts`), leaving
+// this script waiting on a parent that exits at once. Said here, unless the
+// person named a platform.
+const platform =
+  process.platform === "linux" &&
+  !args.some((argument) => argument.startsWith("--ozone-platform"))
+    ? ["--ozone-platform=x11"]
+    : [];
+const child = spawn(electron, [packageDir, ...platform, ...args], {
   stdio: "inherit",
   // npm runs a workspace script inside its package; a relative file on the
   // command line means relative to where the person typed it.
