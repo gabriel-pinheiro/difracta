@@ -28,6 +28,7 @@ import {
 import { EditableReadout } from "./editable-readout";
 import { FieldRow } from "./field-row";
 import { LinkedControl, LinkMenu, type RowLinks } from "./link-row";
+import { MediaControl } from "./media-control";
 
 export type { RowLinks } from "./link-row";
 
@@ -111,8 +112,9 @@ export function Control({
           onCheckedChange={(checked) => send(checked)}
         />
       );
-    case "choice":
     case "media":
+      return <MediaControl resolved={resolved} value={value} send={send} />;
+    case "choice":
       return (
         <Select
           value={typeof value === "string" ? value : null}

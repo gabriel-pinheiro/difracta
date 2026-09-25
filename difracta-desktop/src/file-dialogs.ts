@@ -9,6 +9,7 @@ import path from "node:path";
 
 import { channels } from "./bridge-contract.ts";
 import { isFromOrigin } from "./local-origin.ts";
+import { mediaDialogFilters } from "./media-dialog.ts";
 
 const filters = [{ name: "Difracta Installation", extensions: ["difracta"] }];
 
@@ -51,8 +52,22 @@ export async function pickSavePath(
   return canceled || filePath === "" ? null : filePath;
 }
 
+/** An image or video for a Media item; the dialog starts where the Installation is. */
+export async function pickMediaPath(
+  window: BrowserWindow,
+  currentFile: string | undefined,
+): Promise<string | null> {
+  const { canceled, filePaths } = await dialog.showOpenDialog(window, {
+    title: "Add Media",
+    defaultPath: startingFolder(currentFile),
+    filters: mediaDialogFilters(),
+    properties: ["openFile"],
+  });
+  return canceled ? null : (filePaths[0] ?? null);
+}
+
 /**
- * The main side of the bridge's two pickers. `ipcMain.handle` answers the
+ * The main side of the bridge's three pickers. `ipcMain.handle` answers the
  * preload's `ipcRenderer.invoke`, and a channel takes one handler for the
  * app's whole life, so this is registered once and asks what is current.
  * Every call is checked for where it came from: only a frame showing the
@@ -77,6 +92,12 @@ export function registerFileDialogs(options: {
     return window === undefined
       ? null
       : pickOpenPath(window, options.currentFile());
+  });
+  ipcMain.handle(channels.pickMediaPath, (event) => {
+    const window = trusted(event);
+    return window === undefined
+      ? null
+      : pickMediaPath(window, options.currentFile());
   });
   ipcMain.handle(channels.pickSavePath, (event, suggestedName: unknown) => {
     const window = trusted(event);

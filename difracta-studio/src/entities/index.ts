@@ -6,6 +6,7 @@ import { controllerEntity } from "./controller/controller-entity";
 import { layerEntity } from "./layer/layer-entity";
 import { macroEntity } from "./macro/macro-entity";
 import { maskEntity } from "./mask/mask-entity";
+import { mediaEntity } from "./media/media-entity";
 import { outputEntity } from "./output/output-entity";
 import { pathEntity } from "./path/path-entity";
 import { sceneEntity } from "./scene/scene-entity";
@@ -51,6 +52,7 @@ export const entities = {
   surface: surfaceEntity,
   mask: maskEntity,
   path: pathEntity,
+  media: mediaEntity,
   scene: sceneEntity,
   layer: layerEntity,
   controller: controllerEntity,

@@ -5,6 +5,7 @@ import {
   mediaExtension,
   mediaKindOf,
   mediaNameOf,
+  installationFolder,
   mediaPathProblem,
   normalizeMediaPath,
   relativeMediaPath,
@@ -80,6 +81,23 @@ describe("Media paths", () => {
     expect(relativeMediaPath("art/logo.png", "/shows/living")).toBe(
       "art/logo.png",
     );
+  });
+
+  it("finds the folder an Installation file's Media paths are relative to", () => {
+    expect(installationFolder("/shows/living/tonight.difracta")).toBe(
+      "/shows/living",
+    );
+    expect(installationFolder("/tonight.difracta")).toBe("/");
+    expect(installationFolder("C:\\Shows\\Living\\tonight.difracta")).toBe(
+      "C:/Shows/Living",
+    );
+    expect(installationFolder("tonight.difracta")).toBe(".");
+    expect(
+      relativeMediaPath(
+        "/shows/living/art/logo.png",
+        installationFolder("/shows/living/tonight.difracta"),
+      ),
+    ).toBe("art/logo.png");
   });
 
   it("resolves a stored path and says whether it stays under the folder", () => {

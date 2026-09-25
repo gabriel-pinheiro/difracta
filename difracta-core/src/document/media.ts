@@ -124,6 +124,19 @@ function splitAfterRoot(path: string, root: string): readonly string[] {
   return rest === "" ? [] : rest.split("/");
 }
 
+/**
+ * The folder an Installation file's Media paths are relative to: the file's
+ * path without its last segment, normalized. Studio uses it with the path
+ * from the document's summary, where `node:path` is out of reach.
+ */
+export function installationFolder(filePath: string): string {
+  const normalized = normalizeMediaPath(filePath);
+  const root = rootOf(normalized);
+  const parent = splitAfterRoot(normalized, root).slice(0, -1).join("/");
+  if (root !== "") return `${root}${parent}`;
+  return parent === "" ? "." : parent;
+}
+
 /** Where a stored Media path points for an Installation file in `folder`, normalized. */
 export function resolveMediaPath(folder: string, path: string): string {
   return isAbsoluteMediaPath(path)

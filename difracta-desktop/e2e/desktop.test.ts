@@ -40,8 +40,54 @@ describe("Difracta Desktop", () => {
         node: typeof (globalThis as { require?: unknown }).require,
       })),
     ).toEqual({
-      bridge: ["onOpenRequest", "pickOpenPath", "pickSavePath"],
+      bridge: [
+        "onOpenRequest",
+        "pickMediaPath",
+        "pickOpenPath",
+        "pickSavePath",
+      ],
       node: "undefined",
+    });
+    // The Media picker is a native dialog over the images and videos Difracta
+    // shows, answered for it here; the page gets the absolute path back.
+    await app?.evaluate(({ dialog }) => {
+      dialog.showOpenDialog = (...args: unknown[]) => {
+        const options = args[1] as {
+          title: string;
+          filters: { name: string; extensions: string[] }[];
+        };
+        (globalThis as { mediaDialog?: unknown }).mediaDialog = {
+          title: options.title,
+          filters: options.filters.map((filter) => filter.name),
+          extensions: options.filters[0]?.extensions,
+        };
+        return Promise.resolve({
+          canceled: false,
+          filePaths: ["/shows/tonight/art/logo.png"],
+        });
+      };
+    });
+    expect(
+      await page.evaluate(() => window.difractaDesktop?.pickMediaPath()),
+    ).toBe("/shows/tonight/art/logo.png");
+    expect(
+      await app?.evaluate(
+        () => (globalThis as { mediaDialog?: unknown }).mediaDialog,
+      ),
+    ).toEqual({
+      title: "Add Media",
+      filters: ["Images and videos", "Images", "Videos"],
+      extensions: [
+        "png",
+        "jpg",
+        "jpeg",
+        "webp",
+        "gif",
+        "svg",
+        "mp4",
+        "webm",
+        "mov",
+      ],
     });
     // Main writes the title: the file, the home directory as "~" when inside it.
     expect(await studioTitle()).toBe(

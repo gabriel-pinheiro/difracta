@@ -928,16 +928,22 @@ the local runtime's port. Any other runtime on this computer, a
 page has no bridge and says only that it belongs to Desktop.
 
 Studio in Desktop gets `window.difractaDesktop` from the preload script:
-`pickOpenPath()`, `pickSavePath(suggestedName)` and `onOpenRequest(callback)`.
-Studio feature-detects it in `documents/file-path-request.ts`: with the bridge,
-Open and Save As show native dialogs and then send the same `documents.open` and
-`documents.save` with the absolute path; without it, in a browser on a free
-runtime, the path is typed. A file opened from the OS while Desktop runs (a
-second launch, which the lock turns into a message to the first; `open-file` on
-macOS) is handed to Studio through `onOpenRequest` and goes through Studio's own
-open, unsaved-changes question included. The preload exposes the bridge only to
-the local runtime's origin, main answers only IPC whose sender frame is from
-that origin, and only while a local session exists.
+`pickOpenPath()`, `pickSavePath(suggestedName)`, `pickMediaPath()` and
+`onOpenRequest(callback)`. Studio feature-detects it in
+`documents/file-path-request.ts`: with the bridge, Open and Save As show native
+dialogs and then send the same `documents.open` and `documents.save` with the
+absolute path; without it, in a browser on a free runtime, the path is typed.
+`pickMediaPath()` is the same for a Media file
+(`entities/media/media-path-request.ts`): a native Open dialog filtered to the
+extensions in `settings.media` (`media-dialog.ts` builds the filter list), whose
+absolute path Studio relativizes against the Installation file's folder before
+`media.create` or `media.path`; in a browser the path is typed. A file opened
+from the OS while Desktop runs (a second launch, which the lock turns into a
+message to the first; `open-file` on macOS) is handed to Studio through
+`onOpenRequest` and goes through Studio's own open, unsaved-changes question
+included. The preload exposes the bridge only to the local runtime's origin,
+main answers only IPC whose sender frame is from that origin, and only while a
+local session exists.
 
 Every Studio window, local or remote, also gets `window.difractaMenu`
 (`menu-contract.ts`): `setMenu(model)`, `onMenuCommand(callback)` and
@@ -1204,9 +1210,10 @@ autostart directory is what Linux desktops read. **Why the login setting is not
 stored:** two copies of one fact drift, and the operating system's is the one
 that acts. **Why main writes the title:** only main knows where Studio comes
 from, and a page from another machine does not get to name the window. **Why the
-document bridge is three functions:** anything a page can call in main is attack
+document bridge is four functions:** anything a page can call in main is attack
 surface and is out of the CLI's reach; a file dialog is the one thing that needs
-the OS, and what it returns is only a path for a request the CLI can send too.
+the OS, and what each returns is only a path, for a request or a command the CLI
+can send too.
 
 **Why Desktop re-executes itself on Linux** (`ozone-platform.ts`, the first
 thing `main.ts` does): a Display window has to land on the Display it was asked
@@ -1586,9 +1593,15 @@ label, the control for the Address's type and, when the value is not the
 default, a reset button; numbers are a slider with a readout that turns into an
 input when clicked (typed values clamp to the range), colors are the browser's
 color input with an editable hex and an alpha slider, choices a select, booleans
-a switch. Sliders and the color input stream every position through
-`address.edit`, one send in flight at a time. The Parameters header has Reset
-all, one `layer.reset` step. Section open states are remembered per section.
+a switch. A media Parameter is a select over the Media items of the kind it
+accepts, None first, with a "+" beside it that adds an item through the Media
+section's picker and picks it on the Layer in one flow, as the "+" on a Path row
+makes a Path; a value whose item is gone shows as None. The options come with
+the Address (`layerAddresses` takes the Media table), so the Link picker and the
+Macro picker, which resolve against the whole document, list the same items.
+Sliders and the color input stream every position through `address.edit`, one
+send in flight at a time. The Parameters header has Reset all, one `layer.reset`
+step. Section open states are remembered per section.
 
 The Controllers section is a tree like a Scene's: Number and Color Controllers
 with their live value at the right (a percentage, a swatch), Groups that open
@@ -1615,13 +1628,14 @@ a Run button, and starts closed unless it is empty. The Macro inspector has the
 name, Run, the Run Mode with its count when Some, and the actions in the order
 they run: each with its target, its Chance as a percent readout clicked to type
 (100 clears it), the value it sets edited with the same control the Address has
-in its own inspector, a Set or Toggle choice on switches, a grip to drag it
-elsewhere in the list, the reason it would be skipped, if any, and in Sequence a
-Next mark on the action the next run fires. "Add action…" opens the same picker
-as Links, now over every Address in the Installation under its Scene,
-Controllers, Macros, Scenes and Installation headings; each pick becomes a set
-of the current value, or a trigger. A run that skipped anything shows a toast
-naming what and why.
+in its own inspector (a media Address gets the same select and "+", so a Macro
+swaps artwork from the same control), a Set or Toggle choice on switches, a grip
+to drag it elsewhere in the list, the reason it would be skipped, if any, and in
+Sequence a Next mark on the action the next run fires. "Add action…" opens the
+same picker as Links, now over every Address in the Installation under its
+Scene, Controllers, Macros, Scenes and Installation headings; each pick becomes
+a set of the current value, or a trigger. A run that skipped anything shows a
+toast naming what and why.
 
 The Library is the picker for Visuals and Filters. It is bound to one Visual or
 Filter Layer and takes over the center column while open: a search box, three
@@ -1662,6 +1676,31 @@ Mode stays visible. Escape clears the selection outside text fields and dialogs.
 Blackout sits in the menu bar because it is the one control a performer must
 reach without looking; it writes `installation/blackout` through the input
 channel and is not undoable.
+
+The Media section, below Surfaces, lists the Media items with their kind's icon
+and, at the row's end, the kind as a dim word or, when the runtime cannot serve
+the file, an amber warning naming the status (`live/media/<id>`: missing,
+outside the show folder, or unsaved) explained on hover, the way a Layer without
+a Target warns; each row subscribes to its own status. The section's "+" asks
+for the file first: in Desktop it opens the native picker straight away, in a
+browser a dialog with a path field, then sends `media.create` with the path
+relativized against the Installation file's folder, and selects the new item.
+Without a file for the Installation yet, the path is sent as it came, and the
+row's "unsaved" warning says to save first. The Media inspector has the name,
+the path as text committed on blur (`media.path`) with, in Desktop, a Browse
+button running the same picker, the kind its extension says, the status with its
+reason, and "Used by": the Layers whose media Parameter holds the item, found by
+reading each Layer's definition for which Parameter is a media one; clicking one
+selects the Layer and opens its Scene row. Remove works from the context menu,
+the Delete key and Edit ▸ Remove like every entity.
+
+**Why the "+" opens the picker before creating:** `media.create` names the item
+after its file, so there is nothing to ask until the file is known, and an item
+without a path would draw nothing and warn at once; other sections create a
+named placeholder because a Surface or a Scene is useful before it is
+configured. **Why the status is not computed in Studio:** only the runtime has
+the disk the path resolves on; Studio shows what `live/media` reports and
+explains it.
 
 The Surface inspector places the Surface in its Output's frame with a small SVG:
 the quad with draggable corner handles, other Surfaces on the same Output as

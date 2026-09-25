@@ -7,18 +7,16 @@ import {
   linkAt,
   linkable,
   orderedEntries,
-  pathsOf,
   sameAddressValue,
   type AddressValue,
   type Controller,
   type Layer,
   type Link,
-  type Path,
+  type Media,
   type ResolvedAddress,
   type Surface,
   type Table,
 } from "@difracta/core";
-import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -36,10 +34,10 @@ import { InspectorSection } from "@/inspector/fields/inspector-section";
 import { NameField } from "@/inspector/fields/name-field";
 import { catalog, definitionOf } from "@/lib/catalog";
 import { useCommand, useDocumentPath } from "@/lib/client";
-import { useExpansion } from "@/navigator/expansion";
 import { useSelection } from "@/selection/selection";
 
 import { DefinitionBlock } from "./definition-block";
+import { PathRows } from "./path-rows";
 
 /** The value an Address points at inside its Layer: the path minus `layers/<id>`. */
 function valueAt(layer: Layer, resolved: ResolvedAddress): AddressValue {
@@ -67,10 +65,10 @@ export function LayerInspector({
 }) {
   const command = useCommand(view);
   const { select } = useSelection();
-  const { setExpanded } = useExpansion();
   const layer = useDocumentPath<Layer>(view, ["layers", id]);
   const surfaces = useDocumentPath<Table<Surface>>(view, ["surfaces"]) ?? {};
-  const paths = useDocumentPath<Table<Path>>(view, ["paths"]) ?? {};
+  // A media Parameter lists the Media items of its kind as its options.
+  const media = useDocumentPath<Table<Media>>(view, ["media"]) ?? {};
   const links = useDocumentPath<Table<Link>>(view, ["links"]) ?? {};
   const controllers =
     useDocumentPath<Table<Controller>>(view, ["controllers"]) ?? {};
@@ -81,7 +79,7 @@ export function LayerInspector({
   }, [layer, select]);
   if (layer === undefined) return null;
 
-  const addresses = layerAddresses(layer, catalog);
+  const addresses = layerAddresses(layer, catalog, media);
   const settings = addresses.filter(
     (entry) => !isParameter(entry) && !isCue(entry),
   );
@@ -142,99 +140,14 @@ export function LayerInspector({
   const pathRows =
     layer.kind !== "visual" || definition?.kind !== "visual"
       ? []
-      : (definition.paths ?? []).map((requirement) => {
-          const target = layer.target;
-          const candidates =
-            target === null ? [] : pathsOf({ masks: {}, paths }, target);
-          const bound = layer.paths[requirement.key];
-          const value =
-            bound !== undefined &&
-            candidates.some((candidate) => candidate.id === bound)
-              ? bound
-              : null;
-          const createPath = (): void => {
-            if (target === null) return;
-            const pathId = generateId("path");
-            void command("path.create", {
-              id: pathId,
-              surfaceId: target,
-              name: `${layer.name} ${requirement.label}`,
-            })
-              .then(() =>
-                command("layer.path", {
-                  layerId: id,
-                  key: requirement.key,
-                  pathId,
-                }),
-              )
-              .then(() => {
-                setExpanded("surface", target, true);
-                select({ kind: "path", id: pathId });
-              });
-          };
-          return (
-            <FieldRow key={`path:${requirement.key}`} label={requirement.label}>
-              <div className="flex w-full min-w-0 items-center gap-1">
-                <Select
-                  value={value}
-                  items={[
-                    { value: null, label: "None" },
-                    ...candidates.map((candidate) => ({
-                      value: candidate.id,
-                      label: candidate.name,
-                    })),
-                  ]}
-                  onValueChange={(pathId: string | null) =>
-                    void command("layer.path", {
-                      layerId: id,
-                      key: requirement.key,
-                      pathId,
-                    })
-                  }
-                >
-                  <SelectTrigger
-                    aria-label={`${requirement.label} Path`}
-                    className="min-w-0 flex-1"
-                    title={
-                      target === null
-                        ? "Pick a Target first"
-                        : value === null
-                          ? `Needs a Path on the Target: ${requirement.description ?? "the Visual follows it"}`
-                          : requirement.description
-                    }
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={null}>
-                      {target === null
-                        ? "No Target"
-                        : candidates.length === 0
-                          ? "No Path on the Target"
-                          : "None"}
-                    </SelectItem>
-                    {candidates.map((candidate) => (
-                      <SelectItem key={candidate.id} value={candidate.id}>
-                        {candidate.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="size-7 shrink-0"
-                  disabled={target === null}
-                  title="New Path on the Target, bound here"
-                  aria-label={`New ${requirement.label} Path`}
-                  onClick={createPath}
-                >
-                  <Plus />
-                </Button>
-              </div>
-            </FieldRow>
-          );
-        });
+      : [
+          <PathRows
+            key="paths"
+            view={view}
+            layer={layer}
+            requirements={definition.paths ?? []}
+          />,
+        ];
   const allDefault = parameters.every(
     (entry) =>
       linkAt({ links }, entry.address) !== undefined ||

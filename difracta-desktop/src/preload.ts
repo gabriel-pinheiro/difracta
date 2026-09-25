@@ -37,6 +37,8 @@ if (exposeMenu() !== undefined) {
       ipcRenderer.invoke(channels.pickSavePath, suggestedName) as Promise<
         string | null
       >,
+    pickMediaPath: () =>
+      ipcRenderer.invoke(channels.pickMediaPath) as Promise<string | null>,
     onOpenRequest: (callback) => {
       listener = callback;
       for (const path of waiting.splice(0)) callback(path);
