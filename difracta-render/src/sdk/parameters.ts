@@ -4,6 +4,7 @@ import {
   type ChoiceParameter,
   type Color,
   type ColorParameter,
+  type MediaParameter,
   type NumberParameter,
   type ParameterDefinition,
   type ParameterSchema,
@@ -20,7 +21,9 @@ export type ParameterValueOf<P extends ParameterDefinition> =
         ? Color
         : P extends ChoiceParameter
           ? P["options"][number]["value"]
-          : never;
+          : P extends MediaParameter
+            ? string
+            : never;
 
 export type ParameterValuesOf<S extends ParameterSchema> = {
   readonly [Name in keyof S]: ParameterValueOf<S[Name]>;

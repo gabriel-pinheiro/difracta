@@ -22,6 +22,7 @@ import { conveyor } from "./visuals/conveyor.ts";
 import { flashMatrix } from "./visuals/flash-matrix.ts";
 import { frameElectric } from "./visuals/frame-electric.ts";
 import { gradient } from "./visuals/gradient.ts";
+import { image } from "./visuals/image.ts";
 import { frameEmbers } from "./visuals/frame-embers.ts";
 import { frameGarland } from "./visuals/frame-garland.ts";
 import { frameIvy } from "./visuals/frame-ivy.ts";
@@ -44,6 +45,7 @@ import { strobe } from "./visuals/strobe.ts";
 import { tensionLines } from "./visuals/tension-lines.ts";
 import { thunder } from "./visuals/thunder.ts";
 import { tunnel } from "./visuals/tunnel.ts";
+import { video } from "./visuals/video.ts";
 import { waterCaustics } from "./visuals/water-caustics.ts";
 import { bladeCross } from "./visuals/blade-cross.ts";
 import { lightSweep } from "./visuals/light-sweep.ts";
@@ -99,6 +101,8 @@ import { sirenBeacon } from "./visuals/siren-beacon.ts";
 export const builtInCatalog = new Catalog({
   visuals: [
     solidColor,
+    image,
+    video,
     koiPond,
     bubbles,
     blink,
@@ -202,3 +206,12 @@ export const thumbnailsRoot = new URL("../thumbnails/", import.meta.url);
 export function thumbnailFile(id: string): string {
   return `${id}.png`;
 }
+
+/**
+ * The sample Media the package ships: one small white-on-black picture and
+ * one short white-on-black clip, written by `npm run sample-media`, which
+ * the thumbnail harness and the GPU suite show through Image and Video.
+ */
+export const sampleMediaRoot = new URL("../media/", import.meta.url);
+export const SAMPLE_IMAGE = "sample.png";
+export const SAMPLE_VIDEO = "sample.webm";

@@ -62,7 +62,7 @@ describe("FrameCanvas", () => {
 
   it("idles without a document or under Blackout, and wakes on the next document", () => {
     const canvas = { width: 0, height: 0, clientWidth: 100, clientHeight: 50 };
-    const frame = new FrameCanvas(canvas as unknown as HTMLCanvasElement);
+    const frame = new FrameCanvas(canvas as unknown as HTMLCanvasElement, {});
     frame.start();
     expect(frames).toHaveLength(1);
     // Without a document the tick pauses for the idle interval.

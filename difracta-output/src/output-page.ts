@@ -15,6 +15,8 @@ interface OutputPageOptions {
   readonly overlay: HTMLDivElement;
   /** The `?output=` value: an Output id or name, or null to pick one. */
   readonly output: string | null;
+  /** Where a Media item's file is fetched from, by id, on the runtime this page talks to. */
+  readonly mediaUrl: (id: string) => string;
 }
 
 /**
@@ -37,7 +39,9 @@ export class OutputPage {
 
   constructor(options: OutputPageOptions) {
     this.#options = options;
-    this.#frame = new FrameCanvas(options.canvas);
+    this.#frame = new FrameCanvas(options.canvas, {
+      mediaUrl: options.mediaUrl,
+    });
     options.client.phase.subscribe(() => this.#refresh());
     options.client.document.subscribe(() => this.#refresh());
     this.#refresh();

@@ -191,6 +191,12 @@ export class Stage {
     return this;
   }
 
+  /** A Media item for a file next to the Installation. */
+  media(id: string, path: string): this {
+    this.#document = run(this.#document, "media.create", { id, path });
+    return this;
+  }
+
   blackout(): this {
     this.#document = run(this.#document, "address.set", {
       address: "installation/blackout",

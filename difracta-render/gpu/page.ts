@@ -9,29 +9,54 @@ import { testCatalog } from "./test-catalog.ts";
  * the last frame back with `gl.readPixels` before this task ends, since
  * the canvas keeps no drawing buffer past it. The pixels leave the page
  * as base64 RGBA, bottom row first as WebGL reads them; every frame's
- * report comes along.
+ * report comes along. With Media (data URLs by item id) the frames are
+ * paced by the browser's, since the files load on its clock, they go on
+ * until a Layer has drawn, and the last one is forced by a new revision so
+ * the picture is in the buffer when it is read.
  */
 export interface RenderedFrames {
   readonly pixels: string;
   readonly reports: readonly FrameReport[];
 }
 
-export function render(
+/** How long a paced render may wait for a Layer to draw past its frames. */
+const MEDIA_WAIT_MS = 10_000;
+
+const nextFrame = (): Promise<number> =>
+  new Promise((resolve) => requestAnimationFrame(resolve));
+
+export async function render(
   document: Document,
   outputId: string,
   width: number,
   height: number,
   frames: number,
-): RenderedFrames {
+  media?: Readonly<Record<string, string>>,
+): Promise<RenderedFrames> {
   const canvas = window.document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
-  const compositor = createCompositor(canvas, testCatalog);
+  const compositor = createCompositor(canvas, testCatalog, {
+    mediaUrl: (id) => media?.[id],
+  });
   const reports: FrameReport[] = [];
-  for (let frame = 0; frame < frames; frame += 1)
-    reports.push(
-      compositor.render(document, outputId, width, height, (frame * 1000) / 60),
+  const paced = media !== undefined;
+  const started = performance.now();
+  let drawn = false;
+  for (let frame = 0; frame < frames || (paced && !drawn); frame += 1) {
+    const now = paced ? await nextFrame() : (frame * 1000) / 60;
+    const last = frame >= frames - 1;
+    const report = compositor.render(
+      paced && last ? { ...document } : document,
+      outputId,
+      width,
+      height,
+      now,
     );
+    reports.push(report);
+    drawn ||= report.shaders.rendered > 0 || report.layers.rendered > 0;
+    if (paced && !drawn && performance.now() - started > MEDIA_WAIT_MS) break;
+  }
   const gl = canvas.getContext("webgl2");
   if (gl === null) throw new Error("The compositor's context is gone.");
   const bytes = new Uint8Array(width * height * 4);

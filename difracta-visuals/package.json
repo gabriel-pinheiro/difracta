@@ -8,7 +8,8 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "thumbnails": "tsx scripts/thumbnails.ts"
+    "thumbnails": "tsx scripts/thumbnails.ts",
+    "sample-media": "tsx scripts/sample-media.ts"
   },
   "dependencies": {
     "@difracta/core": "0.2.0",

@@ -7,6 +7,7 @@ import {
 import { createScratchCanvas, createTexture } from "./gl.ts";
 import { reportIssue, type RenderIssue } from "./issues.ts";
 import type { LayerDraw } from "./plan.ts";
+import type { MediaContext, MediaHandle, Textures } from "./sdk/media.ts";
 import { resolveParameters } from "./sdk/parameters.ts";
 import { createVisualPlayer, type VisualPlayer } from "./sdk/player.ts";
 import { createShaderPlayer, type ShaderPlayer } from "./sdk/shader-player.ts";
@@ -32,6 +33,7 @@ export type LayerFrame = {
       readonly visual: ShaderVisual;
       readonly params: ParameterValues;
       readonly uniforms: Uniforms;
+      readonly textures: Textures;
       /** What `u_resolution` reports: the Surface's pixels, or its buffer's. */
       readonly width: number;
       readonly height: number;
@@ -56,6 +58,8 @@ export interface StepReport {
   readonly shaders: Workload;
   /** The Layers whose instance failed, one issue each, on every frame they stay planned. */
   readonly issues: readonly RenderIssue[];
+  /** Every Media handle a planned shader instance holds, hidden ones included: what keeps its texture. */
+  readonly textures: ReadonlySet<MediaHandle>;
 }
 
 /**
@@ -81,6 +85,8 @@ interface ShaderEntry {
   readonly visual: string;
   readonly player: ShaderPlayer;
   buffer: ShaderBuffer | undefined;
+  /** The handles of the last frame, kept while the Layer is hidden. */
+  textures: Textures;
   issue: RenderIssue | undefined;
 }
 
@@ -95,20 +101,28 @@ type Counter = { -readonly [K in keyof Workload]: number };
  * An instance exists exactly while its Layer is in the plan: playing
  * another Scene, disabling the Layer, or losing its Target disposes it,
  * and a Visual or canvas-size change replaces it; while the Layer is
- * hidden (opacity zero) the instance is kept but left alone. Cues reach
- * the instance of the Layer they were fired on. An instance that throws
+ * hidden (opacity zero) the instance is kept but left alone, told once
+ * that it is hidden and again when it shows. Cues reach the instance of
+ * the Layer they were fired on. Instances reach the Output's Media through
+ * the context given here. An instance that throws
  * is stopped by its player; the Layer is logged once, draws nothing and
  * is reported as an issue on every frame until its entry is replaced.
  */
 export class LayerPlayers {
   readonly #gl: WebGL2RenderingContext;
   readonly #catalog: Catalog;
+  readonly #media: MediaContext;
   readonly #maxDimension: number;
   readonly #entries = new Map<string, Entry>();
 
-  constructor(gl: WebGL2RenderingContext, catalog: Catalog) {
+  constructor(
+    gl: WebGL2RenderingContext,
+    catalog: Catalog,
+    media: MediaContext,
+  ) {
     this.#gl = gl;
     this.#catalog = catalog;
+    this.#media = media;
     this.#maxDimension = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
   }
 
@@ -133,6 +147,7 @@ export class LayerPlayers {
       // drawn, so it resumes where it stopped once the Layer shows again.
       if (draw.hidden) {
         seen.add(draw.layer.id);
+        this.#entries.get(draw.layer.id)?.player.hide();
         return;
       }
       const size = (renderScale: number) =>
@@ -189,6 +204,7 @@ export class LayerPlayers {
           draw.paths,
         );
         if (result.changed) changed = true;
+        entry.textures = result.textures;
         if (result.failure !== undefined)
           this.#fail(entry, draw, result.failure, issues);
         if (result.blank) return;
@@ -212,6 +228,7 @@ export class LayerPlayers {
             draw.layer.parameters,
           ),
           uniforms: result.uniforms,
+          textures: result.textures,
           width: buffer?.width ?? width,
           height: buffer?.height ?? height,
           buffer:
@@ -221,13 +238,17 @@ export class LayerPlayers {
         });
       }
     });
+    const textures = new Set<MediaHandle>();
     for (const [id, entry] of this.#entries) {
-      if (seen.has(id)) continue;
-      this.#dispose(entry);
-      this.#entries.delete(id);
-      changed = true;
+      if (!seen.has(id)) {
+        this.#dispose(entry);
+        this.#entries.delete(id);
+        changed = true;
+      } else if (entry.kind === "shader")
+        for (const handle of Object.values(entry.textures))
+          textures.add(handle);
     }
-    return { frames, changed, canvas, shaders, issues };
+    return { frames, changed, canvas, shaders, issues, textures };
   }
 
   /** Delivers a Cue fired on a Layer to its instance, if it is running. */
@@ -266,6 +287,7 @@ export class LayerPlayers {
         width,
         height,
         seed: draw.layer.id,
+        media: this.#media,
       }),
       texture: createTexture(this.#gl),
       blank: false,
@@ -298,8 +320,10 @@ export class LayerPlayers {
         width: 1,
         height: 1,
         seed: draw.layer.id,
+        media: this.#media,
       }),
       buffer: undefined,
+      textures: {},
       issue: undefined,
     };
     this.#entries.set(draw.layer.id, entry);

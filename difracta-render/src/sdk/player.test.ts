@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { MediaContext, MediaHandle } from "./media.ts";
 import { createVisualPlayer } from "./player.ts";
 import { recordingContext } from "./recording-context.ts";
 import { defineVisual, type VisualFrame } from "./visual.ts";
@@ -130,6 +131,50 @@ describe("visual player", () => {
     instance.dispose();
     instance.dispose();
     expect(disposed).toBe(1);
+  });
+
+  it("gives the instance the Media context and tells it when it hides and shows", () => {
+    const picture: MediaHandle = {
+      id: "pic",
+      image: null,
+      width: 4,
+      height: 4,
+      version: 1,
+    };
+    const media: MediaContext = {
+      get: (id) => (id === "pic" ? picture : undefined),
+      video: () => undefined,
+    };
+    const events: string[] = [];
+    const watcher = defineVisual({
+      id: "watcher",
+      name: "Watcher",
+      description: "Logs what it is told and reads a picture.",
+      parameters: {},
+      create: (context) => ({
+        update: () => {
+          events.push(
+            context.media.get("pic") === picture ? "update" : "no picture",
+          );
+        },
+        render: () => undefined,
+        hidden: () => events.push("hidden"),
+        shown: () => events.push("shown"),
+      }),
+    });
+    const instance = createVisualPlayer(watcher, {
+      context: recordingContext().context,
+      width: 8,
+      height: 8,
+      seed: 1,
+      media,
+    });
+    instance.hide(); // no instance yet: nothing to tell
+    instance.frame(0.016, {});
+    instance.hide();
+    instance.hide();
+    instance.frame(0.016, {});
+    expect(events).toEqual(["update", "hidden", "shown", "update"]);
   });
 
   it("stops an instance that throws and reports the failure on every later frame", () => {

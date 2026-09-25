@@ -9,6 +9,7 @@ export default defineConfig({
     proxy: {
       "/live": { target: runtime, ws: true },
       "/health": { target: runtime },
+      "/media": { target: runtime },
     },
   },
 });

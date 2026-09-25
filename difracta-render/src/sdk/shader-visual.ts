@@ -1,5 +1,6 @@
 import type { ParameterSchema, VisualDefinition } from "@difracta/core";
 
+import type { Textures } from "./media.ts";
 import type { Uniforms } from "./uniforms.ts";
 import type { PathRequirements, VisualContext, VisualFrame } from "./visual.ts";
 
@@ -13,7 +14,9 @@ import type { PathRequirements, VisualContext, VisualFrame } from "./visual.ts";
  * instance integrates clocks and live events in JavaScript, the fragment
  * only paints. Uniform naming and the prelude (`u_resolution`, `u_texel`,
  * `hash`, `hash2`) follow the Filter SDK; each declared Path arrives as
- * `u_path_<key>_points`, `_count` and `_closed` (see `sdk/path.ts`).
+ * `u_path_<key>_points`, `_count` and `_closed` (see `sdk/path.ts`), and a
+ * Media handle returned under `textures` as `u_<name>` with `u_<name>_size`
+ * (see `sdk/media.ts`); the fragment declares both.
  */
 export interface ShaderUpdate {
   /** False when the picture would be the same as last frame's. */
@@ -22,6 +25,8 @@ export interface ShaderUpdate {
   readonly blank?: boolean;
   /** Kept from one frame to the next until returned again. */
   readonly uniforms?: Uniforms;
+  /** Media handles the fragment samples, by name; kept like uniforms. */
+  readonly textures?: Textures;
   /**
    * The share of the Surface's pixels, along each side, the fragment renders
    * at. At 1, the default, it draws straight into the frame; below 1, down
@@ -40,6 +45,10 @@ export interface ShaderVisualInstance<
   // eslint-disable-next-line @typescript-eslint/no-invalid-void-type -- an update with nothing to report returns nothing
   update(frame: VisualFrame<S, P>): ShaderUpdate | void;
   cue?(key: string): void;
+  /** The Layer went to opacity zero: the instance is kept but not stepped until `shown`. */
+  hidden?(): void;
+  /** The Layer is visible again; its next update follows. */
+  shown?(): void;
   dispose?(): void;
 }
 

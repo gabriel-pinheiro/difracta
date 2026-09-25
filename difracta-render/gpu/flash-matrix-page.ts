@@ -1,6 +1,7 @@
 import { defaultParameterValues } from "@difracta/core";
 
 import { flashMatrix } from "../../difracta-visuals/src/visuals/flash-matrix.ts";
+import { MediaTextures } from "../src/media-textures.ts";
 import { ShaderVisualPrograms } from "../src/shader-visuals.ts";
 
 /** One pixel at each cell centre, using the production shader and uniform path. */
@@ -21,7 +22,12 @@ function sampleFlashMatrix(
     gl.STATIC_DRAW,
   );
   gl.enableVertexAttribArray(0);
-  const programs = new ShaderVisualPrograms(gl, quad, quad);
+  const programs = new ShaderVisualPrograms(
+    gl,
+    quad,
+    quad,
+    new MediaTextures(gl),
+  );
   const params = {
     ...defaultParameterValues(flashMatrix.parameters),
     columns: 10,
@@ -44,6 +50,7 @@ function sampleFlashMatrix(
         visual: flashMatrix,
         params,
         uniforms: { flashes: { size: 2, values: packed }, flash_count: 1 },
+        textures: {},
         paths: {},
         width: 10,
         height: 10,

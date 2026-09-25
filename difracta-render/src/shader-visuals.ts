@@ -3,6 +3,8 @@ import type { ParameterDefinition, ParameterValues } from "@difracta/core";
 import { parameterDeclarations, uniformName } from "./filter-shaders.ts";
 import { compileProgram, setUniform, uniform } from "./gl.ts";
 import { errorMessage } from "./issues.ts";
+import type { MediaTextures } from "./media-textures.ts";
+import type { Textures } from "./sdk/media.ts";
 import {
   pathDeclarations,
   pathUniformPoints,
@@ -19,6 +21,8 @@ export interface ShaderDrawInput {
   /** The Layer's values completed with the schema defaults. */
   readonly params: ParameterValues;
   readonly uniforms: Uniforms;
+  /** The Media handles the instance samples, bound as `u_<name>` with `u_<name>_size`. */
+  readonly textures: Textures;
   /** The Paths the Visual declares, by key, in Surface Space. */
   readonly paths: PathShapes;
   /** The Surface's size in frame pixels, what `u_resolution` reports. */
@@ -32,7 +36,7 @@ export interface ShaderDrawInput {
 /** What a draw into a Layer's buffer needs; the buffer decides the rest. */
 export type BufferDrawInput = Pick<
   ShaderDrawInput,
-  "visual" | "params" | "uniforms" | "paths"
+  "visual" | "params" | "uniforms" | "textures" | "paths"
 >;
 
 /**
@@ -94,12 +98,16 @@ export function visualFragmentSource(visual: ShaderVisual): string {
  * kept, run over the Surface's quad through the same vertex shader as
  * everything else so the fragment sees Surface Space. A Visual that fails
  * to compile is logged once and skipped; `failure` tells the compositor
- * why, so every Layer using it is reported as an issue.
+ * why, so every Layer using it is reported as an issue. The Media handles
+ * an instance returns go on the texture units after the mask's, each as
+ * the sampler `u_<name>` and the vec2 `u_<name>_size` the fragment
+ * declares.
  */
 export class ShaderVisualPrograms {
   readonly #gl: WebGL2RenderingContext;
   readonly #quad: WebGLBuffer;
   readonly #unit: WebGLBuffer;
+  readonly #media: MediaTextures;
   readonly #programs = new Map<string, ProgramEntry | undefined>();
   readonly #failures = new Map<string, string>();
 
@@ -111,10 +119,12 @@ export class ShaderVisualPrograms {
     gl: WebGL2RenderingContext,
     quad: WebGLBuffer,
     unit: WebGLBuffer,
+    media: MediaTextures,
   ) {
     this.#gl = gl;
     this.#quad = quad;
     this.#unit = unit;
+    this.#media = media;
   }
 
   /** Draws with the current blend function; the mask goes on texture unit 0. */
@@ -167,6 +177,18 @@ export class ShaderVisualPrograms {
       const location = this.#location(entry, name);
       if (location !== null) setUniform(gl, location, value);
     }
+    let unit = 1;
+    for (const [name, handle] of Object.entries(input.textures)) {
+      const sampler = this.#location(entry, name);
+      const size = this.#location(entry, `${name}_size`);
+      if (sampler === null && size === null) continue;
+      gl.activeTexture(gl.TEXTURE0 + unit);
+      this.#media.bind(handle);
+      if (sampler !== null) gl.uniform1i(sampler, unit);
+      if (size !== null) gl.uniform2f(size, handle.width, handle.height);
+      unit += 1;
+    }
+    gl.activeTexture(gl.TEXTURE0);
     gl.bindBuffer(gl.ARRAY_BUFFER, quad);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
     gl.drawArrays(gl.TRIANGLES, 0, 6);

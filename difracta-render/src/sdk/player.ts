@@ -1,6 +1,7 @@
 import { sameAddressValue, type ParameterValues } from "@difracta/core";
 
 import { disposeQuietly, toError } from "./failure.ts";
+import { NO_MEDIA, type MediaContext } from "./media.ts";
 import { resolveParameters } from "./parameters.ts";
 import { pathTracker, type PathShapes } from "./path.ts";
 import { createRandom } from "./random.ts";
@@ -12,9 +13,10 @@ import {
 
 /**
  * Runs one Visual instance on one canvas: creates it on the first frame,
- * detects Parameter and Path changes, clamps time, and turns the instance's
- * update report into whether the canvas was redrawn or should be skipped.
- * The Output owns the canvas and calls `frame` once per animation frame.
+ * detects Parameter and Path changes, clamps time, tells the instance when
+ * its Layer is hidden and shown again, and turns the instance's update
+ * report into whether the canvas was redrawn or should be skipped. The
+ * Output owns the canvas and calls `frame` once per animation frame.
  * An instance that throws (in `create`, `update`, `render` or `cue`) is
  * disposed and never called again: every later frame is blank and carries
  * the failure, so the Output can report it and draw the other Layers.
@@ -23,6 +25,8 @@ export interface VisualPlayer {
   frame(dt: number, values: ParameterValues, paths?: PathShapes): FrameResult;
   /** Delivers a fired Cue to the instance, once there is one. */
   cue(key: string): void;
+  /** The Layer is at opacity zero: no frames until it shows again, which the next `frame` says. */
+  hide(): void;
   dispose(): void;
 }
 
@@ -42,17 +46,20 @@ export function createVisualPlayer(
     width,
     height,
     seed,
+    media = NO_MEDIA,
   }: {
     readonly context: CanvasRenderingContext2D;
     readonly width: number;
     readonly height: number;
     /** Typically the Layer id, so the Layer looks the same on every run. */
     readonly seed: number | string;
+    readonly media?: MediaContext;
   },
 ): VisualPlayer {
   let instance: VisualInstance<typeof visual.parameters> | undefined;
   let previous: ParameterValues | undefined;
   let needsRedraw = true;
+  let hidden = false;
   let failure: Error | undefined;
   const tracker = pathTracker();
   let paths: ReturnType<typeof tracker.resolve>["paths"] = {};
@@ -83,7 +90,12 @@ export function createVisualPlayer(
           params,
           paths,
           random: createRandom(seed),
+          media,
         });
+        if (hidden) {
+          hidden = false;
+          instance.shown?.();
+        }
         const report =
           instance.update({
             dt: Math.min(MAX_FRAME_SECONDS, Math.max(0, dt)),
@@ -116,6 +128,15 @@ export function createVisualPlayer(
     cue(key) {
       try {
         instance?.cue?.(key);
+      } catch (error: unknown) {
+        fail(error);
+      }
+    },
+    hide() {
+      if (hidden || instance === undefined) return;
+      hidden = true;
+      try {
+        instance.hidden?.();
       } catch (error: unknown) {
         fail(error);
       }

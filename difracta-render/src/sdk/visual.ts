@@ -4,6 +4,7 @@ import type {
   VisualDefinition,
 } from "@difracta/core";
 
+import type { MediaContext } from "./media.ts";
 import type { ParameterValuesOf } from "./parameters.ts";
 import type { PathGeometry } from "./path.ts";
 import type { Random } from "./random.ts";
@@ -16,7 +17,8 @@ import type { Random } from "./random.ts";
  * things are now. There is no absolute time anywhere in the contract.
  * The Paths a Visual declares arrive resolved to pixels under their keys,
  * in the context, in every frame and in every render, and never missing:
- * a Layer with a Path unbound is not run at all.
+ * a Layer with a Path unbound is not run at all. The Installation's Media
+ * is reached through `media` in the context (`sdk/media.ts`).
  */
 
 /** Frames longer than this are clamped: a tab that slept does not fast-forward. */
@@ -38,6 +40,7 @@ export interface VisualContext<
   readonly params: ParameterValuesOf<S>;
   readonly paths: PathsOf<P>;
   readonly random: Random;
+  readonly media: MediaContext;
 }
 
 export interface VisualFrame<
@@ -87,6 +90,10 @@ export interface VisualInstance<
   render(canvas: VisualCanvas<S, P>): void;
   /** A Cue the Visual declares was fired on this Layer; arrives before the next update. */
   cue?(key: string): void;
+  /** The Layer went to opacity zero: the instance is kept but not stepped until `shown`. */
+  hidden?(): void;
+  /** The Layer is visible again; its next update follows. */
+  shown?(): void;
   dispose?(): void;
 }
 

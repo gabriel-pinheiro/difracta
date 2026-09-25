@@ -10,6 +10,8 @@ import {
 import { frameIssues, type RenderIssue } from "./issues.ts";
 import { LayerPlayers, type LayerFrame } from "./layer-players.ts";
 import { MaskTextures } from "./masks.ts";
+import { MediaLoader } from "./media-loader.ts";
+import { MediaTextures } from "./media-textures.ts";
 import { planFrame, plannedSurfaces, type LayerDraw } from "./plan.ts";
 import { MAX_FRAME_SECONDS } from "./sdk/visual.ts";
 import { ShaderVisualPrograms } from "./shader-visuals.ts";
@@ -33,6 +35,15 @@ export interface Compositor {
   /** Delivers a Cue fired on a Layer to that Layer's Visual instance. */
   trigger(layerId: string, key: string): void;
   dispose(): void;
+}
+
+export interface CompositorOptions {
+  /**
+   * Where a Media item's file is fetched from, by id: `/media/<id>` on the
+   * runtime for an Output page, a data URL for the thumbnail harness.
+   * Without it no Media loads and every Media handle stays empty.
+   */
+  readonly mediaUrl?: (id: string) => string | undefined;
 }
 
 export interface FrameReport {
@@ -73,25 +84,30 @@ interface Resources {
   readonly filters: FilterPlayers;
   readonly chain: FilterChain;
   readonly shaderPrograms: ShaderVisualPrograms;
+  readonly media: MediaTextures;
   readonly geometries: SurfaceGeometries;
 }
 
 export function createCompositor(
   canvas: HTMLCanvasElement,
   catalog: Catalog,
+  options: CompositorOptions = {},
 ): Compositor {
-  return new WebGLCompositor(canvas, catalog);
+  return new WebGLCompositor(canvas, catalog, options);
 }
 
 /**
  * WebGL2 compositor for one Output. It keeps GPU resources per Surface
  * (mask texture, homography) and per Layer (instance, canvas, texture), and
  * skips frames whose inputs did not change and whose Layers drew nothing
- * new, so a static Scene costs the Output only the instances' updates.
+ * new, so a static Scene costs the Output only the instances' updates. The
+ * Media loader is kept outside the GPU resources: elements survive a lost
+ * context, textures do not.
  */
 class WebGLCompositor implements Compositor {
   readonly #canvas: HTMLCanvasElement;
   readonly #catalog: Catalog;
+  readonly #loader: MediaLoader;
   #resources: Resources | undefined;
   #lost = false;
   #lastNow: number | undefined;
@@ -113,9 +129,16 @@ class WebGLCompositor implements Compositor {
     this.#last = undefined;
   };
 
-  constructor(canvas: HTMLCanvasElement, catalog: Catalog) {
+  constructor(
+    canvas: HTMLCanvasElement,
+    catalog: Catalog,
+    options: CompositorOptions,
+  ) {
     this.#canvas = canvas;
     this.#catalog = catalog;
+    this.#loader = new MediaLoader({
+      mediaUrl: options.mediaUrl ?? (() => undefined),
+    });
     canvas.addEventListener("webglcontextlost", this.#onLost);
     canvas.addEventListener("webglcontextrestored", this.#onRestored);
     this.#resources = this.#setup();
@@ -146,6 +169,7 @@ class WebGLCompositor implements Compositor {
     this.#lastNow = now;
     const resources = (this.#resources ??= this.#setup());
     const { gl, program } = resources;
+    this.#loader.sync(document.media);
     // Parameter Links resolve here, once per frame: the Layers planned and
     // drawn carry what their Controllers make of them.
     const plan = planFrame(
@@ -154,6 +178,7 @@ class WebGLCompositor implements Compositor {
       this.#catalog,
     );
     const step = resources.players.step(plan.layers, dt, width, height);
+    resources.media.retain(step.textures);
     const chain = resources.filters.step(plan.filters, dt, width, height);
     // A pass over Layers that all drew nothing this frame would transform
     // a blank frame at full-frame cost, so only passes with input run.
@@ -196,6 +221,7 @@ class WebGLCompositor implements Compositor {
           visual: frame.visual,
           params: frame.params,
           uniforms: frame.uniforms,
+          textures: frame.textures,
           paths: frame.draw.paths,
         });
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -276,8 +302,10 @@ class WebGLCompositor implements Compositor {
     resources.filters.dispose();
     resources.chain.dispose();
     resources.shaderPrograms.dispose();
+    resources.media.dispose();
     resources.program.dispose();
     this.#resources = undefined;
+    this.#loader.dispose();
   }
 
   #setup(): Resources {
@@ -298,19 +326,22 @@ class WebGLCompositor implements Compositor {
     gl.bindVertexArray(gl.createVertexArray());
     gl.enableVertexAttribArray(0);
     const program = new SurfaceProgram(gl);
+    const media = new MediaTextures(gl);
     return {
       gl,
       program,
       calibration: new CalibrationDrawing(program),
       masks: new MaskTextures(gl),
-      players: new LayerPlayers(gl, this.#catalog),
+      players: new LayerPlayers(gl, this.#catalog, this.#loader),
       filters: new FilterPlayers(this.#catalog),
       chain: new FilterChain(gl, program.quad),
       shaderPrograms: new ShaderVisualPrograms(
         gl,
         program.surface,
         program.quad,
+        media,
       ),
+      media,
       geometries: new SurfaceGeometries(),
     };
   }
@@ -329,6 +360,7 @@ class WebGLCompositor implements Compositor {
       visual: frame.visual,
       params: frame.params,
       uniforms: frame.uniforms,
+      textures: frame.textures,
       paths: frame.draw.paths,
       width: frame.width,
       height: frame.height,

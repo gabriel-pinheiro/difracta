@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { LayerPlayers } from "./layer-players.ts";
 import { planFrame } from "./plan.ts";
+import { NO_MEDIA, type MediaHandle } from "./sdk/media.ts";
 import { renderResolution } from "./sdk/parameters.ts";
 import { defineShaderVisual } from "./sdk/shader-visual.ts";
 import { defineVisual } from "./sdk/visual.ts";
@@ -28,11 +29,12 @@ vi.mock("./gl.ts", async () => {
 
 let created = 0;
 let updates = 0;
+const visibility: string[] = [];
 
 const probe = defineVisual({
   id: "probe",
   name: "Probe",
-  description: "Counts its instances and updates.",
+  description: "Counts its instances and updates, and logs hidden and shown.",
   parameters: {},
   create: () => {
     created += 1;
@@ -42,6 +44,35 @@ const probe = defineVisual({
       },
       render({ context, width, height }) {
         context.fillRect(0, 0, width, height);
+      },
+      hidden: () => visibility.push("hidden"),
+      shown: () => visibility.push("shown"),
+    };
+  },
+});
+
+const picture: MediaHandle = {
+  id: "pic",
+  image: null,
+  width: 0,
+  height: 0,
+  version: 0,
+};
+
+/** A shader Visual holding one Media handle from its first frame on. */
+const sampler = defineShaderVisual({
+  id: "sampler",
+  name: "Sampler",
+  description: "Returns a texture once.",
+  parameters: {},
+  fragment: "vec4 render_visual(vec2 uv) { return vec4(1.0); }",
+  create: () => {
+    let first = true;
+    return {
+      update() {
+        const report = first ? { textures: { media: picture } } : {};
+        first = false;
+        return report;
       },
     };
   },
@@ -62,7 +93,10 @@ const scaled = defineShaderVisual({
   }),
 });
 
-const catalog = new Catalog({ visuals: [probe, scaled], filters: [] });
+const catalog = new Catalog({
+  visuals: [probe, scaled, sampler],
+  filters: [],
+});
 const registry = createBuiltInRegistry(catalog);
 const gl = new Proxy({}, { get: () => () => 4096 }) as WebGL2RenderingContext;
 
@@ -102,7 +136,8 @@ describe("LayerPlayers", () => {
   it("leaves a hidden Layer's instance idle and resumes it when the Layer shows again", () => {
     created = 0;
     updates = 0;
-    const players = new LayerPlayers(gl, catalog);
+    visibility.length = 0;
+    const players = new LayerPlayers(gl, catalog, NO_MEDIA);
     const step = (document: Document) =>
       players.step(planFrame(document, "out_a", catalog).layers, 0.016, 64, 64);
     const shown = staged();
@@ -118,10 +153,13 @@ describe("LayerPlayers", () => {
     expect(hidden.canvas).toEqual({ planned: 1, running: 0, rendered: 0 });
     step(faded);
     expect([created, updates]).toEqual([1, 2]);
+    // Told once on the way out, whatever the number of hidden frames.
+    expect(visibility).toEqual(["hidden"]);
     const resumed = step(opacity(faded, 0.5));
     expect(resumed.frames).toHaveLength(1);
     expect(resumed.canvas.running).toBe(1);
     expect([created, updates]).toEqual([1, 3]);
+    expect(visibility).toEqual(["hidden", "shown"]);
     // Leaving the plan still disposes: the next show starts anew.
     step(run(faded, "layer.update", { layerId: "A", target: null }));
     step(shown);
@@ -129,8 +167,30 @@ describe("LayerPlayers", () => {
     players.dispose();
   });
 
+  it("keeps a shader instance's Media handles while the Layer is planned, hidden or not", () => {
+    const players = new LayerPlayers(gl, catalog, NO_MEDIA);
+    const step = (document: Document) =>
+      players.step(planFrame(document, "out_a", catalog).layers, 0.016, 64, 64);
+    const shown = run(staged(), "layer.visual", {
+      layerId: "A",
+      visual: "sampler",
+    });
+    const first = step(shown);
+    expect([...first.textures]).toEqual([picture]);
+    const frame = first.frames[0];
+    expect(frame?.kind === "shader" && frame.textures).toEqual({
+      media: picture,
+    });
+    // The handle carries over like a uniform, and survives hiding.
+    expect([...step(shown).textures]).toEqual([picture]);
+    expect([...step(opacity(shown, 0)).textures]).toEqual([picture]);
+    const gone = run(shown, "layer.update", { layerId: "A", target: null });
+    expect([...step(gone).textures]).toEqual([]);
+    players.dispose();
+  });
+
   it("gives a shader Layer below full resolution a buffer, redrawn only on a change", () => {
-    const players = new LayerPlayers(gl, catalog);
+    const players = new LayerPlayers(gl, catalog, NO_MEDIA);
     const step = (document: Document) =>
       players.step(planFrame(document, "out_a", catalog).layers, 0.016, 64, 64);
     const shader = (report: ReturnType<typeof step>) => {

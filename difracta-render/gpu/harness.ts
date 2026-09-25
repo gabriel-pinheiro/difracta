@@ -30,11 +30,13 @@ export interface Frame {
 }
 
 export interface Renderer {
+  /** With `media` (data URLs by Media item id) the frames are paced by the browser and wait for a first draw. */
   render(
     document: Document,
     width: number,
     height: number,
     frames?: number,
+    media?: Readonly<Record<string, string>>,
   ): Promise<Frame>;
   close(): Promise<void>;
 }
@@ -79,7 +81,7 @@ export async function launchRenderer(): Promise<Renderer> {
   await page.goto(ORIGIN);
   await page.addScriptTag({ content: await bundle() });
   return {
-    async render(document, width, height, frames = 1) {
+    async render(document, width, height, frames = 1, media) {
       const result: RenderedFrames = await page.evaluate(
         (options) =>
           window.render(
@@ -88,8 +90,9 @@ export async function launchRenderer(): Promise<Renderer> {
             options.width,
             options.height,
             options.frames,
+            options.media,
           ),
-        { document, outputId: OUTPUT, width, height, frames },
+        { document, outputId: OUTPUT, width, height, frames, media },
       );
       if (escaped.length > 0) {
         const messages = escaped.splice(0).map((error) => error.message);

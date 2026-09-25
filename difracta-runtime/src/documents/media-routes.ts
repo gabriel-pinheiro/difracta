@@ -51,9 +51,12 @@ export function parseByteRange(
  * `GET /media/<id>` streams a Media item's file: the content type from its
  * extension, `Cache-Control: no-cache` with an ETag from size and
  * modification time so a page revalidates cheaply, and Range requests
- * honoured, which video seeking needs. 404 for an unknown id, a missing
- * file or an Installation without a path; 403 when the resolved path leaves
- * the Installation's folder and the runtime does not allow that.
+ * honoured, which video seeking needs. Any origin may read it, so an
+ * Output page served from elsewhere (a dev server, another runtime's
+ * Studio) can upload the picture to a texture. 404 for an unknown id, a
+ * missing file or an Installation without a path; 403 when the resolved
+ * path leaves the Installation's folder and the runtime does not allow
+ * that.
  */
 export function registerMediaRoutes(
   app: FastifyInstance,
@@ -111,6 +114,7 @@ function sendFile(
   const etag = mediaEtag(info);
   void reply
     .header("accept-ranges", "bytes")
+    .header("access-control-allow-origin", "*")
     .header("cache-control", "no-cache")
     .header("etag", etag)
     .header("last-modified", new Date(info.mtimeMs).toUTCString())

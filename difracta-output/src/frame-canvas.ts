@@ -2,6 +2,7 @@ import { settings, type Document } from "@difracta/core";
 import {
   createCompositor,
   type Compositor,
+  type CompositorOptions,
   type FrameReport,
   type RenderIssue,
 } from "@difracta/render";
@@ -75,9 +76,9 @@ export class FrameCanvas {
       issues: [],
     };
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, options: CompositorOptions) {
     this.#canvas = canvas;
-    this.#compositor = createCompositor(canvas, builtInCatalog);
+    this.#compositor = createCompositor(canvas, builtInCatalog, options);
   }
 
   update(state: {

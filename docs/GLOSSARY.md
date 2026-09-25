@@ -228,6 +228,23 @@ none, restricted to one kind (`accepts: "image" | "video"`). Its Address lists
 the Media items of that kind as its options, so a Macro can swap artwork; it is
 not linkable. Removing the Media item clears every Media Parameter holding it.
 
+### Image
+
+The built-in shader Visual that shows an image Media item on its Target, through
+a Fit (stretch, cover or contain) and a Tint. The Output loads every Media item
+ahead of use and uploads the picture to a texture once; the Layer is blank until
+the picture is decoded or while the Parameter is `""`.
+
+### Video
+
+The built-in shader Visual that plays a video Media item on its Target, muted,
+with the same Fit and Tint, Autoplay, Loop, Speed (the playback rate) and Hide
+on Stop, and the Cues Play, Pause and Stop. Its transport is stopped, paused or
+playing: Play from stopped starts at the first frame, from paused resumes, from
+playing restarts; Pause holds the frame; Stop returns to the first frame, as
+does ending without Loop. Every Layer on every Output plays its own copy of the
+file on the browser's clock, and a hidden Layer pauses it.
+
 ### Controller
 
 An Installation-owned, named value that Parameter Links spread over many Layers

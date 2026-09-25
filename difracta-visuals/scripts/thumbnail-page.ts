@@ -7,7 +7,7 @@ import {
 } from "@difracta/core";
 import { createCompositor, defineVisual } from "@difracta/render";
 
-import { builtInCatalog } from "../src/index.ts";
+import { SAMPLE_IMAGE, SAMPLE_VIDEO, builtInCatalog } from "../src/index.ts";
 
 /**
  * The browser half of `npm run thumbnails`: renders one definition the
@@ -16,9 +16,20 @@ import { builtInCatalog } from "../src/index.ts";
  * a Filter gets the same with a gray checkerboard under it, so every
  * Filter is shown over the same picture. The checkerboard carries a ring,
  * since a displaced checkerboard would look like the checkerboard itself.
- * The result is the canvas as PNG.
+ * A Visual with a Media Parameter gets the sample image or video as a
+ * Media item, served from the data URL the script passes, and its frames
+ * are paced by the browser's own, since the file loads and a video plays
+ * on the browser's clock. The result is the canvas as PNG.
  */
 export type ThumbnailKind = "visual" | "filter";
+
+/** The sample files as data URLs, by the Media item id they get. */
+export type SampleMedia = Readonly<
+  Record<"sample_image" | "sample_video", string>
+>;
+
+/** How long a Media Visual may keep waiting for its picture past its run. */
+const MEDIA_WAIT_MS = 5_000;
 
 /**
  * A Visual's first Cue fires this many frames before the picture is taken,
@@ -66,6 +77,14 @@ function run(document: Document, name: string, payload: unknown): Document {
 function installation(kind: ThumbnailKind, id: string): Document {
   let document = emptyDocument("Thumbnail");
   document = run(document, "output.create", { id: "out", name: "Thumbnail" });
+  document = run(document, "media.create", {
+    id: "sample_image",
+    path: SAMPLE_IMAGE,
+  });
+  document = run(document, "media.create", {
+    id: "sample_video",
+    path: SAMPLE_VIDEO,
+  });
   document = run(document, "surface.create", {
     id: "sur",
     name: "Frame",
@@ -91,6 +110,15 @@ function installation(kind: ThumbnailKind, id: string): Document {
         });
       document = run(document, "layer.path", { layerId, key, pathId });
     }
+    for (const [name, parameter] of Object.entries(
+      catalog.visual(visualId)?.parameters ?? {},
+    ))
+      if (parameter.kind === "media")
+        document = run(document, "address.set", {
+          address: `layer/${layerId}/param/${name}`,
+          value:
+            parameter.accepts === "image" ? "sample_image" : "sample_video",
+        });
   };
   if (kind === "visual") visual("thumbnail", id);
   else {
@@ -108,25 +136,56 @@ function installation(kind: ThumbnailKind, id: string): Document {
   return run(document, "scene.play", { sceneId: "scene" });
 }
 
-export function renderThumbnail(
+function usesMedia(kind: ThumbnailKind, id: string): boolean {
+  return (
+    kind === "visual" &&
+    Object.values(catalog.visual(id)?.parameters ?? {}).some(
+      (parameter) => parameter.kind === "media",
+    )
+  );
+}
+
+const nextFrame = (): Promise<number> =>
+  new Promise((resolve) => requestAnimationFrame(resolve));
+
+export async function renderThumbnail(
   kind: ThumbnailKind,
   id: string,
   seconds: number,
   width: number,
   height: number,
-): string {
+  media: SampleMedia,
+): Promise<string> {
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
-  const compositor = createCompositor(canvas, catalog);
+  const compositor = createCompositor(canvas, catalog, {
+    mediaUrl: (mediaId) => media[mediaId as keyof SampleMedia],
+  });
   const scene = installation(kind, id);
   const frames = Math.round(seconds * 60);
   const cue =
     kind === "visual" ? catalog.visual(id)?.cues?.[0]?.key : undefined;
-  for (let frame = 0; frame <= frames; frame += 1) {
+  const paced = usesMedia(kind, id);
+  const started = performance.now();
+  let rendered = false;
+  for (let frame = 0; frame <= frames || !rendered; frame += 1) {
     if (cue !== undefined && CUE_LEAD_FRAMES.includes(frames - frame))
       compositor.trigger("thumbnail", cue);
-    compositor.render(scene, "out", width, height, (frame * 1000) / 60);
+    const now = paced ? await nextFrame() : (frame * 1000) / 60;
+    // The picture must be drawn in this task: the canvas keeps no drawing
+    // buffer past it, so the last frame is forced by a new revision.
+    const last = frame >= frames;
+    const report = compositor.render(
+      last && paced ? { ...scene } : scene,
+      "out",
+      width,
+      height,
+      now,
+    );
+    rendered ||=
+      !paced || report.shaders.rendered > 0 || report.layers.rendered > 0;
+    if (!rendered && performance.now() - started > MEDIA_WAIT_MS) break;
   }
   const png = canvas.toDataURL("image/png");
   compositor.dispose();

@@ -7,14 +7,21 @@
 //   … --seconds=5                                       run longer first
 //
 // Needs Chromium for Playwright (`npx playwright install chromium`).
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 import { build } from "esbuild";
 import { chromium } from "playwright";
 
-import { builtInCatalog, thumbnailFile, thumbnailsRoot } from "../src/index.ts";
-import type { ThumbnailKind } from "./thumbnail-page.ts";
+import {
+  SAMPLE_IMAGE,
+  SAMPLE_VIDEO,
+  builtInCatalog,
+  sampleMediaRoot,
+  thumbnailFile,
+  thumbnailsRoot,
+} from "../src/index.ts";
+import type { SampleMedia, ThumbnailKind } from "./thumbnail-page.ts";
 
 const ORIGIN = "https://thumbnails.invalid/";
 const WIDTH = 480;
@@ -60,6 +67,16 @@ const bundle = await build({
 const script = bundle.outputFiles[0]?.text;
 if (script === undefined) throw new Error("The page did not bundle.");
 
+/** The sample files, as data URLs the page can load without a server. */
+async function dataUrl(file: string, type: string): Promise<string> {
+  const bytes = await readFile(new URL(file, sampleMediaRoot));
+  return `data:${type};base64,${bytes.toString("base64")}`;
+}
+const media: SampleMedia = {
+  sample_image: await dataUrl(SAMPLE_IMAGE, "image/png"),
+  sample_video: await dataUrl(SAMPLE_VIDEO, "video/webm"),
+};
+
 const browser = await chromium.launch({
   args: [
     "--use-gl=angle",
@@ -92,8 +109,9 @@ try {
           options.seconds,
           options.width,
           options.height,
+          options.media,
         ),
-      { kind, id, seconds, width: WIDTH, height: HEIGHT },
+      { kind, id, seconds, width: WIDTH, height: HEIGHT, media },
     );
     const base64 = dataUrl.split(",")[1];
     if (base64 === undefined) throw new Error(`No image for “${id}”.`);

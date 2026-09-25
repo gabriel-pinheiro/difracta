@@ -170,6 +170,20 @@ Surface's Masks and Paths as one list, and an order the operator cannot arrange
 the way they read it is a small daily annoyance for no invariant gained; the
 Masks still apply in their own sequence among Masks.
 
+**Why a table rather than an array on the Surface:** Masks are selected,
+renamed, reordered and inspected like any entity, and the navigator and
+inspector iterate the entity registry. A row in a table with a parent id gets
+all of that from the generic code; an array inside the Surface would need its
+own selection, move and validation paths.
+
+**Why mappings live on the Surface:** a mapping is calibration, and calibration
+is what an operator loses when a projector is swapped and swapped back. Keeping
+the dormant mappings on the Surface makes reassigning it to an earlier Output
+restore its corners for free, without a table or navigator row per Surface and
+Output pair. **Why a relative nudge command:** a held key sends commands faster
+than replies return; an absolute position computed from the view would repeat or
+lose steps, whereas deltas apply in full in any order.
+
 ### Media
 
 A Media item is one image or video file the Installation shows: a name, unique
@@ -201,20 +215,6 @@ status and one place to change the path. **Why relative paths:** a show folder
 is copied to the stage machine or mounted into a container, and the file must
 still be found beside the Installation. **Why the kind is derived:** the
 extension already says it; storing it would be one more thing to keep in step.
-
-**Why a table rather than an array on the Surface:** Masks are selected,
-renamed, reordered and inspected like any entity, and the navigator and
-inspector iterate the entity registry. A row in a table with a parent id gets
-all of that from the generic code; an array inside the Surface would need its
-own selection, move and validation paths.
-
-**Why mappings live on the Surface:** a mapping is calibration, and calibration
-is what an operator loses when a projector is swapped and swapped back. Keeping
-the dormant mappings on the Surface makes reassigning it to an earlier Output
-restore its corners for free, without a table or navigator row per Surface and
-Output pair. **Why a relative nudge command:** a held key sends commands faster
-than replies return; an absolute position computed from the view would repeat or
-lose steps, whereas deltas apply in full in any order.
 
 ### Scenes and Layers
 
@@ -1262,7 +1262,8 @@ literals.
 
 `difracta-render` draws one Output's frame into a canvas behind a two-method
 interface: `render(document, outputId, width, height, now)` and `dispose()`. The
-Output page owns the animation loop, the canvas size and telemetry; the
+Output page owns the animation loop, the canvas size and telemetry, and hands
+the compositor a `mediaUrl(id)` resolver for the Installation's Media; the
 compositor advances the Visual instances, draws, and reports what it did. Under
 Blackout, or before a document arrives, the loop ticks once per
 `settings.output.idleFrameMs` and a document change wakes it, so the frame after
@@ -1376,6 +1377,30 @@ boundary. **Why sized to the Surface, in steps:** a Mask edge is only as sharp
 as its texels on the wall, and rounding the size up keeps a corner drag from
 re-rasterizing every step.
 
+Media: the loader (`media-loader.ts`) is engine-owned and preloading. On every
+document revision it gives each item of the `media` table an element, an `<img>`
+that decodes or a `<video>` that preloads muted and inline, from `mediaUrl(id)`
+(`/media/<id>` on the runtime's origin for an Output page, with `crossOrigin`
+set when that origin is not the page's; a data URL in the thumbnail harness and
+the GPU suite), and drops the elements of items the table lost; nothing is
+evicted while the Installation is open. The loader is kept outside the GPU
+resources, so a lost context costs no reload. An instance reaches it through
+`media` in its context (`sdk/media.ts`): `get(id)` is the shared handle, whose
+`image` is null until the file is decoded and whose `version` counts the
+pictures behind it, once for an image and once per presented video frame;
+`video(id)` is a playback of the instance's own, an element over the same URL
+that the browser serves from its cache, since two Layers showing one clip may be
+at different positions. The GPU side (`media-textures.ts`) keeps one texture per
+handle a running instance holds, uploads when the handle's version is newer than
+the texture's, straight alpha and rows top first like a canvas Layer's, binds it
+on the units after the mask's as `u_<name>` with `u_<name>_size`, and deletes
+the textures of handles no instance holds any more. **Why the loader preloads
+rather than the Visual fetching:** a Layer that starts showing an item mid-set
+must find it decoded, and the table is the one list of what a show may need.
+**Why a version on the handle:** the instance and the uploader read the same
+counter, so a Visual reports `changed` exactly when the texture would differ and
+a paused video uploads nothing.
+
 **Why WebGL2 only:** the projector machines and smart TVs this runs on all have
 it, WebGPU still does not reach every such browser, and one engine is half the
 code of two.
@@ -1406,11 +1431,14 @@ too, and a fragment already gets `u_resolution` to do the same.
 The one rule of the SDK is that a Visual **integrates, it never samples**:
 anything time-derived (a phase, a position, a clock) lives in the instance and
 advances by `dt` times the current rate, so changing Swim Speed only changes
-what happens next. A Parameter that is not integrated (a color, a size) is read
-from `frame.params` every frame and applies at once. Counts go through `fit`,
-which grows or shrinks an entity list at its end, so the entities already on
-screen stay where they are. `smooth` eases a value toward a target at a rate per
-second for the cases where snapping would look wrong, and `rateTimer` turns an
+what happens next. The one exception is a video element, whose clock is the
+browser's: the Video Visual steers it (play, pause, rewind, rate) and reports a
+change when a frame was presented, and Outputs playing the same clip are allowed
+to drift. A Parameter that is not integrated (a color, a size) is read from
+`frame.params` every frame and applies at once. Counts go through `fit`, which
+grows or shrinks an entity list at its end, so the entities already on screen
+stay where they are. `smooth` eases a value toward a target at a rate per second
+for the cases where snapping would look wrong, and `rateTimer` turns an
 Automatic Rate into firings by accumulating `dt * rate`, jittered around the
 mean, so a rate change carries the progress toward the next firing instead of
 rescheduling it. `automaticRate()` is the Parameter every event-driven Visual
@@ -1429,9 +1457,11 @@ frame and `blank` at alpha zero, which is why a static Installation costs
 nothing between edits. The player (`createVisualPlayer`) owns this bookkeeping:
 completing a Layer's values with the schema defaults, detecting changes,
 clamping time, clearing the canvas around `render`, and creating or disposing
-the instance. An Output's size or Render Scale change disposes and recreates
-instances; a Visual that wants to keep its state across that can implement
-`resize`, none does yet.
+the instance. It also tells the instance `hidden()` once when its Layer goes to
+opacity zero and `shown()` before the first update after, which is how Video
+pauses a faded-out clip and resumes it. An Output's size or Render Scale change
+disposes and recreates instances; a Visual that wants to keep its state across
+that can implement `resize`, none does yet.
 
 **Why stateful instances and no absolute time:** a frame that is a function of
 elapsed time and Parameters is discontinuous in the Parameters, so every speed,
@@ -1476,7 +1506,16 @@ Visual's to choose. An update may also return `resolution`, from 0.1 to 1, to
 render below the Surface's resolution, with `renderResolution()` as the
 Parameter that goes with it, keyed `renderResolution` since `defineShaderVisual`
 refuses a Parameter named like an engine uniform; `u_resolution` is then the
-buffer's size.
+buffer's size. An update may return `textures`, Media handles by name, kept like
+uniforms: `{ media: handle }` is what the fragment reads as `sampler2D u_media`
+and `vec2 u_media_size`, both declared by the fragment. Image and Video
+(`difracta-visuals/src/visuals/image.ts`, `video.ts`) are the two shader Visuals
+built on that: a `media` Parameter names the item, `media-fit.ts` holds the Tint
+and Fit they share and the GLSL that maps the Surface's `uv` onto the picture
+from `u_resolution` and `u_media_size`, and each reports `blank` while there is
+no picture and `changed` only when a Parameter or the handle's version moved.
+Video owns a playback per instance and a transport of stopped, paused and
+playing driven by its Cues, Autoplay and the element's end.
 
 Cues reach the instance, canvas or shader, as `cue(key)` before its next
 `update`, and the instance keeps whatever it needs: a list of live envelopes, a

@@ -8,6 +8,14 @@ export {
   type ShaderFilter,
 } from "./filter.ts";
 export {
+  NO_MEDIA,
+  type MediaContext,
+  type MediaHandle,
+  type MediaImage,
+  type MediaVideo,
+  type Textures,
+} from "./media.ts";
+export {
   vec2s,
   vec3s,
   vec4s,

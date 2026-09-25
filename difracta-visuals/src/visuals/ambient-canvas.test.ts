@@ -1,4 +1,5 @@
 import {
+  NO_MEDIA,
   createRandom,
   createShaderPlayer,
   recordingContext,
@@ -34,6 +35,7 @@ function harness(visual: CanvasVisual, start: Record<string, unknown> = {}) {
     params,
     paths: {},
     random: createRandom("test"),
+    media: NO_MEDIA,
   });
   const step = (
     frames: number,

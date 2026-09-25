@@ -78,6 +78,7 @@ describe("GET /media/<id>", () => {
     expect(response.headers["content-type"]).toBe("image/png");
     expect(response.headers["cache-control"]).toBe("no-cache");
     expect(response.headers["accept-ranges"]).toBe("bytes");
+    expect(response.headers["access-control-allow-origin"]).toBe("*");
     expect(response.headers["content-length"]).toBe("26");
     expect(response.body).toBe("abcdefghijklmnopqrstuvwxyz");
     const etag = response.headers.etag!;
