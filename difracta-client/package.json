@@ -1,6 +1,6 @@
 {
   "name": "@difracta/client",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "type": "module",
   "exports": {
@@ -11,8 +11,8 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@difracta/core": "0.3.0",
-    "@difracta/protocol": "0.3.0",
+    "@difracta/core": "0.3.1",
+    "@difracta/protocol": "0.3.1",
     "bonjour-service": "^1.4.4"
   }
 }

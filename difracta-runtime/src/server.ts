@@ -19,7 +19,7 @@ import { registerMediaRoutes } from "./documents/media-routes.ts";
 import { LiveServer } from "./live/live-server.ts";
 import { OscServer } from "./osc/osc-server.ts";
 
-export const RUNTIME_VERSION = "0.3.0";
+export const RUNTIME_VERSION = "0.3.1";
 
 export interface Runtime {
   readonly app: FastifyInstance;
