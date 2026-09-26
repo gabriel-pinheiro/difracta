@@ -100,6 +100,14 @@ describe("Difracta Desktop's native menu", () => {
         items.some(([id, enabled]) => id === "page:revert" && !enabled),
     );
 
+    // A file picker needs a user activation, and a native click happens
+    // outside the page, so main lends it one. Playwright's own calls into the
+    // page lend one too, for five seconds, so those are waited out first.
+    await new Promise((resolve) => setTimeout(resolve, 6000));
+    const picker = page.waitForEvent("filechooser", { timeout: 5000 });
+    await clickMenu("page:replaceFromFile");
+    await picker;
+
     // A reload forgets the page's items until the new page describes them.
     await clickMenu("help:reload-studio");
     await eventually(

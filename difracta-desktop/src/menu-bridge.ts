@@ -32,10 +32,20 @@ export function registerMenuBridge(options: {
   });
 }
 
-/** Tells the page which of its items was chosen in the native menu. */
+/**
+ * Tells the page which of its items was chosen in the native menu. The click
+ * happened outside the page, so the page is first given the user activation
+ * that a click on its own bar would have: without it Chromium silently
+ * refuses what needs a gesture, such as the file picker behind Replace from
+ * File. That grants the page nothing over Desktop.
+ */
 export function sendMenuCommand(window: BrowserWindow, id: string): void {
-  if (!window.isDestroyed())
-    window.webContents.send(menuChannels.menuCommand, id);
+  if (window.isDestroyed()) return;
+  const { webContents } = window;
+  const send = (): void => {
+    if (!window.isDestroyed()) webContents.send(menuChannels.menuCommand, id);
+  };
+  void webContents.executeJavaScript("undefined", true).then(send, send);
 }
 
 /**
