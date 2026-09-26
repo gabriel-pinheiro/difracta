@@ -1,6 +1,6 @@
 {
   "name": "@difracta/protocol",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -10,7 +10,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@difracta/core": "0.2.0",
+    "@difracta/core": "0.3.0",
     "zod": "^4.4.3"
   }
 }
