@@ -1,10 +1,11 @@
 import { createBuiltInRegistry, settings } from "@difracta/core";
-import { builtInCatalog, thumbnailsRoot } from "@difracta/visuals";
+import { builtInCatalog, bundledRoot, thumbnailsRoot } from "@difracta/visuals";
 import fastifyStatic from "@fastify/static";
 import fastifyWebsocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance } from "fastify";
 import { stat } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { RuntimeConfig } from "./config.ts";
@@ -51,6 +52,7 @@ export async function buildRuntime(
   const log = (message: string): void => {
     app.log.warn(message);
   };
+  const bundledDir = config.bundledDir ?? fileURLToPath(bundledRoot);
   const store = new DocumentStore({
     registry: createBuiltInRegistry(builtInCatalog),
     autosaveIntervalMs: config.autosaveIntervalMs,
@@ -67,6 +69,7 @@ export async function buildRuntime(
     runtimeVersion: RUNTIME_VERSION,
     documents: config.documents,
     mediaAnywhere: config.mediaAnywhere,
+    bundledDir,
     log,
     osc,
   });
@@ -87,11 +90,17 @@ export async function buildRuntime(
   registerDocumentRoutes(app, store);
   registerMediaRoutes(app, store, {
     allowOutsideShowFolder: config.mediaAnywhere,
+    catalog: builtInCatalog,
+    bundledDir,
   });
 
-  // Thumbnails of the Catalog, one per definition, for Studio's browser.
+  // Thumbnails of the Catalog, one per definition, for Studio's browser:
+  // the Visuals' and Filters' own, then the Bundled Media's.
   await app.register(fastifyStatic, {
-    root: config.thumbnailsDir ?? fileURLToPath(thumbnailsRoot),
+    root: [
+      config.thumbnailsDir ?? fileURLToPath(thumbnailsRoot),
+      path.join(bundledDir, "thumbnails"),
+    ],
     prefix: "/catalog/",
     decorateReply: false,
   });

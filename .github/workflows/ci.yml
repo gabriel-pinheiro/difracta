@@ -24,6 +24,12 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      # The Bundled Media the postinstall fetches, kept across runs while the
+      # pin in settings.ts is the same; the script sees its stamp and skips.
+      - uses: actions/cache@v4
+        with:
+          path: difracta-visuals/bundled
+          key: bundled-media-${{ hashFiles('difracta-core/src/settings.ts') }}
       - run: npm ci
       - run: npm run typecheck
       - run: npm test

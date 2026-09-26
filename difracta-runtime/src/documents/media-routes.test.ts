@@ -1,5 +1,9 @@
-import { createBuiltInRegistry, settings } from "@difracta/core";
-import { builtInCatalog } from "@difracta/visuals";
+import {
+  Catalog,
+  createBuiltInRegistry,
+  settings,
+  type MediaDefinition,
+} from "@difracta/core";
 import Fastify, { type FastifyInstance } from "fastify";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -11,6 +15,24 @@ import { mediaContentType } from "./media-files.ts";
 import { parseByteRange, registerMediaRoutes } from "./media-routes.ts";
 
 const route = settings.runtime.mediaPath;
+const bundledRoute = settings.runtime.bundledPath;
+const entry = (id: string, file: string): MediaDefinition => ({
+  kind: "media",
+  id,
+  name: id,
+  description: id,
+  type: file.endsWith(".png") ? "image" : "video",
+  file,
+  width: 16,
+  height: 9,
+});
+/** Flash Cut's clip is in the bundle's folder; Grid's is not. */
+const catalog = new Catalog({
+  media: [
+    entry("flash-cut", "clips/flash-cut.webm"),
+    entry("grid", "clips/grid.png"),
+  ],
+});
 let dir: string;
 let store: DocumentStore;
 let app: FastifyInstance;
@@ -18,13 +40,23 @@ let anywhere: FastifyInstance;
 
 beforeEach(async () => {
   dir = await mkdtemp(path.join(tmpdir(), "difracta-media-"));
-  store = new DocumentStore({
-    registry: createBuiltInRegistry(builtInCatalog),
-  });
+  await mkdir(path.join(dir, "bundled", "clips"), { recursive: true });
+  await writeFile(
+    path.join(dir, "bundled", "clips", "flash-cut.webm"),
+    "flash bytes",
+  );
+  store = new DocumentStore({ registry: createBuiltInRegistry(catalog) });
+  const serving = { catalog, bundledDir: path.join(dir, "bundled") };
   app = Fastify();
-  registerMediaRoutes(app, store, { allowOutsideShowFolder: false });
+  registerMediaRoutes(app, store, {
+    ...serving,
+    allowOutsideShowFolder: false,
+  });
   anywhere = Fastify();
-  registerMediaRoutes(anywhere, store, { allowOutsideShowFolder: true });
+  registerMediaRoutes(anywhere, store, {
+    ...serving,
+    allowOutsideShowFolder: true,
+  });
   await Promise.all([app.ready(), anywhere.ready()]);
 });
 
@@ -74,7 +106,7 @@ describe("GET /media/<id>", () => {
     expect(gone.statusCode).toBe(404);
     expect(gone.json<{ error: string }>().error).toContain("no file at");
 
-    await store.create("Fresh", { discard: true });
+    await store.create("Fresh", { discard: true, blank: true });
     store
       .currentSession()!
       .execute("media.create", { id: "m_x", path: "x.png" }, "t");
@@ -151,6 +183,55 @@ describe("GET /media/<id>", () => {
     expect(served.statusCode).toBe(200);
     expect(served.headers["content-type"]).toBe("video/mp4");
     expect(served.body).toBe("video bytes");
+  });
+
+  it("streams a bundled item's clip from the bundle, saved or not, and 404s one the Catalog lacks", async () => {
+    await store.create("Fresh", { blank: true });
+    const session = store.currentSession()!;
+    session.execute(
+      "media.create",
+      { id: "m_flash", kind: "bundled", bundled: "flash-cut" },
+      "t",
+    );
+    const served = await app.inject({
+      url: `${route}/m_flash`,
+      headers: { range: "bytes=0-4" },
+    });
+    expect(served.statusCode).toBe(206);
+    expect(served.headers["content-type"]).toBe("video/webm");
+    expect(served.headers["access-control-allow-origin"]).toBe("*");
+    expect(served.body).toBe("flash");
+    // A runtime whose bundle lacks the entry the item names.
+    const lacking = Fastify();
+    registerMediaRoutes(lacking, store, {
+      catalog: new Catalog(),
+      bundledDir: path.join(dir, "bundled"),
+      allowOutsideShowFolder: false,
+    });
+    const unavailable = await lacking.inject({ url: `${route}/m_flash` });
+    await lacking.close();
+    expect(unavailable.statusCode).toBe(404);
+    expect(unavailable.json()).toEqual({
+      error:
+        "Media “flash-cut” shows Bundled Media “flash-cut”, which this runtime lacks.",
+    });
+  });
+
+  it("streams a Bundled Media entry by id, and 404s an unknown one or a missing file", async () => {
+    const served = await app.inject({ url: `${bundledRoute}/flash-cut` });
+    expect(served.statusCode).toBe(200);
+    expect(served.headers["content-type"]).toBe("video/webm");
+    expect(served.headers["content-length"]).toBe("11");
+    expect(served.headers.etag).toMatch(/^W\//);
+    expect(served.body).toBe("flash bytes");
+    const unknown = await app.inject({ url: `${bundledRoute}/nope` });
+    expect(unknown.statusCode).toBe(404);
+    expect(unknown.json()).toEqual({
+      error: "No Bundled Media entry “nope”.",
+    });
+    const missing = await app.inject({ url: `${bundledRoute}/grid` });
+    expect(missing.statusCode).toBe(404);
+    expect(missing.json<{ error: string }>().error).toContain("media:fetch");
   });
 
   it("parses the ranges it honours", () => {

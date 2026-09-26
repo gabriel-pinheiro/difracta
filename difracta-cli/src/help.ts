@@ -58,6 +58,11 @@ Working from a shell
              edit layer/Wall/param/media Logo. Names are unique within a
              Group, so a name used in two Groups is ambiguous: give the id.
              The runtime serves a file at GET /media/<id>.
+             Bundled Media are clips Difracta ships: "media bundled" lists
+             them (id, name, type, loop, hit, recommended), "catalog <id>"
+             describes one, "media add --bundled <id|name>" adds one as a
+             Media item of kind bundled (no save needed), and
+             run media.bundled '{"mediaId":…,"bundled":…}' swaps its clip.
 
   Order      A create lands first in its Group (a Layer: on top; a Media
              item: last). Pass "after": <sibling id|name> to place it below

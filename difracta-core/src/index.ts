@@ -1,6 +1,7 @@
 export * from "./ids.ts";
 export * from "./settings.ts";
 export * from "./catalog/catalog.ts";
+export * from "./catalog/bundle-manifest.ts";
 export * from "./catalog/parameters.ts";
 export * from "./document/calibration.ts";
 export * from "./document/controllers.ts";

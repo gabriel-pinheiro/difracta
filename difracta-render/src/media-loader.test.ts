@@ -1,4 +1,4 @@
-import { id as brand } from "@difracta/core";
+import { Catalog, id as brand } from "@difracta/core";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -90,6 +90,19 @@ class FakeVideo extends FakeElement {
   }
 }
 
+const bundle = new Catalog({
+  media: (["flash", "grid"] as const).map((id) => ({
+    kind: "media" as const,
+    id,
+    name: id,
+    description: id,
+    type: id === "flash" ? ("video" as const) : ("image" as const),
+    file: `clips/${id}.${id === "flash" ? "webm" : "png"}`,
+    width: 16,
+    height: 9,
+  })),
+});
+
 function loader(mediaUrl = (id: string): string | undefined => `/media/${id}`) {
   const images: FakeImage[] = [];
   const videos: FakeVideo[] = [];
@@ -107,6 +120,7 @@ function loader(mediaUrl = (id: string): string | undefined => `/media/${id}`) {
   };
   const instance = new MediaLoader({
     mediaUrl,
+    catalog: bundle,
     elements,
     pageOrigin: "http://tv.local:4801",
   });
@@ -168,6 +182,28 @@ describe("MediaLoader", () => {
     expect(instance.get("a")).toBeUndefined();
     expect(a?.version).toBe(0);
     expect(images[0]?.src).toBe("");
+  });
+
+  it("loads a bundled item by its entry's type, reloads it on a new entry and skips one the Catalog lacks", () => {
+    const { instance, images, videos } = loader();
+    const bundled = (id: string, entry: string) => ({
+      id: brand("media", id),
+      kind: "bundled" as const,
+      name: id,
+      parentId: null,
+      order: "a",
+      bundled: entry,
+    });
+    instance.sync({
+      flash: bundled("flash", "flash"),
+      old: bundled("old", "retired"),
+    });
+    expect(videos).toHaveLength(1);
+    expect(videos[0]?.src).toBe("/media/flash");
+    expect(instance.get("old")).toBeUndefined();
+    instance.sync({ flash: bundled("flash", "grid") });
+    expect(videos[0]?.src).toBe("");
+    expect(images[0]?.src).toBe("/media/flash");
   });
 
   it("skips Groups and items with no URL or an extension it cannot show", () => {

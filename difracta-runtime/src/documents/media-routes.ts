@@ -4,16 +4,13 @@ import { createReadStream } from "node:fs";
 
 import type { DocumentStore } from "./document-store.ts";
 import {
+  locateBundled,
   locateMedia,
   mediaContentType,
   mediaEtag,
   statMediaFile,
+  type MediaServing,
 } from "./media-files.ts";
-
-export interface MediaRouteOptions {
-  /** Serve files whose path leaves the Installation file's folder. */
-  readonly allowOutsideShowFolder: boolean;
-}
 
 export type ByteRange =
   | { readonly start: number; readonly end: number }
@@ -48,32 +45,48 @@ export function parseByteRange(
 }
 
 /**
- * `GET /media/<id>` streams a Media item's file: the content type from its
- * extension, `Cache-Control: no-cache` with an ETag from size and
+ * `GET /media/<id>` streams a Media item's file, a file item's from beside
+ * the Installation, a bundled item's from the bundle: the content type from
+ * its extension, `Cache-Control: no-cache` with an ETag from size and
  * modification time so a page revalidates cheaply, and Range requests
  * honoured, which video seeking needs. Any origin may read it, so an
  * Output page served from elsewhere (a dev server, another runtime's
  * Studio) can upload the picture to a texture. 404 for an unknown id, a
- * Media Group, a missing file or an Installation without a path; 403 when the resolved
- * path leaves the Installation's folder and the runtime does not allow
- * that.
+ * Media Group, a bundled item whose entry the Catalog lacks, a missing
+ * file or an Installation without a path; 403 when the resolved path
+ * leaves the Installation's folder and the runtime does not allow that.
+ *
+ * `GET /bundled/<entry id>` streams a Bundled Media entry's file the same
+ * way, with no Media item needed, so a page can preview the bundle.
  */
 export function registerMediaRoutes(
   app: FastifyInstance,
   store: DocumentStore,
-  options: MediaRouteOptions,
+  serving: MediaServing,
 ): void {
+  app.get<{ Params: { id: string } }>(
+    `${settings.runtime.bundledPath}/:id`,
+    async (request, reply) => {
+      const file = locateBundled(serving, request.params.id);
+      const info = file === undefined ? undefined : await statMediaFile(file);
+      if (file === undefined || info === undefined)
+        return reply.status(404).send({
+          error:
+            file === undefined
+              ? `No Bundled Media entry “${request.params.id}”.`
+              : `Bundled Media “${request.params.id}”: no file at ${file}; run npm run media:fetch.`,
+        });
+      return sendFile(reply, file, info, request.headers);
+    },
+  );
+
   app.get<{ Params: { id: string } }>(
     `${settings.runtime.mediaPath}/:id`,
     async (request, reply) => {
       const session = store.currentSession();
       if (session === undefined)
         return reply.status(404).send({ error: "No Installation is open." });
-      const location = locateMedia(
-        session,
-        request.params.id,
-        options.allowOutsideShowFolder,
-      );
+      const location = locateMedia(session, request.params.id, serving);
       const item = session.document.media[request.params.id];
       const name = item?.name ?? "";
       switch (location.status) {
@@ -83,6 +96,10 @@ export function registerMediaRoutes(
               item?.kind === "group"
                 ? `“${name}” is a Media Group, which has no file.`
                 : `No Media item “${request.params.id}”.`,
+          });
+        case "unavailable":
+          return reply.status(404).send({
+            error: `Media “${name}” shows Bundled Media “${location.entry}”, which this runtime lacks.`,
           });
         case "unsaved":
           return reply.status(404).send({

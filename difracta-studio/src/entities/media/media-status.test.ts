@@ -29,6 +29,7 @@ describe("Media status", () => {
     expect(mediaWarning({ status: "unsaved" })?.explanation).toContain(
       "Save the Installation",
     );
+    expect(mediaWarning({ status: "unavailable" })?.label).toBe("Unavailable");
   });
 
   it("counts the file rows that warn for the collapsed section, never a Group", () => {

@@ -27,7 +27,8 @@ files:
 # The app is one asar archive, nothing unpacked. Electron reads files inside
 # it wherever Node's fs is used, the utility process that runs
 # dist/runtime.mjs included, so forking the runtime and @fastify/static
-# serving dist/studio, dist/output and dist/thumbnails from inside the archive
+# serving dist/studio, dist/output, dist/thumbnails and dist/bundled (the
+# Bundled Media's clips and thumbnails) from inside the archive
 # both work, as does the app:// launch page read through net.fetch. One gap:
 # Electron's `access` reports a folder inside the archive as missing, so the
 # runtime checks its folders with `stat`.

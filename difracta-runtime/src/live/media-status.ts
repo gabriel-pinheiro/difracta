@@ -1,7 +1,11 @@
 import type { Patch } from "@difracta/core";
 import type { LiveState, MediaLive } from "@difracta/protocol";
 
-import { mediaStatusOf, type MediaSource } from "../documents/media-files.ts";
+import {
+  mediaStatusOf,
+  type MediaServing,
+  type MediaSource,
+} from "../documents/media-files.ts";
 
 /** A source's Media table and path, taken when a refresh is asked for. */
 interface Snapshot {
@@ -11,7 +15,8 @@ interface Snapshot {
 
 /**
  * Whether each Media item's file is there, under `["media", id]` in the
- * live state. The runtime stats every file on each refresh: when a document
+ * live state; a bundled item's is `unavailable` when the Catalog lacks its
+ * entry. The runtime stats every file on each refresh: when a document
  * opens or is replaced, when it is saved to a new path and after any command
  * that touches `media`. There is no file watcher. Refreshes are serialized
  * and a refresh asked for while one runs follows it, with the newest
@@ -20,12 +25,12 @@ interface Snapshot {
 export class MediaStatuses {
   readonly #entries = new Map<string, MediaLive>();
   readonly #listeners = new Set<(patches: readonly Patch[]) => void>();
-  readonly #allowOutsideShowFolder: boolean;
+  readonly #serving: MediaServing;
   #queued: Snapshot | null | undefined;
   #running: Promise<void> | undefined;
 
-  constructor(options: { readonly allowOutsideShowFolder: boolean }) {
-    this.#allowOutsideShowFolder = options.allowOutsideShowFolder;
+  constructor(serving: MediaServing) {
+    this.#serving = serving;
   }
 
   onChange(listener: (patches: readonly Patch[]) => void): () => void {
@@ -65,11 +70,7 @@ export class MediaStatuses {
     const next = new Map<string, MediaLive>();
     if (snapshot !== null)
       for (const id of Object.keys(snapshot.document.media)) {
-        const status = await mediaStatusOf(
-          snapshot,
-          id,
-          this.#allowOutsideShowFolder,
-        );
+        const status = await mediaStatusOf(snapshot, id, this.#serving);
         if (status !== undefined) next.set(id, { status });
       }
     const patches: Patch[] = [];

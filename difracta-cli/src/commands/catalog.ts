@@ -3,26 +3,43 @@ import type { Command } from "commander";
 
 import type { Cli } from "../cli.ts";
 import { fetchCatalog } from "../connection.ts";
+import { bundledFlags, describeBundled } from "./media-bundled.ts";
 
 export function registerCatalog(program: Command, cli: Cli): void {
   program
     .command("catalog [id]")
     .description(
-      "List the Visuals and Filters the runtime renders, or describe one: notes, Parameters, Cues.",
+      "List the Visuals and Filters the runtime renders and its Bundled Media, or describe one: notes, Parameters, Cues; for a Bundled Media entry, notes, size, duration and flags.",
     )
     .action((id: string | undefined) =>
       cli.withClient(async (client) => {
         const catalog = await fetchCatalog(client);
         if (id === undefined) {
           const items = [...catalog.visuals(), ...catalog.filters()];
-          cli.print(items, () =>
-            items
-              .map(
+          const media = catalog.media();
+          cli.print([...items, ...media], () =>
+            [
+              ...items.map(
                 (item) =>
                   `${item.id.padEnd(20)} ${item.kind.padEnd(8)} ${item.backend.padEnd(8)} ${item.recommended === true ? "★ " : "  "}${item.description}`,
-              )
-              .join("\n"),
+              ),
+              ...(media.length === 0
+                ? []
+                : [
+                    "",
+                    "Bundled Media",
+                    ...media.map((entry) => {
+                      const flags = bundledFlags(entry);
+                      return `${entry.id.padEnd(28)} ${entry.type.padEnd(6)} ${entry.recommended === true ? "★ " : "  "}${entry.name}${flags === "" ? "" : ` (${flags})`}: ${entry.description}`;
+                    }),
+                  ]),
+            ].join("\n"),
           );
+          return;
+        }
+        const entry = catalog.mediaEntry(id);
+        if (entry !== undefined) {
+          cli.print(entry, () => describeBundled(entry));
           return;
         }
         const definition = catalog.visual(id) ?? catalog.filter(id);

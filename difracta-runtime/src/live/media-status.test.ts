@@ -1,5 +1,11 @@
 import { DifractaClient } from "@difracta/client";
-import { emptyDocument, id as brand, type Patch } from "@difracta/core";
+import {
+  Catalog,
+  emptyDocument,
+  emptyCatalog,
+  id as brand,
+  type Patch,
+} from "@difracta/core";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -51,7 +57,11 @@ function withMedia(
 
 describe("MediaStatuses", () => {
   it("stats every file, skips Groups and replicates only what changed", async () => {
-    const statuses = new MediaStatuses({ allowOutsideShowFolder: false });
+    const statuses = new MediaStatuses({
+      allowOutsideShowFolder: false,
+      catalog: emptyCatalog,
+      bundledDir: dir,
+    });
     const patches: Patch[] = [];
     statuses.onChange((emitted) => patches.push(...emitted));
     const file = path.join(dir, "show", "show.difracta");
@@ -102,7 +112,11 @@ describe("MediaStatuses", () => {
   });
 
   it("serves outside items as ok or missing when allowed, and settles on the newest refresh", async () => {
-    const statuses = new MediaStatuses({ allowOutsideShowFolder: true });
+    const statuses = new MediaStatuses({
+      allowOutsideShowFolder: true,
+      catalog: emptyCatalog,
+      bundledDir: dir,
+    });
     const file = path.join(dir, "show", "show.difracta");
     const first = statuses.refresh(
       withMedia({ m_loop: "../loop.mp4", m_far: "../far.mp4" }, file),
@@ -114,6 +128,54 @@ describe("MediaStatuses", () => {
       withMedia({ m_loop: "../loop.mp4", m_far: "../far.mp4" }, file),
     );
     expect(statuses.state().media.m_far).toEqual({ status: "missing" });
+  });
+});
+
+describe("MediaStatuses for bundled items", () => {
+  it("are ok when the Catalog has the entry, saved or not, and unavailable when it lacks it", async () => {
+    await mkdir(path.join(dir, "bundled", "clips"), { recursive: true });
+    await writeFile(path.join(dir, "bundled", "clips", "flash.webm"), "webm");
+    const catalog = new Catalog({
+      media: [
+        {
+          kind: "media",
+          id: "flash",
+          name: "Flash",
+          description: "A flash.",
+          type: "video",
+          file: "clips/flash.webm",
+          width: 16,
+          height: 9,
+        },
+      ],
+    });
+    const statuses = new MediaStatuses({
+      allowOutsideShowFolder: false,
+      catalog,
+      bundledDir: path.join(dir, "bundled"),
+    });
+    const bundled = (entry: string) => ({
+      id: brand("media", `m_${entry}`),
+      name: entry,
+      parentId: null,
+      order: "a0",
+      kind: "bundled" as const,
+      bundled: entry,
+    });
+    const source = {
+      document: {
+        ...emptyDocument("Show"),
+        media: { m_flash: bundled("flash"), m_retired: bundled("retired") },
+      },
+      path: null,
+    };
+    await statuses.refresh(source);
+    expect(statuses.state()).toEqual({
+      media: {
+        m_flash: { status: "ok" },
+        m_retired: { status: "unavailable" },
+      },
+    });
   });
 });
 
@@ -130,6 +192,7 @@ describe("Media status in the live state", () => {
       studioDist: undefined,
       outputDist: undefined,
       thumbnailsDir: undefined,
+      bundledDir: undefined,
       autosaveIntervalMs: 60_000,
       oscPort: undefined,
       discovery: false,

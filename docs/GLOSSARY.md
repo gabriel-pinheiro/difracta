@@ -170,7 +170,8 @@ where things are now.
 
 ### Catalog
 
-The set of Visual and Filter definitions a Runtime knows, each with a stable id.
+What a Runtime knows it can show, in three kinds of definition, each with a
+stable id unique across all three: Visuals, Filters and Bundled Media (`media`).
 Studio picks from the Catalog in the Library, the CLI lists and describes it,
 and commands validate ids and Parameter Values against it. A definition may
 carry notes for whoever composes with it, and has a thumbnail rendered from it.
@@ -214,21 +215,34 @@ by Parameter name; picking a definition sets them to the definition's defaults.
 
 One image or video the Installation refers to, as an entity in the `media`
 table. A Media item is of kind `file`, with a `path` relative to the
-Installation File's folder, POSIX separators and `..` allowed. Its type, image
-or video, is read from the file's extension (png, jpg, jpeg, webp, gif, svg;
-mp4, webm, mov) and never stored. Items are arranged in Media Groups, and a name
+Installation File's folder, POSIX separators and `..` allowed, or of kind
+`bundled`, naming a Bundled Media entry by id. Its type, image or video, is read
+from the file's extension (png, jpg, jpeg, webp, gif, svg; mp4, webm, mov) or
+from the entry, and never stored. Items are arranged in Media Groups, and a name
 is unique among its siblings. The Runtime serves the file at `GET /media/<id>`
 and reports in the live state whether it is there: `ok`, `missing`, `outside`
 the folder, or `unsaved` while the Installation has no file for the path to be
-relative to.
+relative to; a bundled item is `ok`, or `unavailable` when the Runtime's Catalog
+lacks its entry.
+
+### Bundled Media
+
+The images and videos Difracta ships, from a pinned release of the
+`difracta-media` repository, each with a stable id, a name, a description,
+notes, a thumbnail and optional Recommended, Loop (loops without a seam) and Hit
+(a one-shot on a beat) flags. They are `media` definitions in the Catalog, so
+the CLI and validation know them. A Media item of kind `bundled` refers to one
+by id; when the Runtime's Catalog lacks that id the item stays in the file,
+unavailable, and shows nothing.
 
 ### Media Parameter
 
 A Parameter of kind `media` a Visual declares, holding a Media id or `""` for
 none, restricted to one type (`accepts: "image" | "video"`). Its Address lists
-the Media files of that type as its options, in navigator order and without
-Groups, so a Macro can swap artwork; it is not linkable. Removing the Media
-item, or the Group holding it, clears every Media Parameter holding it.
+the Media items of that type as its options, files and bundled items, in
+navigator order and without Groups, so a Macro can swap artwork; it is not
+linkable. Removing the Media item, or the Group holding it, clears every Media
+Parameter holding it.
 
 ### Image
 

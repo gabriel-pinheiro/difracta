@@ -3,6 +3,7 @@ import {
   Catalog,
   settings,
   type FilterDefinition,
+  type MediaDefinition,
   type VisualDefinition,
 } from "@difracta/core";
 import type { DocumentSummary } from "@difracta/protocol";
@@ -62,13 +63,14 @@ export function currentDocument(client: DifractaClient): DocumentSummary {
   return summary;
 }
 
-/** The runtime's Catalog, as metadata: what its Visual and Filter ids mean. */
+/** The runtime's Catalog, as metadata: what its Visual, Filter and Bundled Media ids mean. */
 export async function fetchCatalog(client: DifractaClient): Promise<Catalog> {
-  const { visuals, filters } = await client.request<{
+  const { visuals, filters, media } = await client.request<{
     visuals: VisualDefinition[];
     filters: FilterDefinition[];
+    media?: MediaDefinition[];
   }>("catalog.list", {});
-  return new Catalog({ visuals, filters });
+  return new Catalog({ visuals, filters, media: media ?? [] });
 }
 
 export function parseJsonArgument(text: string | undefined): unknown {

@@ -181,16 +181,18 @@ const MediaBase = {
   order: z.string().min(1).default(DEFAULT_ORDER_KEY),
 };
 
-export const MEDIA_KINDS = ["file", "group"] as const;
+export const MEDIA_KINDS = ["file", "bundled", "group"] as const;
 export type MediaKind = (typeof MEDIA_KINDS)[number];
 
 /**
- * A Media item is one image or video file the Installation refers to, or a
- * Group arranging items in the navigator. A file's `path` is relative to
- * the Installation file's folder, POSIX separators, `..` allowed; its type
- * (image or video) is read from the extension (`document/media.ts`) and
- * never stored. Names are unique among siblings. An item without a `kind`,
- * as older files hold, is a file.
+ * A Media item is one image or video the Installation refers to, or a
+ * Group arranging items in the navigator. A `file` item's `path` is
+ * relative to the Installation file's folder, POSIX separators, `..`
+ * allowed; a `bundled` item names a Bundled Media entry of the Catalog by
+ * id, and one the Catalog lacks stays, unavailable. The type (image or
+ * video) is read from the file's extension or the entry
+ * (`document/media.ts`) and never stored. Names are unique among siblings.
+ * An item without a `kind`, as older files hold, is a file.
  */
 export const MediaSchema = z.discriminatedUnion("kind", [
   z
@@ -200,10 +202,18 @@ export const MediaSchema = z.discriminatedUnion("kind", [
       path: z.string().min(1),
     })
     .strict(),
+  z
+    .object({
+      ...MediaBase,
+      kind: z.literal("bundled"),
+      bundled: z.string().min(1),
+    })
+    .strict(),
   z.object({ ...MediaBase, kind: z.literal("group") }).strict(),
 ]);
 export type Media = Entity<typeof MediaSchema, MediaId>;
 export type MediaFile = Extract<Media, { kind: "file" }>;
+export type MediaBundled = Extract<Media, { kind: "bundled" }>;
 
 export const CALIBRATION_VIEWS = ["selected", "outlines", "patterns"] as const;
 export const CalibrationViewSchema = z.enum(CALIBRATION_VIEWS);

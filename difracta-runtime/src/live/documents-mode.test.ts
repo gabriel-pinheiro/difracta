@@ -35,6 +35,7 @@ async function connect(mode: DocumentsMode, remoteAddress: string | undefined) {
   const live = new LiveServer({
     store,
     catalog: emptyCatalog,
+    bundledDir: "",
     runtimeName: "test",
     runtimeVersion: "0",
     documents: mode,
@@ -160,6 +161,7 @@ describe("document modes", () => {
       studioDist: undefined,
       outputDist: undefined,
       thumbnailsDir: undefined,
+      bundledDir: undefined,
       autosaveIntervalMs: 60_000,
       oscPort: undefined,
       discovery: false,
@@ -202,6 +204,7 @@ describe("document modes", () => {
       studioDist: undefined,
       outputDist: undefined,
       thumbnailsDir: undefined,
+      bundledDir: undefined,
       autosaveIntervalMs: 60_000,
       oscPort: undefined,
       discovery: false,

@@ -8,6 +8,8 @@ build/
 !difracta-desktop/build/
 difracta-desktop/release/
 out/
+# The Bundled Media, fetched by scripts/fetch-media.mjs from the pinned release.
+difracta-visuals/bundled/
 coverage/
 *.log
 .DS_Store

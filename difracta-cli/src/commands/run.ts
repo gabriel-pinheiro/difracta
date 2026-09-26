@@ -9,7 +9,7 @@ import type { Command } from "commander";
 import { z } from "zod";
 
 import type { Cli } from "../cli.ts";
-import { parseJsonArgument } from "../connection.ts";
+import { fetchCatalog, parseJsonArgument } from "../connection.ts";
 import { relativizeMediaPayload } from "../media-paths.ts";
 import { resolvePayloadNames } from "../names.ts";
 import {
@@ -18,6 +18,7 @@ import {
   type NamedResult,
 } from "../result.ts";
 import { formatSchema } from "../schema.ts";
+import { resolveBundledPayload } from "./media-bundled.ts";
 
 /** The registry is the only source for `commands`, `describe` and `run`. */
 const registry = createBuiltInRegistry();
@@ -105,18 +106,23 @@ export function registerRun(program: Command, cli: Cli): void {
   program
     .command("run <command> [payload]")
     .description(
-      'Run any command with a JSON payload, e.g. run output.create \'{"name":"TV"}\'. Entity fields take names as well as ids; a Media path is taken from this shell. `commands` lists the commands, `describe <command>` shows its payload; a create\'s reply lists what it made, with the name it got.',
+      'Run any command with a JSON payload, e.g. run output.create \'{"name":"TV"}\'. Entity fields take names as well as ids, and a Bundled Media entry its name; a Media path is taken from this shell. `commands` lists the commands, `describe <command>` shows its payload; a create\'s reply lists what it made, with the name it got.',
     )
     .action((name: string, payload: string | undefined) =>
       cli.withDocument(async (client, summary) => {
         const { document, view } = await cli.replica(client, summary.id);
+        const entries = await resolveBundledPayload(
+          name,
+          parseJsonArgument(payload),
+          () => fetchCatalog(client),
+        );
         const reply = await client.command<CommandResult>(
           summary.id,
           name,
           relativizeMediaPayload(
             summary,
             name,
-            resolvePayloadNames(document, name, parseJsonArgument(payload)),
+            resolvePayloadNames(document, name, entries),
           ),
         );
         const result: NamedResult =

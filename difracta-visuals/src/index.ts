@@ -1,5 +1,7 @@
 import { Catalog } from "@difracta/core";
 
+import { bundledMedia, bundledRoot } from "./bundled/manifest.ts";
+
 import { blockGlitch } from "./filters/block-glitch.ts";
 import { chromaticAberration } from "./filters/chromatic-aberration.ts";
 import { dither } from "./filters/dither.ts";
@@ -96,7 +98,8 @@ import { sirenBeacon } from "./visuals/siren-beacon.ts";
 
 /**
  * The built-in Catalog: every Visual and Filter Difracta ships, one file
- * each. Add a definition by importing it here.
+ * each, and the Bundled Media from the fetched manifest. Add a definition by
+ * importing it here.
  */
 export const builtInCatalog = new Catalog({
   visuals: [
@@ -194,14 +197,18 @@ export const builtInCatalog = new Catalog({
     pixelCrush,
     sliceShift,
   ],
+  media: bundledMedia,
 });
 
 /**
  * Where the thumbnails live: one `<id>.png` per definition, rendered by
  * `npm run thumbnails` through the compositor itself (a Filter over a gray
- * checkerboard), so a thumbnail is what the definition does.
+ * checkerboard), so a thumbnail is what the definition does. The Bundled
+ * Media's thumbnails come with the bundle, in `bundled/thumbnails/`.
  */
 export const thumbnailsRoot = new URL("../thumbnails/", import.meta.url);
+
+export { bundledRoot };
 
 export function thumbnailFile(id: string): string {
   return `${id}.png`;

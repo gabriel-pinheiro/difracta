@@ -11,7 +11,8 @@ import {
 /**
  * Points a Media file at another file. The type follows the extension, so
  * a change from image to video (or back) clears the Parameters that held
- * the item: they accept only the type it was. A Group has no path.
+ * the item: they accept only the type it was. A Group has no path, nor
+ * does a bundled item, whose entry `media.bundled` changes.
  */
 export const mediaPath = defineCommand({
   name: "media.path",
@@ -29,6 +30,10 @@ export const mediaPath = defineCommand({
       return rejected(`Media “${payload.mediaId}” does not exist.`);
     if (media.kind === "group")
       return rejected(`“${media.name}” is a Media Group, which has no path.`);
+    if (media.kind === "bundled")
+      return rejected(
+        `“${media.name}” is bundled Media, which has no path; media.bundled changes its entry.`,
+      );
     const problem = mediaPathProblem(payload.path);
     if (problem !== undefined) return rejected(problem);
     const path = normalizeMediaPath(payload.path);

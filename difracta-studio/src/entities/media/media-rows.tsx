@@ -1,7 +1,7 @@
 import type { DocumentView } from "@difracta/client";
 import {
   childMedia,
-  mediaItemType,
+  mediaItemTypeIn,
   type Media,
   type Table,
 } from "@difracta/core";
@@ -14,6 +14,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { catalog } from "@/lib/catalog";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useExpansion } from "@/navigator/expansion";
 import {
@@ -174,7 +175,7 @@ function MediaFileRow({
   readonly onSelect: () => void;
 }) {
   const live = useDocumentPath<MediaLive>(view, ["live", "media", item.id]);
-  const type = mediaItemType(item) ?? "image";
+  const type = mediaItemTypeIn(item, catalog) ?? "image";
   const warning = mediaWarning(live);
   return (
     <NavigatorRow

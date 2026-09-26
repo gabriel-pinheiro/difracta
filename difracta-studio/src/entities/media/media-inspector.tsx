@@ -1,5 +1,10 @@
 import type { DocumentView } from "@difracta/client";
-import { mediaTypeOf, type Media, type MediaFile } from "@difracta/core";
+import {
+  mediaItemTypeIn,
+  type Media,
+  type MediaBundled,
+  type MediaFile,
+} from "@difracta/core";
 import { FolderOpen } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -21,7 +26,7 @@ import { requestMediaPath } from "./media-path-request";
 import { describeMediaStatus, type MediaLive } from "./media-status";
 import { layersUsing } from "./media-usage";
 
-/** A Media item's inspector: a Group has only its name; a file has the rest. */
+/** A Media item's inspector: a Group has only its name; a file or bundled item has the rest. */
 export function MediaInspector({
   view,
   id,
@@ -37,7 +42,7 @@ export function MediaInspector({
     if (item === undefined) select({ kind: "installation" });
   }, [item, select]);
   if (item === undefined) return null;
-  if (item.kind === "file")
+  if (item.kind !== "group")
     return <MediaFileInspector view={view} item={item} />;
   return (
     <>
@@ -59,14 +64,14 @@ export function MediaInspector({
  * A Media file's name, its path as text (Browse in Desktop opens the native
  * picker over the same file types), the type its extension says, what the
  * runtime reports about the file, and the Layers showing it, each a way to
- * that Layer.
+ * that Layer. A bundled item shows the entry it names instead of a path.
  */
 function MediaFileInspector({
   view,
   item,
 }: {
   readonly view: DocumentView;
-  readonly item: MediaFile;
+  readonly item: MediaFile | MediaBundled;
 }) {
   const id = item.id;
   const command = useCommand(view);
@@ -78,7 +83,7 @@ function MediaFileInspector({
   const document = useSignal(view.document);
   const [request, setRequest] = useState<NameRequest | undefined>(undefined);
   const desktop = desktopBridge() !== undefined;
-  const type = mediaTypeOf(item.path);
+  const type = mediaItemTypeIn(item, catalog);
   const status =
     live === undefined ? undefined : describeMediaStatus(live.status);
   const uses = document === undefined ? [] : layersUsing(document, catalog, id);
@@ -97,30 +102,37 @@ function MediaFileInspector({
             void command("media.rename", { mediaId: id, name })
           }
         />
-        <div className="grid gap-1">
-          <NameField label="Path" value={item.path} onCommit={setPath} />
-          <p className="text-[0.6875rem]/relaxed text-muted-foreground">
-            Relative to the Installation file's folder.
+        {item.kind === "bundled" ? (
+          <p className="text-xs">
+            <span className="text-muted-foreground">Bundled: </span>
+            {catalog.mediaEntry(item.bundled)?.name ?? item.bundled}
           </p>
-          {desktop && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="justify-self-start"
-              onClick={() =>
-                requestMediaPath({
-                  purpose: "change",
-                  documentPath: selected?.path ?? null,
-                  initial: item.path,
-                  showDialog: setRequest,
-                  onPath: setPath,
-                })
-              }
-            >
-              <FolderOpen /> Browse…
-            </Button>
-          )}
-        </div>
+        ) : (
+          <div className="grid gap-1">
+            <NameField label="Path" value={item.path} onCommit={setPath} />
+            <p className="text-[0.6875rem]/relaxed text-muted-foreground">
+              Relative to the Installation file's folder.
+            </p>
+            {desktop && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="justify-self-start"
+                onClick={() =>
+                  requestMediaPath({
+                    purpose: "change",
+                    documentPath: selected?.path ?? null,
+                    initial: item.path,
+                    showDialog: setRequest,
+                    onPath: setPath,
+                  })
+                }
+              >
+                <FolderOpen /> Browse…
+              </Button>
+            )}
+          </div>
+        )}
         <div className="grid gap-1">
           <span className="text-xs text-muted-foreground">Type</span>
           <span className="text-xs">

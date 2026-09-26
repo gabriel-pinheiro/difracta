@@ -15,7 +15,11 @@ import {
   type Layer,
   type Surface,
 } from "../document/document.ts";
-import { mediaFiles, mediaTypeOf, type MediaType } from "../document/media.ts";
+import {
+  flattenMedia,
+  mediaItemTypeIn,
+  type MediaType,
+} from "../document/media.ts";
 import { orderedEntries } from "../document/order.ts";
 import { flattenTree } from "../document/tree.ts";
 import type { PatchPath } from "../document/patch.ts";
@@ -58,9 +62,9 @@ export interface ResolvedAddress {
   /** What the property starts at; a trigger has none. */
   readonly default?: AddressValue;
   readonly range?: NumberRange;
-  /** A choice's values, or for a media Address none (`""`) and the Media files of the accepted type. */
+  /** A choice's values, or for a media Address none (`""`) and the Media items of the accepted type. */
   readonly options?: readonly ChoiceOption[];
-  /** The type of Media file a media Address takes. */
+  /** The type of Media item a media Address takes. */
   readonly accepts?: MediaType;
 }
 
@@ -107,21 +111,27 @@ export function layerDefinition(layer: Layer, catalog: Catalog) {
   return undefined;
 }
 
-/** None first, then the Media files of `type` in navigator order, Groups left out, so a control lists them as they are. */
+/**
+ * None first, then the Media files and bundled items of `type` in navigator
+ * order, Groups and bundled items the Catalog lacks left out, so a control
+ * lists them as they are.
+ */
 function mediaOptions(
   source: AddressSource,
+  catalog: Catalog,
   type: MediaType,
 ): readonly ChoiceOption[] {
   return [
     { value: "", label: "None" },
-    ...mediaFiles(source.media)
-      .filter((item) => mediaTypeOf(item.path) === type)
+    ...flattenMedia(source.media)
+      .filter((item) => mediaItemTypeIn(item, catalog) === type)
       .map((item) => ({ value: item.id, label: item.name })),
   ];
 }
 
 function fromParameter(
   source: AddressSource,
+  catalog: Catalog,
   layer: Layer,
   name: string,
   definition: ParameterDefinition,
@@ -154,7 +164,7 @@ function fromParameter(
         ...base,
         type: "media",
         accepts: definition.accepts,
-        options: mediaOptions(source, definition.accepts),
+        options: mediaOptions(source, catalog, definition.accepts),
       };
   }
 }
@@ -327,7 +337,7 @@ const patterns: readonly AddressPattern[] = [
       const parameter = layerDefinition(layer, catalog)?.parameters[name];
       return parameter === undefined
         ? undefined
-        : fromParameter(document, layer, name, parameter);
+        : fromParameter(document, catalog, layer, name, parameter);
     },
     list: (document, catalog) =>
       orderedEntries(document.layers).flatMap((layer) =>

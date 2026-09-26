@@ -38,6 +38,7 @@ import { macroRename } from "./macro.rename.ts";
 import { macroUngroup } from "./macro.ungroup.ts";
 import { installationRename } from "./installation.rename.ts";
 import { maskCreate } from "./mask.create.ts";
+import { mediaBundled } from "./media.bundled.ts";
 import { mediaCreate } from "./media.create.ts";
 import { mediaMove } from "./media.move.ts";
 import { mediaPath } from "./media.path.ts";
@@ -112,6 +113,7 @@ export const builtInCommands: readonly CommandDefinition<never>[] = [
   mediaCreate,
   mediaRename,
   mediaPath,
+  mediaBundled,
   mediaMove,
   mediaUngroup,
   mediaRemove,

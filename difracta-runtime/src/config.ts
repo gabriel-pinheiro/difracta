@@ -19,6 +19,8 @@ export interface RuntimeConfig {
   readonly outputDist: string | undefined;
   /** The Catalog's thumbnails; undefined serves the ones inside `@difracta/visuals`. */
   readonly thumbnailsDir: string | undefined;
+  /** The Bundled Media's folder (manifest, clips, thumbnails); undefined serves the one inside `@difracta/visuals`. */
+  readonly bundledDir: string | undefined;
   readonly autosaveIntervalMs: number;
   /** OSC and OSCQuery port; undefined keeps the door closed. */
   readonly oscPort: number | undefined;
@@ -86,6 +88,7 @@ export function configFromEnvironment(
       env.DIFRACTA_OUTPUT_DIST ??
       path.join(packageRoot, "difracta-output", "dist"),
     thumbnailsDir: nonEmpty(env.DIFRACTA_THUMBNAILS_DIR),
+    bundledDir: nonEmpty(env.DIFRACTA_BUNDLED_DIR),
     autosaveIntervalMs: settings.autosave.delayMs,
     oscPort:
       values["no-osc"] === true || env.DIFRACTA_NO_OSC === "1"

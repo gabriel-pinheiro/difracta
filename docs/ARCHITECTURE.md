@@ -40,7 +40,7 @@ consistent.
 | Package             | Role                                                                                                                                                 | Depends on                       |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
 | `difracta-core`     | Document model (normalized tables), patches, Addresses, Catalog and Parameter types, command registry, pure command reducers, undo history, settings | zod                              |
-| `difracta-visuals`  | The built-in Catalog: Visual and Filter definitions, their implementations and thumbnails                                                            | core, render                     |
+| `difracta-visuals`  | The built-in Catalog: Visual and Filter definitions, their implementations and thumbnails, and the fetched Bundled Media                             | core, render                     |
 | `difracta-protocol` | Wire schemas for the live socket and runtime requests                                                                                                | core                             |
 | `difracta-client`   | Connection, snapshot plus delta replica (`DocumentView`), acknowledged commands, coalesced inputs; Zeroconf browsing under `/discovery` (Node only)  | core, protocol, bonjour-service  |
 | `difracta-runtime`  | Node host: document sessions, files and autosave, live server, static serving                                                                        | core, protocol, visuals, fastify |
@@ -186,24 +186,27 @@ lose steps, whereas deltas apply in full in any order.
 
 ### Media
 
-A Media item is one image or video file the Installation shows, or a Media Group
+A Media item is one image or video the Installation shows, or a Media Group
 arranging items in the navigator. The `media` table has the Controllers' and
-Macros' tree shape (`kind` of `file` or `group`, `parentId`, `order`;
-`document/tree.ts`), and a name is unique among its siblings. A file has a
+Macros' tree shape (`kind` of `file`, `bundled` or `group`, `parentId`, `order`;
+`document/tree.ts`), and a name is unique among its siblings. A bundled item
+names a Bundled Media entry in `bundled` (see Bundled Media below). A file has a
 `path` relative to the Installation file's folder, POSIX separators, `..`
 allowed. Its type, image or video, is read from the extension (`settings.media`
 lists them; `document/media.ts` derives it) and never stored; a path with any
 other extension is refused. An item written before Groups existed, with no
 `kind` or `parentId`, reads as a file at the root.
 
-`media.create` adds a file (kind `file`, the default, with a path) or a Group
-(kind `group`, no path) last in its parent unless `after` places it, naming a
-file after its file unless told otherwise. `media.move` places an item in
-another Group or at the root, carrying a Group's contents and refusing cycles;
-`entity.move` reorders among siblings; `media.ungroup` dissolves a Group;
-`media.rename`; `media.path` for a file only; `media.remove`, which takes a
-Group's contents with it. All are authoring. The CLI has shortcuts for the
-everyday ones: `difracta media add <path> [--group G]`,
+`media.create` adds a file (kind `file`, the default, with a path), a bundled
+item (kind `bundled`, with an entry id the Catalog has) or a Group (kind
+`group`, neither) last in its parent unless `after` places it, naming a file
+after its file and a bundled item after its entry unless told otherwise.
+`media.move` places an item in another Group or at the root, carrying a Group's
+contents and refusing cycles; `entity.move` reorders among siblings;
+`media.ungroup` dissolves a Group; `media.rename`; `media.path` for a file only;
+`media.bundled` for a bundled item only, swapping its entry; `media.remove`,
+which takes a Group's contents with it. All are authoring. The CLI has shortcuts
+for the everyday ones: `difracta media add <path> [--group G]`,
 `difracta media group <name> [--group G]` and `difracta media list`, the tree
 indented by Group with kind, type, status and path. The path helpers in
 `document/media.ts` are pure and run in the browser too: one relativizes an
@@ -212,15 +215,18 @@ use, and one says whether a resolved path stays under that folder.
 
 A Visual refers to an item through a Parameter of kind `media`
 (`{ kind: "media", accepts: "image" | "video", default: "" }`), whose value is a
-file's id or `""` for none. Its Address is of type `media`: the options are none
-plus the files of the accepted type in navigator order, Groups never among them,
-`address.set` and `address.edit` refuse anything else, a Macro `set` action
-swaps artwork, and a Link is refused. `layer.visual` checks the value the same
-way; `layer.reset` puts `""` back. `media.remove` clears every Parameter holding
-the item, or any item inside a removed Group, to `""`, as removing a Surface
-clears Targets, and drops the Macro actions that would set it; `media.path` does
-the same when the new extension changes the type, since the Parameters that held
-it accept only the type it was. The file on disk is never touched.
+file's or bundled item's id or `""` for none. Its Address is of type `media`:
+the options are none plus the items of the accepted type in navigator order
+(`mediaItemTypeIn` reads a bundled item's type from the Catalog), Groups and
+bundled items whose entry the Catalog lacks never among them, `address.set` and
+`address.edit` refuse anything else, a Macro `set` action swaps artwork, and a
+Link is refused. `layer.visual` checks the value the same way; `layer.reset`
+puts `""` back. `media.remove` clears every Parameter holding the item, or any
+item inside a removed Group, to `""`, as removing a Surface clears Targets, and
+drops the Macro actions that would set it; `media.path` does the same when the
+new extension changes the type, since the Parameters that held it accept only
+the type it was, and so does `media.bundled` when the new entry is of the other
+type. The file on disk is never touched.
 
 **Why a table and a reference rather than a path on the Layer:** the same file
 is shown by several Layers and swapped by Macros; one entity gives it a name, a
@@ -228,9 +234,61 @@ status and one place to change the path. **Why relative paths:** a show folder
 is copied to the stage machine or mounted into a container, and the file must
 still be found beside the Installation. **Why the type is derived:** the
 extension already says it; storing it would be one more thing to keep in step.
-**Why `kind` is file or group and image or video is `type`:** every tree in the
-document keys on `kind === "group"`, so the Media tree reuses the same move,
-ungroup and rename helpers.
+**Why `kind` is file, bundled or group and image or video is `type`:** every
+tree in the document keys on `kind === "group"`, so the Media tree reuses the
+same move, ungroup and rename helpers.
+
+### Bundled Media
+
+Difracta ships a set of white-on-black clips, the Bundled Media, from its own
+repository, `difracta-media`: `clips/`, one `thumbnails/<id>.png` per clip and a
+`manifest.json` describing each (id, name, description, notes, `file`, `type`,
+optional `recommended`, `loop` and `hit`, `thumbnailAt`, width, height,
+duration). `settings.media.bundle` pins one release by version and SHA-256.
+`scripts/fetch-media.mjs` (`npm run media:fetch`; also the root `postinstall`
+and the first step of `dev`, `build`, `desktop` and `package:desktop`) downloads
+that release's tarball, refuses it unless the hash matches, and unpacks
+`manifest.json`, `clips/` and `thumbnails/` into `difracta-visuals/bundled/`
+(gitignored) with a `.version` stamp, so a second run is free unless `--force`.
+`DIFRACTA_MEDIA_DIR=<path>` copies the three from a local checkout of the media
+repository instead, stamped `dir:<path>`. While the pin has no SHA-256 and no
+directory is given, the script writes an empty manifest and warns; with one
+pinned, a failed fetch fails the install or the build.
+
+`difracta-visuals` imports the manifest as JSON (`src/bundled/manifest.ts`),
+validates it with the schema in `core/catalog/bundle-manifest.ts` when the
+module loads, so a bad manifest fails the build and the tests rather than a
+show, and adds its entries to `builtInCatalog` as `media` definitions
+(`{ kind: "media", id, name, description, notes, recommended?, type, loop?, hit?, file, width, height, duration? }`:
+no backend, Parameters or Cues). The Catalog's `media()` lists them and
+`definition("media", id)` finds one; ids are unique across Visuals, Filters and
+Bundled Media, since all name a thumbnail in the same URL space. Bundlers inline
+the JSON into Studio, the Output page and Desktop's runtime; the clips and
+thumbnails stay files under `bundledRoot`.
+
+A Media item of kind `bundled` names an entry by id. `media.create` refuses an
+id the Catalog lacks, but a file holding one stays valid: the item is of no
+type, never offered or accepted as a Parameter value, and its status is
+`unavailable`. The runtime serves a bundled item at the same `GET /media/<id>`
+as a file, from `<bundled>/<file>`, so the Output loads it exactly as a file and
+needs the Installation saved for neither; `GET /bundled/<entry id>` serves an
+entry with no item, for previews. Both use the same Range, ETag and CORS
+handling. The bundle's thumbnails are a second root behind the Catalog's
+thumbnail path, after the Visuals' own. The runtime finds the bundle inside
+`@difracta/visuals`, or where `DIFRACTA_BUNDLED_DIR` says: Desktop's build
+copies it to `dist/bundled`, and the packaged runtime reads it from the asar
+archive like the thumbnails. The CLI has `difracta media bundled` (the entries
+and their flags), `difracta media add --bundled <id|name>`, and lists the
+entries under "Bundled Media" in `difracta catalog`.
+
+**Why a separate repository, pinned and fetched, and then shipped inside every
+package:** the clips are tens of megabytes of binary that change on their own
+schedule, and in Difracta's history every revision of them would stay in every
+clone forever; the media repository keeps them, its own checks and its thumbnail
+rendering apart, and a version plus a hash in `settings.ts` makes each Difracta
+commit name exactly one bundle. Fetching at install and build, not at show time,
+means a runtime on a stage without network has every clip, and a clip that a
+file names is the same on every machine that runs the same Difracta version.
 
 ### Scenes and Layers
 
@@ -373,20 +431,21 @@ Macro-wide value would be a second concept for the same effect.
 ### Catalog and Parameters
 
 The Catalog is the set of Visual and Filter definitions a runtime knows
-(`core/catalog/`). A definition is code with a stable id, a name, a description,
-a backend (`canvas` or `shader`), an optional `recommended` flag, a Parameter
-schema, and for Visuals the Paths they follow and the Cues they answer to. Core
-owns the types and the validation; `difracta-visuals` owns the entries and their
-thumbnails, and the runtime passes that Catalog to the command registry. A
-definition's file also carries its implementation, written against the SDK in
-`difracta-render` (see Visuals and Filters below); the runtime and Studio only
-read the metadata. A definition may carry `notes`: paragraphs for whoever
-composes with it, human or agent, saying what the code cannot (how it reads on a
-Surface, which Parameters interact, what it costs, what to stack it with). The
-runtime answers `catalog.list` with its definitions minus their functions and
-shader source, which is how the CLI's `catalog` prints the notes and a reference
-generated from the schema, and how its `addresses` resolves Parameters without
-shipping the Visuals package.
+(`core/catalog/`), and its Bundled Media (see Bundled Media above). A definition
+is code with a stable id, a name, a description, a backend (`canvas` or
+`shader`), an optional `recommended` flag, a Parameter schema, and for Visuals
+the Paths they follow and the Cues they answer to. Core owns the types and the
+validation; `difracta-visuals` owns the entries and their thumbnails, and the
+runtime passes that Catalog to the command registry. A definition's file also
+carries its implementation, written against the SDK in `difracta-render` (see
+Visuals and Filters below); the runtime and Studio only read the metadata. A
+definition may carry `notes`: paragraphs for whoever composes with it, human or
+agent, saying what the code cannot (how it reads on a Surface, which Parameters
+interact, what it costs, what to stack it with). The runtime answers
+`catalog.list` with its definitions minus their functions and shader source,
+which is how the CLI's `catalog` prints the notes and a reference generated from
+the schema, and how its `addresses` resolves Parameters without shipping the
+Visuals package.
 
 Thumbnails are rendered, not drawn: `npm run thumbnails` in `difracta-visuals`
 runs each definition through the compositor in a headless Chromium (Playwright),
@@ -577,15 +636,17 @@ table's type makes a request without a handler a compile error.
 
 ### Media status
 
-`["live", "media", <id>]` holds `{ status }` for every Media file of the open
-document (a Media Group has no file and no entry): `ok`, `missing` (no file at
-the resolved path), `outside` (the path leaves the Installation file's folder
-and the runtime does not allow that) or `unsaved` (the Installation has no path
-yet, so nothing resolves). The runtime (`live/media-status.ts`) stats every file
-when a document opens or is replaced, when it is saved to a new path and after
-any command that touches `media`, and replicates only the entries that changed;
-there is no file watcher, so a file that appears later is noticed at the next of
-those moments. `difracta media list` prints it beside each item.
+`["live", "media", <id>]` holds `{ status }` for every Media file and bundled
+item of the open document (a Media Group has no file and no entry): `ok`,
+`missing` (no file at the resolved path), `outside` (the path leaves the
+Installation file's folder and the runtime does not allow that), `unsaved` (the
+Installation has no path yet, so no file item resolves) or, for a bundled item
+only, `unavailable` (the runtime's Catalog lacks its entry). The runtime
+(`live/media-status.ts`) stats every file when a document opens or is replaced,
+when it is saved to a new path and after any command that touches `media`, and
+replicates only the entries that changed; there is no file watcher, so a file
+that appears later is noticed at the next of those moments.
+`difracta media list` prints it beside each item.
 
 **Why stat on those moments and not watch:** the moments are when the answer can
 change from the document's side, which is what an operator asks about; a watcher
@@ -815,12 +876,14 @@ item's path against the open document's folder and streams the file
 `Cache-Control: no-cache` and an ETag from size and modification time, so an
 Output page revalidates cheaply and sees a replaced file, and with Range
 requests honoured (206, `Content-Range`, 416), which video seeking needs. 404
-for an unknown id, a Media Group, a missing file or a document without a path;
-403 when the resolved path leaves the folder, unless the runtime was started
-with `--media-anywhere` (or `DIFRACTA_MEDIA_ANYWHERE=1`), which turns
-`settings.media.allowOutsideShowFolder` on for that runtime alone: a machine
-setting, never in the file. In a container the show folder is mounted for the
-file already, so media beside it is reachable and `scp` puts files there.
+for an unknown id, a Media Group, a bundled item whose entry the Catalog lacks,
+a missing file or a document without a path (a bundled item needs none; see
+Bundled Media); 403 when the resolved path leaves the folder, unless the runtime
+was started with `--media-anywhere` (or `DIFRACTA_MEDIA_ANYWHERE=1`), which
+turns `settings.media.allowOutsideShowFolder` on for that runtime alone: a
+machine setting, never in the file. In a container the show folder is mounted
+for the file already, so media beside it is reachable and `scp` puts files
+there.
 
 **Why by id and not by path:** the URL then says nothing about the runtime's
 disk, and renaming or moving the file is one `media.path` with every Output
@@ -858,9 +921,10 @@ started `--documents free` on every interface. Each **window** is a sandboxed
 Chromium renderer showing a page the runtime serves: Studio from
 `http://127.0.0.1:<port>/studio/`, and an Output page opened from Studio in a
 window of its own with background throttling off. The build copies the built
-Studio, Output page and Catalog thumbnails next to the bundle, and main names
-them to the runtime through `DIFRACTA_STUDIO_DIST`, `DIFRACTA_OUTPUT_DIST` and
-`DIFRACTA_THUMBNAILS_DIR`, so `dist/` runs without the repository or `tsx`.
+Studio, Output page, Catalog thumbnails and Bundled Media next to the bundle,
+and main names them to the runtime through `DIFRACTA_STUDIO_DIST`,
+`DIFRACTA_OUTPUT_DIST`, `DIFRACTA_THUMBNAILS_DIR` and `DIFRACTA_BUNDLED_DIR`, so
+`dist/` runs without the repository or `tsx`.
 
 Desktop shows one runtime at a time, in one of two modes. **Local mode** forks
 the runtime described above. **Remote mode** forks nothing: it asks the runtime
@@ -1257,14 +1321,14 @@ a dmg per Mac architecture, a per-user NSIS installer for Windows, all unsigned.
 The package holds `dist/` without its source maps and a `package.json`, in one
 asar archive, and no `node_modules`: esbuild inlined every dependency, so the
 workspace packages Desktop bundles are devDependencies, and Electron is the only
-import left. The runtime child reads its Studio, Output page and thumbnails out
-of the archive through Electron's fs. Chromium's sandbox needs unprivileged user
-namespaces, which Ubuntu 23.10 and later refuse to programs without an AppArmor
-profile, and an AppImage cannot ship one or a setuid `chrome-sandbox`; the
-AppImage's `AppRun` probes with `unshare -Ur true` and passes `--no-sandbox`
-only when that fails. package.json's `productName` makes the user data folder
-`~/.config/Difracta` on Linux, for a checkout's Desktop too.
-`.github/workflows/release.yml` builds each OS on its own runner, takes the
+import left. The runtime child reads its Studio, Output page, thumbnails and
+Bundled Media out of the archive through Electron's fs. Chromium's sandbox needs
+unprivileged user namespaces, which Ubuntu 23.10 and later refuse to programs
+without an AppArmor profile, and an AppImage cannot ship one or a setuid
+`chrome-sandbox`; the AppImage's `AppRun` probes with `unshare -Ur true` and
+passes `--no-sandbox` only when that fails. package.json's `productName` makes
+the user data folder `~/.config/Difracta` on Linux, for a checkout's Desktop
+too. `.github/workflows/release.yml` builds each OS on its own runner, takes the
 version from a `vX.Y.Z` tag (package.json's version plus `-g<sha>` on main),
 runs the Desktop suite against the x86_64 AppImage
 (`DIFRACTA_DESKTOP_EXECUTABLE` points the harness at a packaged executable) and
@@ -1274,12 +1338,12 @@ attaches the packages to the tag's GitHub Release.
 
 `difracta-core/src/settings.ts` holds every tunable in one object: history
 coalesce window and limit, autosave delay, default host, port and document mode,
-the Media extensions and whether files outside the show folder are served, the
-discovery service and its delays, how long a Display Host gets to answer, client
-reconnect backoff, CLI connect timeout, Desktop's waits for its runtime to start
-and stop and for a runtime elsewhere to answer, its window sizes and how many
-runtimes it remembers. Packages import from there instead of carrying their own
-literals.
+the Media extensions, whether files outside the show folder are served and the
+pinned Bundled Media release, the discovery service and its delays, how long a
+Display Host gets to answer, client reconnect backoff, CLI connect timeout,
+Desktop's waits for its runtime to start and stop and for a runtime elsewhere to
+answer, its window sizes and how many runtimes it remembers. Packages import
+from there instead of carrying their own literals.
 
 ## Rendering
 
@@ -1401,28 +1465,30 @@ as its texels on the wall, and rounding the size up keeps a corner drag from
 re-rasterizing every step.
 
 Media: the loader (`media-loader.ts`) is engine-owned and preloading. On every
-document revision it gives each item of the `media` table an element, an `<img>`
-that decodes or a `<video>` that preloads muted and inline, from `mediaUrl(id)`
-(`/media/<id>` on the runtime's origin for an Output page, with `crossOrigin`
-set when that origin is not the page's; a data URL in the thumbnail harness and
-the GPU suite), and drops the elements of items the table lost; nothing is
-evicted while the Installation is open. The loader is kept outside the GPU
-resources, so a lost context costs no reload. An instance reaches it through
-`media` in its context (`sdk/media.ts`): `get(id)` is the shared handle, whose
-`image` is null until the file is decoded and whose `version` counts the
-pictures behind it, once for an image and once per presented video frame;
-`video(id)` is a playback of the instance's own, an element over the same URL
-that the browser serves from its cache, since two Layers showing one clip may be
-at different positions. The GPU side (`media-textures.ts`) keeps one texture per
-handle a running instance holds, uploads when the handle's version is newer than
-the texture's, straight alpha and rows top first like a canvas Layer's, binds it
-on the units after the mask's as `u_<name>` with `u_<name>_size`, and deletes
-the textures of handles no instance holds any more. **Why the loader preloads
-rather than the Visual fetching:** a Layer that starts showing an item mid-set
-must find it decoded, and the table is the one list of what a show may need.
-**Why a version on the handle:** the instance and the uploader read the same
-counter, so a Visual reports `changed` exactly when the texture would differ and
-a paused video uploads nothing.
+document revision it gives each file and bundled item of the `media` table an
+element (a bundled item's type from the Catalog the compositor holds), an
+`<img>` that decodes or a `<video>` that preloads muted and inline, from
+`mediaUrl(id)` (`/media/<id>` on the runtime's origin for an Output page, with
+`crossOrigin` set when that origin is not the page's; a data URL in the
+thumbnail harness and the GPU suite), and drops the elements of items the table
+lost; nothing is evicted while the Installation is open. The loader is kept
+outside the GPU resources, so a lost context costs no reload. An instance
+reaches it through `media` in its context (`sdk/media.ts`): `get(id)` is the
+shared handle, whose `image` is null until the file is decoded and whose
+`version` counts the pictures behind it, once for an image and once per
+presented video frame; `video(id)` is a playback of the instance's own, an
+element over the same URL that the browser serves from its cache, since two
+Layers showing one clip may be at different positions. The GPU side
+(`media-textures.ts`) keeps one texture per handle a running instance holds,
+uploads when the handle's version is newer than the texture's, straight alpha
+and rows top first like a canvas Layer's, binds it on the units after the mask's
+as `u_<name>` with `u_<name>_size`, and deletes the textures of handles no
+instance holds any more. **Why the loader preloads rather than the Visual
+fetching:** a Layer that starts showing an item mid-set must find it decoded,
+and the table is the one list of what a show may need. **Why a version on the
+handle:** the instance and the uploader read the same counter, so a Visual
+reports `changed` exactly when the texture would differ and a paused video
+uploads nothing.
 
 **Why WebGL2 only:** the projector machines and smart TVs this runs on all have
 it, WebGPU still does not reach every such browser, and one engine is half the

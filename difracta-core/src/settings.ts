@@ -19,6 +19,8 @@ export const settings = {
     maxDocumentBytes: 64 * 1024 * 1024,
     /** Where a Media item's file is served, by id: `GET /media/<id>`. */
     mediaPath: "/media",
+    /** Where a Bundled Media entry's file is served, by entry id: `GET /bundled/<id>`. */
+    bundledPath: "/bundled",
     /**
      * Document mode when `--documents` is not given. `pinned` keeps the file
      * the runtime was started with; `free` lets loopback clients create, open
@@ -74,6 +76,20 @@ export const settings = {
      * file is refused; `--media-anywhere` turns it on for one runtime.
      */
     allowOutsideShowFolder: false,
+    /**
+     * The release of the difracta-media repository whose clips are the
+     * Bundled Media: `npm run media:fetch` downloads
+     * `difracta-media-<version>.tar.gz` from that release and refuses it
+     * unless its SHA-256 is `sha256`. An empty `sha256` pins nothing: the
+     * script then writes an empty manifest unless `DIFRACTA_MEDIA_DIR`
+     * names a local copy.
+     */
+    bundle: {
+      version: "0.1.0",
+      sha256:
+        "a4696c96cea0cd5cd57dc9ea54281495c3a0c62a18ad16515d5aca5abd4c2f2f",
+      url: "https://github.com/gabriel-pinheiro/difracta-media/releases/download/v<version>/difracta-media-<version>.tar.gz",
+    },
   },
   masks: {
     /** A new Mask is the Surface minus this fraction on each side. */

@@ -1,5 +1,7 @@
 import {
-  mediaTypeOf,
+  emptyCatalog,
+  mediaItemTypeIn,
+  type Catalog,
   type Media,
   type MediaType,
   type Table,
@@ -15,8 +17,9 @@ import type { MediaContext, MediaHandle, MediaVideo } from "./sdk/media.ts";
 
 /**
  * The Output's Media, loaded ahead of use: on every document revision
- * `sync` gives each file of the `media` table an element, an image that
- * decodes or a video that preloads, and drops the ones the table lost, so
+ * `sync` gives each file and bundled item of the `media` table an element,
+ * an image that decodes or a video that preloads, and drops the ones the
+ * table lost or repointed, so
  * a Layer that starts showing an item finds it ready and nothing is
  * evicted while the Installation is open. Files come from `mediaUrl(id)`:
  * `/media/<id>` on the runtime for an Output page, a data URL in the
@@ -33,24 +36,30 @@ export interface MediaElements {
 export interface MediaLoaderOptions {
   /** Where the item's file is; undefined for one this page cannot reach. */
   readonly mediaUrl: (id: string) => string | undefined;
+  /** Where a bundled item's type comes from; one whose entry it lacks is not loaded. */
+  readonly catalog?: Catalog;
   readonly elements?: MediaElements;
   /** The page's origin, to decide when a file needs CORS; the browser's by default. */
   readonly pageOrigin?: string;
 }
 
-/** The `media` table, of which only the files' paths matter here; a Group has none. */
+/** The `media` table, of which only what each item shows matters here; a Group shows nothing. */
 export type MediaTable = Table<Media>;
 
 interface Entry {
-  readonly path: string;
+  /** What the item shows, `file:<path>` or `bundled:<entry id>`: a change reloads it. */
+  readonly source: string;
   readonly type: MediaType;
   readonly url: string;
   readonly handle: MediaHandle;
   readonly release: () => void;
 }
 
-const pathOf = (item: Media | undefined): string | undefined =>
-  item?.kind === "file" ? item.path : undefined;
+const sourceOf = (item: Media | undefined): string | undefined => {
+  if (item?.kind === "file") return `file:${item.path}`;
+  if (item?.kind === "bundled") return `bundled:${item.bundled}`;
+  return undefined;
+};
 
 const DOM_ELEMENTS: MediaElements = {
   image: () => document.createElement("img"),
@@ -70,6 +79,7 @@ export function needsCrossOrigin(url: string, pageOrigin: string): boolean {
 export class MediaLoader implements MediaContext {
   readonly #options: MediaLoaderOptions;
   readonly #elements: MediaElements;
+  readonly #catalog: Catalog;
   readonly #pageOrigin: string;
   readonly #entries = new Map<string, Entry>();
   #table: MediaTable | undefined;
@@ -77,6 +87,7 @@ export class MediaLoader implements MediaContext {
   constructor(options: MediaLoaderOptions) {
     this.#options = options;
     this.#elements = options.elements ?? DOM_ELEMENTS;
+    this.#catalog = options.catalog ?? emptyCatalog;
     this.#pageOrigin =
       options.pageOrigin ??
       (typeof location === "undefined" ? "null" : location.origin);
@@ -87,15 +98,17 @@ export class MediaLoader implements MediaContext {
     if (media === this.#table) return;
     this.#table = media;
     for (const [id, entry] of this.#entries)
-      if (pathOf(media[id]) !== entry.path) {
+      if (sourceOf(media[id]) !== entry.source) {
         entry.release();
         this.#entries.delete(id);
       }
-    for (const [id, item] of Object.entries(media))
-      if (item.kind === "file" && !this.#entries.has(id)) {
-        const entry = this.#load(id, item.path);
+    for (const [id, item] of Object.entries(media)) {
+      const source = sourceOf(item);
+      if (source !== undefined && !this.#entries.has(id)) {
+        const entry = this.#load(id, item, source);
         if (entry !== undefined) this.#entries.set(id, entry);
       }
+    }
   }
 
   get(id: string): MediaHandle | undefined {
@@ -120,19 +133,19 @@ export class MediaLoader implements MediaContext {
     this.#table = undefined;
   }
 
-  #load(id: string, path: string): Entry | undefined {
-    const type = mediaTypeOf(path);
+  #load(id: string, item: Media, source: string): Entry | undefined {
+    const type = mediaItemTypeIn(item, this.#catalog);
     const url = this.#options.mediaUrl(id);
     if (type === undefined || url === undefined) return undefined;
     const crossOrigin = needsCrossOrigin(url, this.#pageOrigin);
     return type === "image"
-      ? this.#loadImage(id, path, url, crossOrigin)
-      : this.#loadVideo(id, path, url, crossOrigin);
+      ? this.#loadImage(id, source, url, crossOrigin)
+      : this.#loadVideo(id, source, url, crossOrigin);
   }
 
   #loadImage(
     id: string,
-    path: string,
+    source: string,
     url: string,
     crossOrigin: boolean,
   ): Entry {
@@ -152,7 +165,7 @@ export class MediaLoader implements MediaContext {
     if (crossOrigin) element.crossOrigin = "anonymous";
     element.src = url;
     return {
-      path,
+      source,
       type: "image",
       url,
       handle: {
@@ -181,7 +194,7 @@ export class MediaLoader implements MediaContext {
 
   #loadVideo(
     id: string,
-    path: string,
+    source: string,
     url: string,
     crossOrigin: boolean,
   ): Entry {
@@ -190,7 +203,7 @@ export class MediaLoader implements MediaContext {
     const frames = countVideoFrames(element);
     let alive = true;
     return {
-      path,
+      source,
       type: "video",
       url,
       handle: videoHandle(id, element, frames, () => alive),

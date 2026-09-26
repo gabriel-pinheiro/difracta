@@ -40,6 +40,8 @@ export interface LiveServerOptions {
   readonly documents: DocumentsMode;
   /** Serve Media files from outside the Installation's folder; `settings.media.allowOutsideShowFolder` when absent. */
   readonly mediaAnywhere?: boolean | undefined;
+  /** The folder the Bundled Media's files are in, for their status. */
+  readonly bundledDir: string;
   readonly log: (message: string) => void;
   /** The OSC door's state, part of the live state Studio shows. */
   readonly osc?:
@@ -73,6 +75,8 @@ export class LiveServer {
     this.#media = new MediaStatuses({
       allowOutsideShowFolder:
         options.mediaAnywhere ?? settings.media.allowOutsideShowFolder,
+      catalog: options.catalog,
+      bundledDir: options.bundledDir,
     });
     this.#attached = new AttachedSession({
       onEvent: (event) => this.#sessions.fanOutEvent(event),

@@ -19,10 +19,12 @@
     "difracta-desktop"
   ],
   "scripts": {
-    "dev": "node scripts/dev.mjs",
-    "desktop": "npm run build -w @difracta/output -w @difracta/studio -w @difracta/desktop && npm run start -w @difracta/desktop --",
-    "package:desktop": "npm run build -w @difracta/output -w @difracta/studio -w @difracta/desktop && npm run package -w @difracta/desktop --",
-    "build": "npm run build --workspaces --if-present",
+    "postinstall": "node scripts/fetch-media.mjs",
+    "media:fetch": "node scripts/fetch-media.mjs",
+    "dev": "node scripts/fetch-media.mjs && node scripts/dev.mjs",
+    "desktop": "node scripts/fetch-media.mjs && npm run build -w @difracta/output -w @difracta/studio -w @difracta/desktop && npm run start -w @difracta/desktop --",
+    "package:desktop": "node scripts/fetch-media.mjs && npm run build -w @difracta/output -w @difracta/studio -w @difracta/desktop && npm run package -w @difracta/desktop --",
+    "build": "node scripts/fetch-media.mjs && npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint . --cache --cache-location node_modules/.cache/eslint/",
     "format": "prettier --write . --cache",

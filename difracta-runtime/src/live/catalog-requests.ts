@@ -3,9 +3,9 @@ import type { Catalog, FilterDefinition } from "@difracta/core";
 import type { RequestHandlers } from "./runtime-requests.ts";
 
 /**
- * `catalog.list`: what this runtime can render, as metadata. Definitions
- * carry their implementation: JSON drops the functions, and a Filter's
- * shader source is left out here.
+ * `catalog.list`: what this runtime can render, as metadata: its Visuals,
+ * Filters and Bundled Media. Definitions carry their implementation: JSON
+ * drops the functions, and a Filter's shader source is left out here.
  */
 export function catalogRequests(
   catalog: Catalog,
@@ -20,6 +20,7 @@ export function catalogRequests(
             filter as FilterDefinition & { fragment?: unknown };
           return metadata;
         }),
+        media: catalog.media(),
       },
     }),
   };

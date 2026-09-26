@@ -1,7 +1,8 @@
 import type { Media, Table } from "@difracta/core";
 
 /** What the runtime reports under `["live", "media", <id>]`. */
-export type MediaStatus = "ok" | "missing" | "outside" | "unsaved";
+export type MediaStatus =
+  "ok" | "missing" | "outside" | "unsaved" | "unavailable";
 
 export interface MediaLive {
   readonly status: MediaStatus;
@@ -43,6 +44,12 @@ export function describeMediaStatus(status: MediaStatus): MediaStatusText {
         explanation:
           "The Installation has no file yet, so the path has nothing to be relative to. Save the Installation first.",
       };
+    case "unavailable":
+      return {
+        label: "Unavailable",
+        explanation:
+          "This runtime's Bundled Media has no such clip, so the Outputs show nothing for it.",
+      };
   }
 }
 
@@ -54,12 +61,13 @@ export function mediaWarning(
   return describeMediaStatus(live.status);
 }
 
-/** How many Media file rows warn, for the collapsed Media section; a Group has no file to warn about. */
+/** How many Media rows warn, for the collapsed Media section; a Group has no file to warn about. */
 export function mediaWarningCount(
   media: Table<Media>,
   live: MediaLiveTable,
 ): number {
   return Object.values(media).filter(
-    (item) => item.kind === "file" && mediaWarning(live[item.id]) !== undefined,
+    (item) =>
+      item.kind !== "group" && mediaWarning(live[item.id]) !== undefined,
   ).length;
 }

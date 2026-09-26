@@ -80,13 +80,22 @@ export const OscLiveSchema = z
   .strict();
 export type OscLive = z.infer<typeof OscLiveSchema>;
 
-export const MEDIA_STATUSES = ["ok", "missing", "outside", "unsaved"] as const;
+export const MEDIA_STATUSES = [
+  "ok",
+  "missing",
+  "outside",
+  "unsaved",
+  "unavailable",
+] as const;
 export type MediaStatus = (typeof MEDIA_STATUSES)[number];
 
 /**
  * Whether a Media item's file can be served: `ok`, `missing` on disk,
  * `outside` the Installation file's folder while the runtime refuses that,
- * or `unsaved` because the Installation has no file yet, so nothing resolves.
+ * `unsaved` because the Installation has no file yet, so nothing resolves,
+ * or, for a bundled item, `unavailable` because the runtime's Catalog lacks
+ * its Bundled Media entry. The first four are about files; a bundled item
+ * is `ok` or `unavailable`, or `missing` if the bundle's file is gone.
  */
 export const MediaLiveSchema = z
   .object({ status: z.enum(MEDIA_STATUSES) })

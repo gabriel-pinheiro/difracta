@@ -138,6 +138,7 @@ class WebGLCompositor implements Compositor {
     this.#catalog = catalog;
     this.#loader = new MediaLoader({
       mediaUrl: options.mediaUrl ?? (() => undefined),
+      catalog,
     });
     canvas.addEventListener("webglcontextlost", this.#onLost);
     canvas.addEventListener("webglcontextrestored", this.#onRestored);

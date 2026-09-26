@@ -1,11 +1,15 @@
+import type { MediaType } from "../document/media.ts";
 import type { ParameterSchema } from "./parameters.ts";
 
 /**
- * The Catalog is what Layers are made of: the Visual and Filter definitions
- * a runtime knows. A definition is code, identified by a stable id the
- * document refers to; Studio picks from the Catalog and commands validate
- * against it. An id the Catalog no longer has stays in the document and
- * shows as unavailable, so a changed Catalog never invalidates a file.
+ * The Catalog is what a runtime knows it can show: the Visual and Filter
+ * definitions Layers are made of, and the Bundled Media, the clips Difracta
+ * ships, which a Media item of kind `bundled` refers to. A definition is
+ * identified by a stable id the document refers to; Studio picks from the
+ * Catalog and commands validate against it. An id the Catalog no longer has
+ * stays in the document and shows as unavailable, so a changed Catalog
+ * never invalidates a file. Ids are unique across the three kinds, since
+ * they name thumbnails in one folder.
  */
 export const VISUAL_BACKENDS = ["canvas", "shader"] as const;
 export type VisualBackend = (typeof VISUAL_BACKENDS)[number];
@@ -54,6 +58,34 @@ export interface FilterDefinition extends DefinitionBase {
 
 export type Definition = VisualDefinition | FilterDefinition;
 
+/**
+ * One entry of the Bundled Media: an image or video Difracta ships, read
+ * from the bundle's manifest. It has no backend, Parameters or Cues; a
+ * Media item of kind `bundled` shows it through Image or Video. `file` is
+ * relative to the bundle's folder.
+ */
+export interface MediaDefinition {
+  readonly kind: "media";
+  readonly id: string;
+  readonly name: string;
+  /** One sentence a person reads while choosing. */
+  readonly description: string;
+  /** How it reads on a Surface, what to stack it with, when to use it. */
+  readonly notes?: string;
+  /** Sorted first when picking: a good default. */
+  readonly recommended?: boolean;
+  readonly type: MediaType;
+  /** Loops without a visible seam. */
+  readonly loop?: boolean;
+  /** Works as a one-shot on a beat. */
+  readonly hit?: boolean;
+  readonly file: string;
+  readonly width: number;
+  readonly height: number;
+  /** In seconds; videos only. */
+  readonly duration?: number;
+}
+
 export function usesPath(definition: Definition): boolean {
   return definition.kind === "visual" && (definition.paths?.length ?? 0) > 0;
 }
@@ -62,30 +94,49 @@ export function hasCues(definition: Definition): boolean {
   return (definition.cues?.length ?? 0) > 0;
 }
 
-function byName(a: Definition, b: Definition): number {
+function byName(
+  a: { readonly name: string },
+  b: { readonly name: string },
+): number {
   return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
 }
 
 export class Catalog {
   readonly #visuals = new Map<string, VisualDefinition>();
   readonly #filters = new Map<string, FilterDefinition>();
+  readonly #media = new Map<string, MediaDefinition>();
 
   constructor({
     visuals = [],
     filters = [],
+    media = [],
   }: {
     readonly visuals?: readonly VisualDefinition[];
     readonly filters?: readonly FilterDefinition[];
+    readonly media?: readonly MediaDefinition[];
   } = {}) {
+    const seen = new Map<string, string>();
+    const claim = (id: string, label: string): void => {
+      const previous = seen.get(id);
+      if (previous !== undefined)
+        throw new Error(
+          previous === label
+            ? `${label} “${id}” is in the Catalog twice.`
+            : `${label} “${id}” has the id of a ${previous} in the Catalog.`,
+        );
+      seen.set(id, label);
+    };
     for (const visual of visuals) {
-      if (this.#visuals.has(visual.id))
-        throw new Error(`Visual “${visual.id}” is in the Catalog twice.`);
+      claim(visual.id, "Visual");
       this.#visuals.set(visual.id, visual);
     }
     for (const filter of filters) {
-      if (this.#filters.has(filter.id))
-        throw new Error(`Filter “${filter.id}” is in the Catalog twice.`);
+      claim(filter.id, "Filter");
       this.#filters.set(filter.id, filter);
+    }
+    for (const entry of media) {
+      claim(entry.id, "Bundled Media entry");
+      this.#media.set(entry.id, entry);
     }
   }
 
@@ -97,8 +148,19 @@ export class Catalog {
     return this.#filters.get(id);
   }
 
-  /** The definition a Layer of `kind` refers to by `id`. */
-  definition(kind: "visual" | "filter", id: string): Definition | undefined {
+  /** The Bundled Media entry `id` names. */
+  mediaEntry(id: string): MediaDefinition | undefined {
+    return this.#media.get(id);
+  }
+
+  /** The definition a Layer of `kind`, or a bundled Media item, refers to by `id`. */
+  definition(kind: "media", id: string): MediaDefinition | undefined;
+  definition(kind: "visual" | "filter", id: string): Definition | undefined;
+  definition(
+    kind: "visual" | "filter" | "media",
+    id: string,
+  ): Definition | MediaDefinition | undefined {
+    if (kind === "media") return this.mediaEntry(id);
     return kind === "visual" ? this.visual(id) : this.filter(id);
   }
 
@@ -108,6 +170,11 @@ export class Catalog {
 
   filters(): readonly FilterDefinition[] {
     return [...this.#filters.values()].sort(byName);
+  }
+
+  /** The Bundled Media, by name. */
+  media(): readonly MediaDefinition[] {
+    return [...this.#media.values()].sort(byName);
   }
 }
 

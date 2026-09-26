@@ -28,6 +28,7 @@ beforeEach(async () => {
     studioDist: undefined,
     outputDist: undefined,
     thumbnailsDir: undefined,
+    bundledDir: undefined,
     autosaveIntervalMs: 60_000,
     oscPort: undefined,
     discovery: false,

@@ -38,6 +38,10 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - uses: actions/cache@v4
+        with:
+          path: difracta-visuals/bundled
+          key: bundled-media-${{ hashFiles('difracta-core/src/settings.ts') }}
       - run: npm ci
       - name: Version
         id: version

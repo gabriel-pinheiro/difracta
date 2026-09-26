@@ -1,6 +1,6 @@
 import type { Catalog } from "../catalog/catalog.ts";
 import { settings } from "../settings.ts";
-import type { Document, Media, MediaFile, Table } from "./document.ts";
+import type { Document, Media, Table } from "./document.ts";
 import type { Patch } from "./patch.ts";
 import { childrenOf, descendantsOf, flattenTree } from "./tree.ts";
 
@@ -8,9 +8,10 @@ import { childrenOf, descendantsOf, flattenTree } from "./tree.ts";
  * A Media file is one image or video the Installation refers to. Its `path`
  * is relative to the Installation file's folder, with POSIX separators and
  * `..` allowed, so a show folder moves between machines with its files. The
- * type is read from the extension and never stored. These helpers run in
- * the browser as well as in Node, so paths are handled here rather than
- * with `node:path`.
+ * type is read from the extension and never stored; a bundled item's comes
+ * from its Bundled Media entry in the Catalog. These helpers run in the
+ * browser as well as in Node, so paths are handled here rather than with
+ * `node:path`.
  */
 export const MEDIA_TYPES = ["image", "video"] as const;
 export type MediaType = (typeof MEDIA_TYPES)[number];
@@ -31,13 +32,31 @@ export const descendantMedia = (
   mediaId: string,
 ): readonly Media[] => descendantsOf(media, mediaId);
 
-/** The Media files, Groups left out, in navigator order. */
-export const mediaFiles = (media: Table<Media>): readonly MediaFile[] =>
-  flattenTree(media).filter((item): item is MediaFile => item.kind === "file");
-
-/** The type of a Media item: its file's, or undefined for a Group or a file Difracta cannot show. */
+/**
+ * The type of a Media file from its path, or undefined for a Group, a file
+ * Difracta cannot show, and a bundled item, whose type only the Catalog
+ * knows (`mediaItemTypeIn`).
+ */
 export const mediaItemType = (item: Media): MediaType | undefined =>
   item.kind === "file" ? mediaTypeOf(item.path) : undefined;
+
+/**
+ * The type of any Media item: a file's from its extension, a bundled item's
+ * from its entry in `catalog`. Undefined for a Group, a file Difracta
+ * cannot show and a bundled item whose entry the Catalog lacks, so such an
+ * item is never offered or accepted as a value.
+ */
+export function mediaItemTypeIn(
+  item: Media,
+  catalog: Catalog,
+): MediaType | undefined {
+  if (item.kind === "bundled") return catalog.mediaEntry(item.bundled)?.type;
+  return mediaItemType(item);
+}
+
+/** The refusal for a Bundled Media id the Catalog lacks. */
+export const bundledEntryUnknown = (entry: string): string =>
+  `“${entry}” is not in the Bundled Media; \`difracta media bundled\` lists them.`;
 
 const IMAGE_EXTENSIONS: readonly string[] = settings.media.imageExtensions;
 const VIDEO_EXTENSIONS: readonly string[] = settings.media.videoExtensions;
@@ -179,10 +198,12 @@ export function withinFolder(folder: string, resolved: string): boolean {
 /**
  * Why `value` cannot be the value of a Media Parameter accepting `accepts`,
  * or undefined when it can: the empty string for none, or the id of a Media
- * file of that type. A Group is never a value.
+ * file or bundled item of that type. A Group is never a value, nor is a
+ * bundled item whose entry `catalog` lacks.
  */
 export function mediaValueProblem(
   document: Pick<Document, "media">,
+  catalog: Catalog,
   accepts: MediaType,
   value: unknown,
 ): string | undefined {
@@ -194,7 +215,9 @@ export function mediaValueProblem(
     return `${expected}; there is no Media item “${value}”`;
   if (item.kind === "group")
     return `${expected}; “${item.name}” is a Media Group`;
-  const type = mediaTypeOf(item.path);
+  const type = mediaItemTypeIn(item, catalog);
+  if (type === undefined && item.kind === "bundled")
+    return `${expected}; “${item.name}” is Bundled Media “${item.bundled}”, which this runtime lacks`;
   if (type !== accepts)
     return `${expected}; “${item.name}” is ${type === undefined ? "a file of another type" : `${anOf(type)} ${type}`}`;
   return undefined;

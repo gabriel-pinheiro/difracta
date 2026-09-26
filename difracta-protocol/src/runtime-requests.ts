@@ -50,7 +50,7 @@ export const RuntimeRequestSchemas = {
   "documents.close": z
     .object({ documentId: z.string().min(1), discard: z.boolean().optional() })
     .strict(),
-  /** The Visual and Filter definitions this runtime renders, metadata only. */
+  /** The Visual and Filter definitions this runtime renders and its Bundled Media, metadata only. */
   "catalog.list": z.object({}).strict(),
   /** The connected Display Hosts, as in the live state, oldest connection first. */
   "displays.list": z.object({}).strict(),
