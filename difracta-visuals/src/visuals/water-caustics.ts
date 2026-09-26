@@ -79,7 +79,9 @@ float caustics_field(vec2 position, float time) {
 
 vec4 render_visual(vec2 uv) {
   float aspect = u_resolution.x / max(1.0, u_resolution.y);
-  vec2 position = uv * vec2(aspect, 1.0) * u_scale + u_seed;
+  // The field's brightness depends on the magnitude of position, tuned around
+  // -250, so the seed moves the pattern in time only and every Layer is as lit.
+  vec2 position = uv * vec2(aspect, 1.0) * u_scale - 250.0;
   float time = u_time + u_seed * 40.0;
   vec3 light;
   if (u_dispersion <= 0.0) {
