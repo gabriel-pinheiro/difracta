@@ -204,9 +204,11 @@ after its file and a bundled item after its entry unless told otherwise.
 `media.move` places an item in another Group or at the root, carrying a Group's
 contents and refusing cycles; `entity.move` reorders among siblings;
 `media.ungroup` dissolves a Group; `media.rename`; `media.path` for a file only;
-`media.bundled` for a bundled item only, swapping its entry; `media.remove`,
-which takes a Group's contents with it. All are authoring. The CLI has shortcuts
-for the everyday ones: `difracta media add <path> [--group G]`,
+`media.bundled` for a bundled item only, swapping its entry and, while the item
+is still called after its previous entry, its name, as `layer.visual` does for a
+Layer; `media.remove`, which takes a Group's contents with it. All are
+authoring. The CLI has shortcuts for the everyday ones:
+`difracta media add <path> [--group G]`,
 `difracta media group <name> [--group G]` and `difracta media list`, the tree
 indented by Group with kind, type, status and path. The path helpers in
 `document/media.ts` are pure and run in the browser too: one relativizes an
@@ -1471,10 +1473,13 @@ element (a bundled item's type from the Catalog the compositor holds), an
 `mediaUrl(id)` (`/media/<id>` on the runtime's origin for an Output page, with
 `crossOrigin` set when that origin is not the page's; a data URL in the
 thumbnail harness and the GPU suite), and drops the elements of items the table
-lost; nothing is evicted while the Installation is open. The loader is kept
-outside the GPU resources, so a lost context costs no reload. An instance
-reaches it through `media` in its context (`sdk/media.ts`): `get(id)` is the
-shared handle, whose `image` is null until the file is decoded and whose
+lost; nothing is evicted while the Installation is open. An item pointed at
+another file or entry is loaded again under `?v=<n>`, since the browser keeps
+what it fetched per URL and would show the old picture, and gets a new shared
+handle, which is how the Video Visual knows to open a fresh playback. The loader
+is kept outside the GPU resources, so a lost context costs no reload. An
+instance reaches it through `media` in its context (`sdk/media.ts`): `get(id)`
+is the shared handle, whose `image` is null until the file is decoded and whose
 `version` counts the pictures behind it, once for an image and once per
 presented video frame; `video(id)` is a playback of the instance's own, an
 element over the same URL that the browser serves from its cache, since two
@@ -1676,14 +1681,17 @@ default, a reset button; numbers are a slider with a readout that turns into an
 input when clicked (typed values clamp to the range), colors are the browser's
 color input with an editable hex and an alpha slider, choices a select, booleans
 a switch. A media Parameter is a select over the Media files of the type it
-accepts, None first, with a "+" beside it that adds an item through the Media
-section's picker and picks it on the Layer in one flow, as the "+" on a Path row
-makes a Path; a value whose item is gone shows as None. The options come with
-the Address (`layerAddresses` takes the Media table), so the Link picker and the
-Macro picker, which resolve against the whole document, list the same items.
-Sliders and the color input stream every position through `address.edit`, one
-send in flight at a time. The Parameters header has Reset all, one `layer.reset`
-step. Section open states are remembered per section.
+accepts, None first, with a "+" menu beside it that adds an item and picks it on
+the Layer in one flow, as the "+" on a Path row makes a Path: File… through the
+Media section's picker, Bundled… as the section's Bundled… but on an entry of
+the accepted type, setting the Parameter to the new item before the Library
+opens on it, with only entries of that type offered; Escape there puts the
+Parameter back and removes the item. A value whose item is gone shows as None.
+The options come with the Address (`layerAddresses` takes the Media table), so
+the Link picker and the Macro picker, which resolve against the whole document,
+list the same items. Sliders and the color input stream every position through
+`address.edit`, one send in flight at a time. The Parameters header has Reset
+all, one `layer.reset` step. Section open states are remembered per section.
 
 The Controllers section is a tree like a Scene's: Number and Color Controllers
 with their live value at the right (a percentage, a swatch), Groups that open
@@ -1737,6 +1745,24 @@ the inspector's button opens it later. Selecting another Visual or Filter Layer
 rebinds the Library, selecting anything else closes it. A Layer still carrying
 its generated name takes the name of what it picks.
 
+Bound to a bundled Media item, the Library offers the Bundled Media instead
+(`library/media-library.tsx`): the same ranking, with notes searched after
+descriptions, facets Loop and Hit, tiles with the Recommended, Loop and Hit
+badges whose clip plays muted over the thumbnail while hovered (the `<video>`
+exists only then, streamed from `GET /bundled/<entry id>`), and the focused
+entry's clip, notes, size and length in the description strip. A pick sends
+`media.bundled`, which coalesces per item and renames an item still called after
+its previous entry, so anything showing the item changes on the Outputs and the
+browse undoes as one step. Enter keeps the entry and focuses the item's row;
+Escape puts back the entry it had, or removes an item whose creation opened the
+browse and whose name still follows the entries. Opened from a media Parameter's
+"+", the binding also holds the Parameter's type, the selection it began from
+(the Library stays open while that Layer or Macro is selected) and how to put
+the Parameter back. Selecting another bundled item rebinds the Library;
+selecting anything else closes it. The binding, a Layer or a Media item, is
+Studio-local state (`library/browser-state.tsx`), and both kinds share the
+frame, keyboard and grid (`library/library-shell.tsx`).
+
 **Why apply on highlight rather than preview locally:** the projector is the
 only honest preview of a Visual on a real Surface, and Studio has no renderer of
 its own; applying to the runtime shows every candidate where it will be seen.
@@ -1766,29 +1792,40 @@ the row's end, the type as a dim word or, when the runtime cannot serve the
 file, an amber warning naming the status (`live/media/<id>`: missing, outside
 the show folder, or unsaved) explained on hover, the way a Layer without a
 Target warns; each row subscribes to its own status, and the collapsed section's
-warning count skips Groups. The section's "+" is a menu of File… and Group, and
-a Group row's "+" and context menu offer the same (Add File…, Add Group) with
-Ungroup and Remove; a new item lands last in the Group whose menu was used, and
-Group asks for a name. File… asks for the file first: in Desktop it opens the
-native picker straight away, in a browser a dialog with a path field, then sends
-`media.create` with the path relativized against the Installation file's folder
-and the Group as `parentId`, and selects the new item. Without a file for the
-Installation yet, the path is sent as it came, and the row's "unsaved" warning
-says to save first. A Group's inspector has only its name. A file's inspector
-has the name, the path as text committed on blur (`media.path`) with, in
-Desktop, a Browse button running the same picker, the type its extension says,
-the status with its reason, and "Used by": the Layers whose media Parameter
-holds the item, found by reading each Layer's definition for which Parameter is
-a media one; clicking one selects the Layer and opens its Scene row. Remove
-works from the context menu, the Delete key and Edit ▸ Remove like every entity.
+warning count skips Groups. The section's "+" is a menu of File…, Bundled… and
+Group, and a Group row's "+" and context menu offer the same (Add File…, Add
+Bundled…, Add Group) with Ungroup and Remove; a new item lands last in the Group
+whose menu was used, and Group asks for a name. Bundled… sends `media.create`
+with kind `bundled` on the first entry the Library shows with nothing typed (the
+first Recommended one), selects the item and opens the Library bound to it; with
+no Bundled Media in the Catalog it is disabled, and its tooltip says
+`npm run media:fetch` puts them in place. File… asks for the file first: in
+Desktop it opens the native picker straight away, in a browser a dialog with a
+path field, then sends `media.create` with the path relativized against the
+Installation file's folder and the Group as `parentId`, and selects the new
+item. Without a file for the Installation yet, the path is sent as it came, and
+the row's "unsaved" warning says to save first. A Group's inspector has only its
+name. A bundled item's inspector has the name, "Bundled" with the entry's name,
+badges, description, size and length and a Change… button that opens the Library
+on the item, then the type, the status (`unavailable` when this runtime's bundle
+lacks the entry) and "Used by", with no path. A file's inspector has the name,
+the path as text committed on blur (`media.path`) with, in Desktop, a Browse
+button running the same picker, the type its extension says, the status with its
+reason, and "Used by": the Layers whose media Parameter holds the item, found by
+reading each Layer's definition for which Parameter is a media one; clicking one
+selects the Layer and opens its Scene row. Remove works from the context menu,
+the Delete key and Edit ▸ Remove like every entity.
 
 **Why the "+" opens the picker before creating:** `media.create` names the item
 after its file, so there is nothing to ask until the file is known, and an item
 without a path would draw nothing and warn at once; other sections create a
 named placeholder because a Surface or a Scene is useful before it is
-configured. **Why the status is not computed in Studio:** only the runtime has
-the disk the path resolves on; Studio shows what `live/media` reports and
-explains it.
+configured. **Why Bundled… creates the item before anything is chosen:** as with
+a new Layer, the Outputs are the only honest preview, so the item exists from
+the first tile and every pick is shown where it will be seen; Escape takes it
+back out. **Why the status is not computed in Studio:** only the runtime has the
+disk the path resolves on; Studio shows what `live/media` reports and explains
+it.
 
 The Surface inspector places the Surface in its Output's frame with a small SVG:
 the quad with draggable corner handles, other Surfaces on the same Output as

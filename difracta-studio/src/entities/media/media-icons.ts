@@ -3,6 +3,7 @@ import {
   FileImage,
   FileVideoCamera,
   Folder,
+  Package,
   type LucideIcon,
 } from "lucide-react";
 
@@ -17,3 +18,6 @@ export const mediaTypeLabels: Record<MediaType, string> = {
 };
 
 export const mediaGroupIcon: LucideIcon = Folder;
+
+/** "Bundled…" in the "+" menus: a clip Difracta ships. */
+export const bundledMediaIcon: LucideIcon = Package;

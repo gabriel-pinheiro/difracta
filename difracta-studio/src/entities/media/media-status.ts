@@ -17,9 +17,24 @@ export interface MediaStatusText {
 
 /**
  * Each status in the words the section and the inspector use: what is
- * wrong and what to do about it. `ok` says where the file was found.
+ * wrong and what to do about it. `ok` says where the file was found. A
+ * bundled item's file is the bundle's, so its `ok` and `missing` say so.
  */
-export function describeMediaStatus(status: MediaStatus): MediaStatusText {
+export function describeMediaStatus(
+  status: MediaStatus,
+  kind: "file" | "bundled" = "file",
+): MediaStatusText {
+  if (kind === "bundled" && status === "ok")
+    return {
+      label: "OK",
+      explanation: "The clip is in the Bundled Media, and the Outputs load it.",
+    };
+  if (kind === "bundled" && status === "missing")
+    return {
+      label: "Missing",
+      explanation:
+        "The Bundled Media list this clip but its file is gone. Run npm run media:fetch to put the bundle back.",
+    };
   switch (status) {
     case "ok":
       return {
@@ -56,9 +71,10 @@ export function describeMediaStatus(status: MediaStatus): MediaStatusText {
 /** The warning a Media row shows, or undefined while the file is found or nothing is reported yet. */
 export function mediaWarning(
   live: MediaLive | undefined,
+  kind: "file" | "bundled" = "file",
 ): MediaStatusText | undefined {
   if (live === undefined || live.status === "ok") return undefined;
-  return describeMediaStatus(live.status);
+  return describeMediaStatus(live.status, kind);
 }
 
 /** How many Media rows warn, for the collapsed Media section; a Group has no file to warn about. */

@@ -23,7 +23,9 @@ import type { MediaContext, MediaHandle, MediaVideo } from "./sdk/media.ts";
  * a Layer that starts showing an item finds it ready and nothing is
  * evicted while the Installation is open. Files come from `mediaUrl(id)`:
  * `/media/<id>` on the runtime for an Output page, a data URL in the
- * thumbnail harness. Element creation is injected so the loader is tested
+ * thumbnail harness. An item repointed to another file or entry is loaded
+ * again under `?v=<n>`, since the browser keeps what it fetched per URL and
+ * would otherwise show the old picture. Element creation is injected so the loader is tested
  * without a browser. A video's preloaded element is only ever shown as its
  * first frame; a Layer that plays it asks `video(id)` for an element of
  * its own over the same URL, which the browser serves from its cache.
@@ -66,6 +68,13 @@ const DOM_ELEMENTS: MediaElements = {
   video: () => document.createElement("video"),
 };
 
+/** `url` for the `loads`-th load of an item: the first as it is, later ones with `v=<n>`; data and blob URLs as they are. */
+export function withLoad(url: string, loads: number): string {
+  if (loads <= 1 || url.startsWith("data:") || url.startsWith("blob:"))
+    return url;
+  return `${url}${url.includes("?") ? "&" : "?"}v=${String(loads)}`;
+}
+
 /** Whether a file at `url` is fetched from another origin than the page's; data and blob URLs are never. */
 export function needsCrossOrigin(url: string, pageOrigin: string): boolean {
   if (url.startsWith("data:") || url.startsWith("blob:")) return false;
@@ -82,6 +91,8 @@ export class MediaLoader implements MediaContext {
   readonly #catalog: Catalog;
   readonly #pageOrigin: string;
   readonly #entries = new Map<string, Entry>();
+  /** How many times each item was loaded, for the reload's URL. */
+  readonly #loads = new Map<string, number>();
   #table: MediaTable | undefined;
 
   constructor(options: MediaLoaderOptions) {
@@ -135,8 +146,11 @@ export class MediaLoader implements MediaContext {
 
   #load(id: string, item: Media, source: string): Entry | undefined {
     const type = mediaItemTypeIn(item, this.#catalog);
-    const url = this.#options.mediaUrl(id);
-    if (type === undefined || url === undefined) return undefined;
+    const base = this.#options.mediaUrl(id);
+    if (type === undefined || base === undefined) return undefined;
+    const loads = (this.#loads.get(id) ?? 0) + 1;
+    this.#loads.set(id, loads);
+    const url = withLoad(base, loads);
     const crossOrigin = needsCrossOrigin(url, this.#pageOrigin);
     return type === "image"
       ? this.#loadImage(id, source, url, crossOrigin)

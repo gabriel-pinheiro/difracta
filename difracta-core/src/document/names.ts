@@ -48,3 +48,13 @@ function counterBase(taken: readonly string[], wanted: string): string {
       sameName(NUMBERED_SUFFIX.exec(name.trim())?.[1] ?? "", base));
   return taken.some(isVariant) ? base : wanted;
 }
+
+/**
+ * Whether `name` is `base` or a numbered variant of it ("Flash Cut 2"),
+ * ignoring case: an entity still called after what it was made from, whose
+ * name may follow what it is made from next.
+ */
+export function namedAfter(name: string, base: string): boolean {
+  const escaped = base.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^${escaped}( \\d+)?$`, "i").test(name.trim());
+}

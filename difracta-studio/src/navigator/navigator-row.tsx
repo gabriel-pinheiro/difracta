@@ -4,16 +4,19 @@ import type { ReactNode } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+
+import { CreateMenuItems } from "./create-menu";
 
 /** One choice in a row's "+" menu, for rows that can hold several kinds of children. */
 export interface CreateItem {
   readonly label: string;
   readonly icon: LucideIcon;
   readonly onSelect: () => void;
+  /** Why the entry cannot be used now; the entry shows disabled with this on hover. */
+  readonly disabled?: string | undefined;
 }
 
 /** Left edge of a row's content at `depth`, leaving room for the chevron slot on nested rows. */
@@ -155,11 +158,7 @@ export function NavigatorRow({
             <Plus className="size-3" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {createItems.map((item) => (
-              <DropdownMenuItem key={item.label} onClick={item.onSelect}>
-                <item.icon /> {item.label}
-              </DropdownMenuItem>
-            ))}
+            <CreateMenuItems items={createItems} />
           </DropdownMenuContent>
         </DropdownMenu>
       )}

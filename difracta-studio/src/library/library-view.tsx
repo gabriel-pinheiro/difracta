@@ -7,17 +7,8 @@ import type {
   Table,
   VisualLayer,
 } from "@difracta/core";
-import { Search, X } from "lucide-react";
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent,
-} from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { catalog, definitionOf, pickLabels } from "@/lib/catalog";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import {
@@ -26,10 +17,12 @@ import {
 } from "@/navigator/focus-row";
 import { useSelection } from "@/selection/selection";
 
-import { useBrowser } from "./browser-state";
+import { useBrowser, type LibraryBinding } from "./browser-state";
 import { Description } from "./description";
 import { FacetControl } from "./facet-control";
+import { LibraryShell } from "./library-shell";
 import { LibraryTile } from "./library-tile";
+import { MediaLibraryView } from "./media-library";
 import {
   ANY_FACETS,
   pickOnEnter,
@@ -43,9 +36,24 @@ interface RestorePoint {
   readonly parameters: ParameterValues;
 }
 
+/** The Library for whatever it is bound to: a Visual or Filter Layer, or a bundled Media item. */
+export function LibraryView({
+  view,
+  binding,
+}: {
+  readonly view: DocumentView;
+  readonly binding: LibraryBinding;
+}) {
+  return binding.kind === "layer" ? (
+    <LayerLibraryView view={view} layerId={binding.id} />
+  ) : (
+    <MediaLibraryView view={view} binding={binding} />
+  );
+}
+
 /**
- * The Library: the Catalog as a grid of tiles, bound to one Visual or Filter
- * Layer. Clicking a tile or moving with the arrow keys applies it to the
+ * The Library bound to one Visual or Filter Layer: the Catalog as a grid of
+ * tiles. Clicking a tile or moving with the arrow keys applies it to the
  * Layer at once, so the Outputs are the preview; Enter keeps the pick, or
  * picks the first result while the Layer has none, and Escape discards the
  * browse, putting back what the Layer had when the Library opened. When
@@ -55,7 +63,7 @@ interface RestorePoint {
  * navigator row. Selecting another Visual or Filter Layer rebinds the
  * Library to it; selecting anything else closes it.
  */
-export function LibraryView({
+function LayerLibraryView({
   view,
   layerId,
 }: {
@@ -85,10 +93,10 @@ export function LibraryView({
   }, [bound, close]);
 
   if (bound === undefined) return null;
-  return <Browser key={layerId} view={view} layer={bound} />;
+  return <LayerBrowser key={layerId} view={view} layer={bound} />;
 }
 
-function Browser({
+function LayerBrowser({
   view,
   layer,
 }: {
@@ -96,13 +104,11 @@ function Browser({
   readonly layer: VisualLayer | FilterLayer;
 }) {
   const command = useCommand(view);
-  const { close, created } = useBrowser();
+  const { close, binding } = useBrowser();
+  const created = binding?.created === true;
   const labels = pickLabels[layer.kind];
   const [query, setQuery] = useState("");
   const [facets, setFacets] = useState<Facets>(ANY_FACETS);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const gridRef = useRef<HTMLDivElement>(null);
-  const tiles = useRef(new Map<string, HTMLButtonElement>());
   // Captured once per binding: the Layer as it was before browsing.
   const restore = useRef<RestorePoint>({
     id: definitionOf(layer).id,
@@ -124,36 +130,12 @@ function Browser({
     return rankDefinitions(all, query, facets);
   }, [layer.kind, query, facets]);
 
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
-  useEffect(() => {
-    if (currentId === null) return;
-    tiles.current.get(currentId)?.scrollIntoView({ block: "nearest" });
-  }, [currentId]);
-
   const apply = (id: string | null, parameters?: ParameterValues): void => {
     void command(labels.command, {
       layerId: layer.id,
       [layer.kind]: id,
       ...(parameters === undefined ? {} : { parameters }),
     });
-  };
-
-  const moveBy = (step: number): void => {
-    if (ranked.length === 0) return;
-    const index = ranked.findIndex((entry) => entry.id === currentId);
-    const next =
-      index === -1 ? 0 : Math.min(ranked.length - 1, Math.max(0, index + step));
-    const target = ranked[next];
-    if (target !== undefined && target.id !== currentId) apply(target.id);
-  };
-
-  const columns = (): number => {
-    const grid = gridRef.current;
-    if (grid === null) return 1;
-    return getComputedStyle(grid).gridTemplateColumns.split(" ").length;
   };
 
   /** Closes and hands focus back to the Layer's row, or to the inspector's "Swap…" button. */
@@ -165,159 +147,99 @@ function Browser({
     );
   };
 
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    const inInput = event.target === inputRef.current;
-    switch (event.key) {
-      case "ArrowDown":
-        moveBy(columns());
-        break;
-      case "ArrowUp":
-        moveBy(-columns());
-        break;
-      case "ArrowRight":
-        if (inInput && query !== "") return;
-        moveBy(1);
-        break;
-      case "ArrowLeft":
-        if (inInput && query !== "") return;
-        moveBy(-1);
-        break;
-      case "Enter": {
-        const focused =
-          event.target instanceof HTMLElement
-            ? event.target.closest<HTMLElement>("[data-testid='library-tile']")
-                ?.dataset.id
-            : undefined;
-        const pick = pickOnEnter(currentId, ranked, focused);
-        if (pick !== undefined) apply(pick);
-        leave();
-        break;
-      }
-      case "Escape": {
-        if (untouched) {
-          close();
-          removeFocusingNeighbour(layer.id, () =>
-            command("layer.remove", { layerId: layer.id }),
-          );
-          break;
-        }
-        const { id, parameters } = restore.current;
-        if (id !== currentId || parameters !== layer.parameters)
-          apply(id, id === null ? undefined : parameters);
-        leave();
-        break;
-      }
-      default:
-        return;
+  const onEscape = (): void => {
+    if (untouched) {
+      close();
+      removeFocusingNeighbour(layer.id, () =>
+        command("layer.remove", { layerId: layer.id }),
+      );
+      return;
     }
-    event.preventDefault();
-  };
-
-  const reset = (): void => {
-    setQuery("");
-    setFacets(ANY_FACETS);
-    inputRef.current?.focus();
+    const { id, parameters } = restore.current;
+    if (id !== currentId || parameters !== layer.parameters)
+      apply(id, id === null ? undefined : parameters);
+    leave();
   };
 
   return (
-    <div
-      data-testid="library"
-      className="flex h-full min-h-0 flex-col"
-      onKeyDown={onKeyDown}
-    >
-      <div className="flex h-7 shrink-0 items-center gap-1.5 border-b px-2 text-xs">
-        <span className="font-medium">{labels.plural} for</span>
-        <span className="min-w-0 truncate">{layer.name}</span>
-        <span className="ml-auto truncate text-[0.6875rem] text-muted-foreground">
-          {`${currentId === null && ranked.length > 0 ? "Enter picks the first" : "Enter keeps"}, ${untouched ? "Esc removes the new Layer" : "Esc discards"}`}
-        </span>
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          aria-label="Close the Library"
-          title="Close the Library"
-          onClick={close}
-        >
-          <X />
-        </Button>
-      </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b px-2 py-1.5">
-        <div className="relative min-w-40 flex-1">
-          <Search className="pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            ref={inputRef}
-            aria-label={`Search ${labels.plural}`}
-            placeholder={`Search ${labels.plural}`}
-            className="pl-6"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </div>
-        <FacetControl
-          label="Backend"
-          value={facets.backend}
-          options={[
-            { value: "any", label: "Any" },
-            { value: "canvas", label: "Canvas" },
-            { value: "shader", label: "Shader" },
-          ]}
-          onChange={(backend) => setFacets({ ...facets, backend })}
-        />
-        {layer.kind === "visual" && (
+    <LibraryShell
+      title={
+        <>
+          <span className="font-medium">{labels.plural} for</span>
+          <span className="min-w-0 truncate">{layer.name}</span>
+        </>
+      }
+      hint={`${currentId === null && ranked.length > 0 ? "Enter picks the first" : "Enter keeps"}, ${untouched ? "Esc removes the new Layer" : "Esc discards"}`}
+      searchLabel={`Search ${labels.plural}`}
+      query={query}
+      onQuery={setQuery}
+      facets={
+        <>
           <FacetControl
-            label="Path"
-            value={facets.path}
+            label="Backend"
+            value={facets.backend}
             options={[
               { value: "any", label: "Any" },
-              { value: "uses", label: "Uses" },
+              { value: "canvas", label: "Canvas" },
+              { value: "shader", label: "Shader" },
+            ]}
+            onChange={(backend) => setFacets({ ...facets, backend })}
+          />
+          {layer.kind === "visual" && (
+            <FacetControl
+              label="Path"
+              value={facets.path}
+              options={[
+                { value: "any", label: "Any" },
+                { value: "uses", label: "Uses" },
+                { value: "none", label: "None" },
+              ]}
+              onChange={(path) => setFacets({ ...facets, path })}
+            />
+          )}
+          <FacetControl
+            label="Cues"
+            value={facets.cues}
+            options={[
+              { value: "any", label: "Any" },
+              { value: "has", label: "Has" },
               { value: "none", label: "None" },
             ]}
-            onChange={(path) => setFacets({ ...facets, path })}
+            onChange={(cues) => setFacets({ ...facets, cues })}
           />
-        )}
-        <FacetControl
-          label="Cues"
-          value={facets.cues}
-          options={[
-            { value: "any", label: "Any" },
-            { value: "has", label: "Has" },
-            { value: "none", label: "None" },
-          ]}
-          onChange={(cues) => setFacets({ ...facets, cues })}
+        </>
+      }
+      description={
+        <Description
+          kind={layer.kind}
+          current={current}
+          currentId={currentId}
         />
-      </div>
-      <Description kind={layer.kind} current={current} currentId={currentId} />
-      {ranked.length === 0 ? (
-        <p className="p-3 text-muted-foreground">
-          No {labels.plural} match.{" "}
-          <button
-            type="button"
-            className="underline underline-offset-2 hover:text-foreground"
-            onClick={reset}
-          >
-            Reset the search and facets
-          </button>
-        </p>
-      ) : (
-        <div
-          ref={gridRef}
-          className="grid min-h-0 flex-1 grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] content-start gap-2 overflow-auto p-2"
-        >
-          {ranked.map((definition) => (
-            <LibraryTile
-              key={definition.id}
-              ref={(element) => {
-                if (element === null) tiles.current.delete(definition.id);
-                else tiles.current.set(definition.id, element);
-              }}
-              definition={definition}
-              current={definition.id === currentId}
-              onPick={() => apply(definition.id)}
-            />
-          ))}
-        </div>
+      }
+      entries={ranked}
+      currentId={currentId}
+      empty={`No ${labels.plural} match.`}
+      onApply={(id) => apply(id)}
+      onEnter={(focused) => {
+        const pick = pickOnEnter(currentId, ranked, focused);
+        if (pick !== undefined) apply(pick);
+        leave();
+      }}
+      onEscape={onEscape}
+      onClose={close}
+      onReset={() => {
+        setQuery("");
+        setFacets(ANY_FACETS);
+      }}
+      renderTile={(definition, isCurrent) => (
+        <LibraryTile
+          key={definition.id}
+          definition={definition}
+          current={isCurrent}
+          onPick={() => apply(definition.id)}
+        />
       )}
-    </div>
+    />
   );
 }
 

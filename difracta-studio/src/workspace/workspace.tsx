@@ -44,7 +44,7 @@ export function Workspace({ view }: { readonly view: DocumentView }) {
 }
 
 function Columns({ view }: { readonly view: DocumentView }) {
-  const { bound } = useBrowser();
+  const { binding } = useBrowser();
   return (
     <ResizablePanelGroup
       orientation="horizontal"
@@ -57,8 +57,8 @@ function Columns({ view }: { readonly view: DocumentView }) {
       </ResizablePanel>
       <ResizableHandle />
       <ResizablePanel id="center" minSize={320}>
-        {bound !== undefined ? (
-          <LibraryView view={view} layerId={bound} />
+        {binding !== undefined ? (
+          <LibraryView view={view} binding={binding} />
         ) : (
           <Tabs defaultValue="outputs" className="flex h-full flex-col gap-0">
             <TabsList

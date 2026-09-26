@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { sameName, uniqueName } from "./names.ts";
+import { namedAfter, sameName, uniqueName } from "./names.ts";
 
 describe("names", () => {
   it("compares names ignoring case and surrounding whitespace", () => {
@@ -37,5 +37,13 @@ describe("names", () => {
 
   it("reads a number as a counter when a sibling shares its base", () => {
     expect(uniqueName(["Layer 1", "Layer 2"], "Layer 1")).toBe("Layer 3");
+  });
+
+  it("tells a name still after its base, numbered or not", () => {
+    expect(namedAfter("Flash Cut", "Flash Cut")).toBe(true);
+    expect(namedAfter("flash cut 2", "Flash Cut")).toBe(true);
+    expect(namedAfter("Flash Cut Two", "Flash Cut")).toBe(false);
+    expect(namedAfter("Opening", "Flash Cut")).toBe(false);
+    expect(namedAfter("A (b) 1", "A (b)")).toBe(true);
   });
 });

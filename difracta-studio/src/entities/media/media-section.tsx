@@ -5,23 +5,30 @@ import { useState } from "react";
 
 import { NameDialog, type NameRequest } from "@/components/name-dialog";
 import { useCommand, useDocumentPath } from "@/lib/client";
+import { useBrowser } from "@/library/browser-state";
 import { useExpansion } from "@/navigator/expansion";
 import type { CreateItem } from "@/navigator/navigator-row";
 import { NavigatorSection } from "@/navigator/navigator-section";
 import { useSelection } from "@/selection/selection";
 
-import { mediaGroupIcon } from "./media-icons";
+import { bundledMediaIcon, mediaGroupIcon } from "./media-icons";
 import { MediaRows } from "./media-rows";
 import { mediaWarningCount, type MediaLiveTable } from "./media-status";
-import { useCreateMedia } from "./use-create-media";
+import {
+  hasBundledMedia,
+  NO_BUNDLED_MEDIA,
+  useCreateMedia,
+} from "./use-create-media";
 
 /**
  * Navigator section listing the Media items as a tree of Media Groups:
  * each file with its type's icon and, when the runtime cannot serve it,
  * why. The "+" of the section or of a Group offers File…, which asks for
  * the file first (a native picker in Desktop, a typed path in a browser)
- * since the item takes its name from the file, and Group, which asks for
- * a name. A new item lands last in the Group whose "+" was used.
+ * since the item takes its name from the file; Bundled…, which adds an
+ * item on the first Bundled Media entry at once and opens the Library on
+ * it, so picking the clip is previewing it; and Group, which asks for a
+ * name. A new item lands last in the Group whose "+" was used.
  */
 export function MediaSection({ view }: { readonly view: DocumentView }) {
   const command = useCommand(view);
@@ -29,7 +36,8 @@ export function MediaSection({ view }: { readonly view: DocumentView }) {
   const { setExpanded } = useExpansion();
   const media = useDocumentPath<Table<Media>>(view, ["media"]) ?? {};
   const live = useDocumentPath<MediaLiveTable>(view, ["live", "media"]) ?? {};
-  const { create, dialog } = useCreateMedia();
+  const { openMedia } = useBrowser();
+  const { create, createBundled, dialog } = useCreateMedia();
   const [naming, setNaming] = useState<NameRequest | undefined>(undefined);
   const roots = childMedia(media, null);
 
@@ -63,6 +71,19 @@ export function MediaSection({ view }: { readonly view: DocumentView }) {
       icon: FilePlus,
       onSelect: () =>
         create({ parentId, onCreated: (id) => reveal(parentId, id) }),
+    },
+    {
+      label: "Bundled…",
+      icon: bundledMediaIcon,
+      disabled: hasBundledMedia() ? undefined : NO_BUNDLED_MEDIA,
+      onSelect: () =>
+        createBundled({
+          parentId,
+          onCreated: (id) => {
+            reveal(parentId, id);
+            openMedia(id, { created: true });
+          },
+        }),
     },
     {
       label: "Group",

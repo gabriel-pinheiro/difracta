@@ -38,6 +38,7 @@ export default defineConfig(({ command }) => ({
       "/health": { target: runtime },
       "/document": { target: runtime },
       "/catalog": { target: runtime },
+      "/bundled": { target: runtime },
       "/output": { target: output, ws: true },
     },
   },

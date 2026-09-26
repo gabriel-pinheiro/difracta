@@ -230,4 +230,22 @@ describe("Video", () => {
     player.dispose();
     expect(first.calls.filter((call) => call === "dispose")).toHaveLength(2);
   });
+
+  it("opens a fresh playback when the item it shows is repointed", () => {
+    const handles: Record<string, MediaHandle> = { clip: fakeHandle("clip") };
+    const clips = [fakeVideo("clip"), fakeVideo("clip")];
+    let opened = 0;
+    const player = shader(
+      video,
+      context(handles, { clip: () => clips[opened++] as MediaVideo }),
+    );
+    player.frame({ media: "clip" });
+    player.frame({ media: "clip" });
+    expect(opened).toBe(1);
+    handles.clip = fakeHandle("clip");
+    player.frame({ media: "clip" });
+    expect(opened).toBe(2);
+    expect(clips[0]?.calls).toContain("dispose");
+    expect(clips[1]?.calls).toEqual(["rewind", "play", "loop true"]);
+  });
 });

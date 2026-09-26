@@ -231,9 +231,9 @@ The images and videos Difracta ships, from a pinned release of the
 `difracta-media` repository, each with a stable id, a name, a description,
 notes, a thumbnail and optional Recommended, Loop (loops without a seam) and Hit
 (a one-shot on a beat) flags. They are `media` definitions in the Catalog, so
-the CLI and validation know them. A Media item of kind `bundled` refers to one
-by id; when the Runtime's Catalog lacks that id the item stays in the file,
-unavailable, and shows nothing.
+the Library, the CLI and validation know them. A Media item of kind `bundled`
+refers to one by id; when the Runtime's Catalog lacks that id the item stays in
+the file, unavailable, and shows nothing.
 
 ### Media Parameter
 
@@ -573,11 +573,11 @@ the default when the value differs from it.
 
 ### Library
 
-The Studio view for picking a Visual or Filter from the Catalog. It is bound to
-one Layer and takes the center column while open, with search, facets and a grid
-of thumbnails. Picking applies to the Layer at once, so the Outputs are the
-preview; Enter keeps the pick and Escape discards the browse, putting the
-previous one back.
+The Studio view for picking from the Catalog. It is bound to one Layer, to pick
+its Visual or Filter, or to one bundled Media item, to pick its Bundled Media
+entry, and takes the center column while open, with search, facets and a grid of
+thumbnails. Picking applies at once, so the Outputs are the preview; Enter keeps
+the pick and Escape discards the browse, putting the previous one back.
 
 ### Control
 

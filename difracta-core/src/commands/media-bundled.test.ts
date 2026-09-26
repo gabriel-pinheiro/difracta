@@ -181,7 +181,7 @@ describe("bundled Media items", () => {
     });
     expect(image.document.media.m_flash).toMatchObject({
       bundled: "grid",
-      name: "Flash Cut",
+      name: "Grid",
     });
     expect(valueOf(image.document)).toBe("");
     const back = run(image.document, "media.bundled", {
@@ -190,7 +190,32 @@ describe("bundled Media items", () => {
     });
     expect(back.patches).toEqual([
       { op: "set", path: ["media", "m_flash", "bundled"], value: "flash-cut" },
+      { op: "set", path: ["media", "m_flash", "name"], value: "Flash Cut" },
     ]);
+  });
+
+  it("keep a name the person gave, and follow from a numbered one", () => {
+    let document = installation();
+    document = run(document, "media.create", {
+      id: "m_second",
+      kind: "bundled",
+      bundled: "flash-cut",
+    }).document;
+    expect(document.media.m_second?.name).toBe("Flash Cut 1");
+    const followed = run(document, "media.bundled", {
+      mediaId: "m_second",
+      bundled: "grid",
+    }).document;
+    expect(followed.media.m_second?.name).toBe("Grid");
+    const renamed = run(document, "media.rename", {
+      mediaId: "m_flash",
+      name: "Opening hit",
+    }).document;
+    const kept = run(renamed, "media.bundled", {
+      mediaId: "m_flash",
+      bundled: "grid",
+    }).document;
+    expect(kept.media.m_flash?.name).toBe("Opening hit");
   });
 
   it("refuse media.path, and media.bundled refuses files, Groups and unknown entries", () => {

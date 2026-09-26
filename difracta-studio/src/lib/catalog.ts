@@ -9,6 +9,11 @@ export function thumbnailUrl(id: string): string {
   return `/catalog/${thumbnailFile(id)}`;
 }
 
+/** A Bundled Media entry's image or video, streamed by the runtime by entry id. */
+export function bundledUrl(id: string): string {
+  return `/bundled/${encodeURIComponent(id)}`;
+}
+
 /** What a Layer refers to: its id, and the definition when the Catalog has it. */
 export function definitionOf(layer: VisualLayer | FilterLayer): {
   readonly id: string | null;

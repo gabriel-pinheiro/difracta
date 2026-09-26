@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/context-menu";
 import { catalog } from "@/lib/catalog";
 import { useCommand, useDocumentPath } from "@/lib/client";
+import { DisabledHint } from "@/navigator/create-menu";
 import { useExpansion } from "@/navigator/expansion";
 import {
   NavigatorEmptyRow,
@@ -121,14 +122,22 @@ export function MediaRows({
               <ContextMenuContent>
                 {group ? (
                   <>
-                    {createItems(item.id).map((entry) => (
-                      <ContextMenuItem
-                        key={entry.label}
-                        onClick={entry.onSelect}
-                      >
-                        <entry.icon /> Add {entry.label}
-                      </ContextMenuItem>
-                    ))}
+                    {createItems(item.id).map((entry) =>
+                      entry.disabled === undefined ? (
+                        <ContextMenuItem
+                          key={entry.label}
+                          onClick={entry.onSelect}
+                        >
+                          <entry.icon /> Add {entry.label}
+                        </ContextMenuItem>
+                      ) : (
+                        <DisabledHint key={entry.label} hint={entry.disabled}>
+                          <ContextMenuItem disabled>
+                            <entry.icon /> Add {entry.label}
+                          </ContextMenuItem>
+                        </DisabledHint>
+                      ),
+                    )}
                     <ContextMenuSeparator />
                     <ContextMenuItem
                       onClick={() =>
@@ -176,7 +185,10 @@ function MediaFileRow({
 }) {
   const live = useDocumentPath<MediaLive>(view, ["live", "media", item.id]);
   const type = mediaItemTypeIn(item, catalog) ?? "image";
-  const warning = mediaWarning(live);
+  const warning = mediaWarning(
+    live,
+    item.kind === "bundled" ? "bundled" : "file",
+  );
   return (
     <NavigatorRow
       id={item.id}

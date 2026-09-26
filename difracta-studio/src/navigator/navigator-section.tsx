@@ -4,13 +4,13 @@ import { useState, type ReactNode } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { EntityKind } from "@/entities";
 import { isBoolean, useStoredState } from "@/lib/storage";
 import { useSelection } from "@/selection/selection";
 
+import { CreateMenuItems } from "./create-menu";
 import { NavigatorEmptyRow, type CreateItem } from "./navigator-row";
 import { SectionWarning } from "./navigator-warning";
 
@@ -98,11 +98,7 @@ export function NavigatorSection({
               <Plus className="size-3" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {createItems.map((item) => (
-                <DropdownMenuItem key={item.label} onClick={item.onSelect}>
-                  <item.icon /> {item.label}
-                </DropdownMenuItem>
-              ))}
+              <CreateMenuItems items={createItems} />
             </DropdownMenuContent>
           </DropdownMenu>
         )}

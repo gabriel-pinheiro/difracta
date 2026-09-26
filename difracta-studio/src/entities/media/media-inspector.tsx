@@ -21,6 +21,7 @@ import { useSelection } from "@/selection/selection";
 
 import { layerIcons } from "@/entities/layer/layer-icons";
 
+import { BundledBlock } from "./bundled-block";
 import { mediaTypeLabels } from "./media-icons";
 import { requestMediaPath } from "./media-path-request";
 import { describeMediaStatus, type MediaLive } from "./media-status";
@@ -64,7 +65,8 @@ export function MediaInspector({
  * A Media file's name, its path as text (Browse in Desktop opens the native
  * picker over the same file types), the type its extension says, what the
  * runtime reports about the file, and the Layers showing it, each a way to
- * that Layer. A bundled item shows the entry it names instead of a path.
+ * that Layer. A bundled item shows the entry it names instead of a path,
+ * with Change… opening the Library on it.
  */
 function MediaFileInspector({
   view,
@@ -85,7 +87,9 @@ function MediaFileInspector({
   const desktop = desktopBridge() !== undefined;
   const type = mediaItemTypeIn(item, catalog);
   const status =
-    live === undefined ? undefined : describeMediaStatus(live.status);
+    live === undefined
+      ? undefined
+      : describeMediaStatus(live.status, item.kind);
   const uses = document === undefined ? [] : layersUsing(document, catalog, id);
   const setPath = (path: string): void => {
     void command("media.path", { mediaId: id, path });
@@ -103,10 +107,7 @@ function MediaFileInspector({
           }
         />
         {item.kind === "bundled" ? (
-          <p className="text-xs">
-            <span className="text-muted-foreground">Bundled: </span>
-            {catalog.mediaEntry(item.bundled)?.name ?? item.bundled}
-          </p>
+          <BundledBlock item={item} />
         ) : (
           <div className="grid gap-1">
             <NameField label="Path" value={item.path} onCommit={setPath} />

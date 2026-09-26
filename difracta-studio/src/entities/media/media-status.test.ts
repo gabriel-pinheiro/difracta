@@ -32,6 +32,13 @@ describe("Media status", () => {
     expect(mediaWarning({ status: "unavailable" })?.label).toBe("Unavailable");
   });
 
+  it("words a bundled item's missing file as the bundle's", () => {
+    expect(
+      mediaWarning({ status: "missing" }, "bundled")?.explanation,
+    ).toContain("npm run media:fetch");
+    expect(mediaWarning({ status: "ok" }, "bundled")).toBeUndefined();
+  });
+
   it("counts the file rows that warn for the collapsed section, never a Group", () => {
     expect(
       mediaWarningCount(media, {

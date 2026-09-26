@@ -21,7 +21,7 @@ import { linksOfLayer } from "../address/links.ts";
 import { dropActions } from "../document/macros.ts";
 import type { FilterLayer, VisualLayer } from "../document/document.ts";
 import { childLayers, LAYER_LABELS } from "../document/layers.ts";
-import { uniqueName } from "../document/names.ts";
+import { namedAfter, uniqueName } from "../document/names.ts";
 import { mediaValueProblem } from "../document/media.ts";
 import { applyPatches, type Patch } from "../document/patch.ts";
 import { fitPaths } from "../document/paths.ts";
@@ -45,9 +45,6 @@ const PickPayload = z
     parameters: ParameterValuesSchema.optional(),
   })
   .strict();
-
-const numbered = (base: string): RegExp =>
-  new RegExp(`^${base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}( \\d+)?$`, "i");
 
 function pick(
   { document, catalog }: CommandContext<unknown>,
@@ -136,7 +133,7 @@ function pick(
     currentId === null ? undefined : catalog.definition(field, currentId);
   const generated = [LAYER_LABELS[layer.kind], previous?.name]
     .filter((base): base is string => base !== undefined)
-    .some((base) => numbered(base).test(layer.name));
+    .some((base) => namedAfter(layer.name, base));
   if (generated) {
     const taken = childLayers(document.layers, layer.sceneId, layer.parentId)
       .filter((sibling) => sibling.id !== layer.id)

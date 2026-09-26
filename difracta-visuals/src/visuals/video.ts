@@ -1,4 +1,8 @@
-import { defineShaderVisual, type MediaVideo } from "@difracta/render/sdk";
+import {
+  defineShaderVisual,
+  type MediaHandle,
+  type MediaVideo,
+} from "@difracta/render/sdk";
 
 import { MEDIA_FIT_FRAGMENT, MEDIA_FIT_PARAMETERS } from "./media-fit.ts";
 
@@ -9,7 +13,10 @@ import { MEDIA_FIT_FRAGMENT, MEDIA_FIT_PARAMETERS } from "./media-fit.ts";
  * element's clock is the browser's, the one exception to "integrate, never
  * sample": the Visual only steers it, and reports a change when a frame
  * was presented. A hidden Layer pauses the element and showing resumes it,
- * so a faded-out video does not decode for nothing.
+ * so a faded-out video does not decode for nothing. When the item it shows
+ * is pointed at another file or Bundled Media entry, the Output reloads the
+ * item under a new handle and the Visual opens a fresh playback of it,
+ * playing on if it was.
  */
 type Transport = "stopped" | "paused" | "playing";
 
@@ -69,6 +76,8 @@ export const video = defineShaderVisual({
   create({ media }) {
     let id: string | undefined;
     let playback: MediaVideo | undefined;
+    // The item's shared handle when the playback opened: a new one means the item was repointed.
+    let loaded: MediaHandle | undefined;
     let transport: Transport = "stopped";
     let hidden = false;
     let seen = -1;
@@ -93,6 +102,7 @@ export const video = defineShaderVisual({
     const open = (next: string, autoplay: boolean): void => {
       playback?.dispose();
       id = next;
+      loaded = next === "" ? undefined : media.get(next);
       playback = next === "" ? undefined : media.video(next);
       transport = "stopped";
       seen = -1;
@@ -114,6 +124,8 @@ export const video = defineShaderVisual({
       },
       update({ params, changed }) {
         if (params.media !== id) open(params.media, params.autoplay);
+        else if (id !== "" && media.get(id) !== loaded)
+          open(id, params.autoplay || transport === "playing");
         const current = playback;
         if (current === undefined)
           return { changed, blank: true, textures: {} };

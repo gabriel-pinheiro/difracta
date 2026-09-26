@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   MediaLoader,
   needsCrossOrigin,
+  withLoad,
   type MediaElements,
 } from "./media-loader.ts";
 
@@ -177,7 +178,7 @@ describe("MediaLoader", () => {
     expect(a?.version).toBe(1);
     expect(images).toHaveLength(3);
     expect(images[1]?.src).toBe(""); // released
-    expect(images[2]?.src).toBe("/media/b");
+    expect(images[2]?.src).toBe("/media/b?v=2");
     instance.sync({ b: item("b", "other.png") });
     expect(instance.get("a")).toBeUndefined();
     expect(a?.version).toBe(0);
@@ -203,7 +204,7 @@ describe("MediaLoader", () => {
     expect(instance.get("old")).toBeUndefined();
     instance.sync({ flash: bundled("flash", "grid") });
     expect(videos[0]?.src).toBe("");
-    expect(images[0]?.src).toBe("/media/flash");
+    expect(images[0]?.src).toBe("/media/flash?v=2");
   });
 
   it("skips Groups and items with no URL or an extension it cannot show", () => {
@@ -278,5 +279,14 @@ describe("MediaLoader", () => {
     );
     instance.sync({ a: item("a", "a.png") });
     expect(images[0]?.crossOrigin).toBe("anonymous");
+  });
+
+  it("gives a reload a URL of its own, leaving data and blob URLs alone", () => {
+    expect(withLoad("/media/a", 1)).toBe("/media/a");
+    expect(withLoad("/media/a", 3)).toBe("/media/a?v=3");
+    expect(withLoad("/media/a?x=1", 2)).toBe("/media/a?x=1&v=2");
+    expect(withLoad("data:image/png;base64,AA==", 2)).toBe(
+      "data:image/png;base64,AA==",
+    );
   });
 });
