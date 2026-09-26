@@ -30,6 +30,7 @@ export class SurfaceProgram {
     | "mode"
     | "color"
     | "maskEnabled"
+    | "maskRect"
     | "edge"
     | "divisions"
     | "corner"
@@ -50,6 +51,7 @@ export class SurfaceProgram {
       mode: uniform(gl, program, "u_mode"),
       color: uniform(gl, program, "u_color"),
       maskEnabled: uniform(gl, program, "u_mask_enabled"),
+      maskRect: uniform(gl, program, "u_mask_rect"),
       edge: uniform(gl, program, "u_edge"),
       divisions: uniform(gl, program, "u_divisions"),
       corner: uniform(gl, program, "u_corner"),
@@ -78,12 +80,17 @@ export class SurfaceProgram {
     gl.bufferData(gl.ARRAY_BUFFER, geometry.quad, gl.DYNAMIC_DRAW);
   }
 
-  /** Binds the Surface's Mask on unit 0, or turns masking off. */
-  setMask(texture: WebGLTexture | undefined): void {
+  /**
+   * Binds the Surface's Mask on unit 0, or turns masking off. `rect` is
+   * the part of Surface Space the current draw covers, so a Region samples
+   * its Surface's Mask where it sits.
+   */
+  setMask(texture: WebGLTexture | undefined, rect: Rect = WHOLE): void {
     const { gl } = this;
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture ?? null);
     gl.uniform1i(this.uniforms.maskEnabled, texture === undefined ? 0 : 1);
+    gl.uniform4f(this.uniforms.maskRect, ...rect);
   }
 
   /** Draws the whole current Surface, its edge feathered, with the uniforms as they are. */

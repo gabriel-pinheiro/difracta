@@ -16,7 +16,7 @@ import { planFrame, plannedSurfaces, type LayerDraw } from "./plan.ts";
 import { MAX_FRAME_SECONDS } from "./sdk/visual.ts";
 import { ShaderVisualPrograms } from "./shader-visuals.ts";
 import { SurfaceGeometries } from "./surface-geometry.ts";
-import { MODE, SurfaceProgram, WHOLE } from "./surface-program.ts";
+import { MODE, SurfaceProgram, WHOLE, type Rect } from "./surface-program.ts";
 
 export interface Compositor {
   /**
@@ -249,10 +249,19 @@ class WebGLCompositor implements Compositor {
     };
     for (const frame of step.frames) {
       passesBelow(frame.index);
-      const geometry = resources.geometries.get(frame.draw, width, height);
+      const geometry = resources.geometries.get(
+        frame.draw.target,
+        frame.draw.corners,
+        width,
+        height,
+      );
       if (geometry === undefined) continue;
       program.setSurface(geometry);
-      const maskTexture = resources.masks.get(frame.draw, width, height);
+      const maskTexture = resources.masks.get(
+        { ...frame.draw, corners: frame.draw.surfaceCorners },
+        width,
+        height,
+      );
       if (frame.kind === "canvas")
         this.#drawTexture(resources, frame.draw, frame.texture, maskTexture);
       else if (frame.buffer !== undefined)
@@ -270,7 +279,12 @@ class WebGLCompositor implements Compositor {
       program.use();
     }
     for (const draw of plan.draws) {
-      const geometry = resources.geometries.get(draw, width, height);
+      const geometry = resources.geometries.get(
+        draw.surface.id,
+        draw.corners,
+        width,
+        height,
+      );
       if (geometry === undefined) continue;
       program.setSurface(geometry);
       const maskTexture = resources.masks.get(draw, width, height);
@@ -368,6 +382,7 @@ class WebGLCompositor implements Compositor {
       opacity: layer.opacity,
       homography,
       maskTexture,
+      maskRect: maskRectOf(frame.draw),
     });
     if (layer.blendMode === "additive")
       gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
@@ -384,7 +399,7 @@ class WebGLCompositor implements Compositor {
     const { gl, program } = resources;
     const { uniforms } = program;
     const { layer } = draw;
-    program.setMask(maskTexture);
+    program.setMask(maskTexture, maskRectOf(draw));
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.uniform1i(uniforms.mode, MODE.layer);
@@ -395,4 +410,10 @@ class WebGLCompositor implements Compositor {
     if (layer.blendMode === "additive")
       gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   }
+}
+
+/** The Target's rectangle as the shaders take it: x, y, width, height. */
+function maskRectOf(draw: LayerDraw): Rect {
+  const { rect } = draw;
+  return [rect.x, rect.y, rect.width, rect.height];
 }

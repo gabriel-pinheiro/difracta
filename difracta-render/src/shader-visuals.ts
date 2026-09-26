@@ -14,6 +14,7 @@ import type { ShaderVisual } from "./sdk/shader-visual.ts";
 import type { ShaderBuffer } from "./shader-buffers.ts";
 import type { Uniforms } from "./sdk/uniforms.ts";
 import { EDGE_COVERAGE_SOURCE, VERTEX_SOURCE } from "./shaders.ts";
+import { WHOLE, type Rect } from "./surface-program.ts";
 
 /** One shader Layer to draw this frame, with everything its program needs. */
 export interface ShaderDrawInput {
@@ -23,14 +24,16 @@ export interface ShaderDrawInput {
   readonly uniforms: Uniforms;
   /** The Media handles the instance samples, bound as `u_<name>` with `u_<name>_size`. */
   readonly textures: Textures;
-  /** The Paths the Visual declares, by key, in Surface Space. */
+  /** The Paths the Visual declares, by key, in the Target's space. */
   readonly paths: PathShapes;
-  /** The Surface's size in frame pixels, what `u_resolution` reports. */
+  /** The Target's size in frame pixels, what `u_resolution` reports. */
   readonly width: number;
   readonly height: number;
   readonly opacity: number;
   readonly homography: Float32Array;
   readonly maskTexture: WebGLTexture | undefined;
+  /** The Target inside Surface Space, which the Mask texture covers. */
+  readonly maskRect: Rect;
 }
 
 /** What a draw into a Layer's buffer needs; the buffer decides the rest. */
@@ -49,6 +52,7 @@ const BUFFER_HOMOGRAPHY = new Float32Array([1, 0, 0, 0, -1, 0, 0, 1, 1]);
 interface ProgramEntry {
   readonly program: WebGLProgram;
   readonly homography: WebGLUniformLocation;
+  readonly maskRect: WebGLUniformLocation;
   readonly rect: WebGLUniformLocation;
   readonly maskEnabled: WebGLUniformLocation;
   readonly opacity: WebGLUniformLocation;
@@ -62,6 +66,7 @@ precision highp float;
 precision highp int;
 uniform sampler2D u_mask;
 uniform int u_mask_enabled;
+uniform vec4 u_mask_rect;
 uniform float u_opacity;
 uniform vec2 u_resolution;
 uniform vec2 u_texel;
@@ -78,11 +83,14 @@ float hash2(vec2 value) {
 }
 ${EDGE_COVERAGE_SOURCE}`;
 
-// The Surface's edge fades the Visual out like the Masks cut it; the Mask
-// texture clamps past the edge, so the coverage alone decides there.
+// The Target's edge fades the Visual out like the Masks cut it; the Mask
+// texture clamps past the edge, so the coverage alone decides there. The
+// Mask is in Surface Space, sampled through the Target's rectangle.
 const MAIN = `
 void main() {
-  float mask = u_mask_enabled == 1 ? texture(u_mask, v_uv).a : 1.0;
+  float mask = u_mask_enabled == 1
+    ? texture(u_mask, u_mask_rect.xy + v_uv * u_mask_rect.zw).a
+    : 1.0;
   vec4 color = clamp(render_visual(v_uv), 0.0, 1.0);
   color.rgb *= color.a;
   o_color = color * u_opacity * mask * edgeCoverage(v_uv);
@@ -151,6 +159,7 @@ export class ShaderVisualPrograms {
         opacity: 1,
         homography: BUFFER_HOMOGRAPHY,
         maskTexture: undefined,
+        maskRect: WHOLE,
       },
       this.#unit,
     );
@@ -166,6 +175,7 @@ export class ShaderVisualPrograms {
     gl.uniform1i(entry.maskEnabled, input.maskTexture === undefined ? 0 : 1);
     gl.uniformMatrix3fv(entry.homography, false, input.homography);
     gl.uniform4f(entry.rect, 0, 0, 1, 1);
+    gl.uniform4f(entry.maskRect, ...input.maskRect);
     gl.uniform1f(entry.opacity, input.opacity);
     gl.uniform2f(entry.resolution, input.width, input.height);
     gl.uniform2f(entry.texel, 1 / input.width, 1 / input.height);
@@ -222,6 +232,7 @@ export class ShaderVisualPrograms {
         program,
         homography: uniform(gl, program, "u_homography"),
         rect: uniform(gl, program, "u_rect"),
+        maskRect: uniform(gl, program, "u_mask_rect"),
         maskEnabled: uniform(gl, program, "u_mask_enabled"),
         opacity: uniform(gl, program, "u_opacity"),
         resolution: gl.getUniformLocation(program, "u_resolution"),

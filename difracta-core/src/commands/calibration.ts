@@ -1,19 +1,24 @@
 import { z } from "zod";
 
 import { accepted, defineCommand, rejected } from "../command/command.ts";
-import { CalibrationSchema, type Calibration } from "../document/document.ts";
+import {
+  CalibrationSchema,
+  REGION_CORNERS,
+  type Calibration,
+  type RegionCorner,
+} from "../document/document.ts";
 
 /**
  * Enters or changes Calibration Mode with the whole state at once: the
- * Surface, Mask or Path being aligned, the highlighted corner or point, the
- * view.
+ * Surface, Mask, Path or Region being aligned, the highlighted corner or
+ * point, the view.
  * Performance kind: replicated to the Output at once, never in undo history.
  */
 export const calibrationSet = defineCommand({
   name: "calibration.set",
   kind: "performance",
   description:
-    "Show a Surface, or a Mask or Path of it, as a calibration pattern on its Output.",
+    "Show a Surface, or a Mask, Path or Region of it, as a calibration pattern on its Output.",
   payload: CalibrationSchema,
   apply({ document, payload }) {
     const surface = document.surfaces[payload.surfaceId];
@@ -43,6 +48,22 @@ export const calibrationSet = defineCommand({
       if (payload.point !== null && payload.point >= path.points.length)
         return rejected(`Path “${path.name}” has no point ${payload.point}.`);
     }
+    if (payload.regionId !== null) {
+      if (payload.maskId !== null || payload.pathId !== null)
+        return rejected(
+          "Calibration aligns one Mask, Path or Region at a time.",
+        );
+      const region = document.regions[payload.regionId];
+      if (region?.surfaceId !== surface.id)
+        return rejected(
+          `Region “${payload.regionId}” is not a Region of “${surface.name}”.`,
+        );
+      if (
+        payload.corner !== null &&
+        !REGION_CORNERS.includes(payload.corner as RegionCorner)
+      )
+        return rejected(`A Region has no ${payload.corner} corner.`);
+    }
     const current = document.operational.calibration;
     if (current !== null && sameCalibration(current, payload))
       return accepted([]);
@@ -70,6 +91,7 @@ function sameCalibration(a: Calibration, b: Calibration): boolean {
     a.surfaceId === b.surfaceId &&
     a.maskId === b.maskId &&
     a.pathId === b.pathId &&
+    a.regionId === b.regionId &&
     a.corner === b.corner &&
     a.point === b.point &&
     a.view === b.view &&

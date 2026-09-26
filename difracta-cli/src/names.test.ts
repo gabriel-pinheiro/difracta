@@ -22,6 +22,19 @@ function stage(): Document {
   for (const [name, payload] of [
     ["output.create", { id: "out_tv", name: "TV" }],
     ["surface.create", { id: "sur_wall", name: "Wall" }],
+    ["surface.create", { id: "sur_floor", name: "Floor" }],
+    [
+      "region.create",
+      { id: "reg_north", surfaceId: "sur_wall", name: "North" },
+    ],
+    [
+      "region.create",
+      { id: "reg_wall_s", surfaceId: "sur_wall", name: "South" },
+    ],
+    [
+      "region.create",
+      { id: "reg_floor_s", surfaceId: "sur_floor", name: "South" },
+    ],
     ["scene.create", { id: "sc_live", name: "Live" }],
     ["scene.create", { id: "sc_reh", name: "Rehearsal" }],
     [
@@ -173,6 +186,33 @@ describe("resolvePayloadNames", () => {
         output: "TV",
       }),
     ).toEqual({ surfaceId: "sur_wall", output: "out_tv" });
+    // A Target may be a Region: by id, by Surface/Region, or by a bare name only one Region has.
+    const target = (text: string) =>
+      (
+        resolvePayloadNames(document, "layer.update", {
+          layerId: "Looks",
+          target: text,
+        }) as { target: string }
+      ).target;
+    expect(target("reg_north")).toBe("reg_north");
+    expect(target("wall/north")).toBe("reg_north");
+    expect(target("Floor/South")).toBe("reg_floor_s");
+    expect(target("North")).toBe("reg_north");
+    expect(() => target("South")).toThrow(/matches 2 Regions/);
+    expect(() => target("Wall/East")).toThrow(/No Region of Surface “Wall”/);
+    expect(() => target("Ceiling")).toThrow(/No Surface or Region/);
+    expect(
+      resolvePayloadNames(document, "region.rename", {
+        regionId: "Wall/South",
+        name: "S",
+      }),
+    ).toEqual({ regionId: "reg_wall_s", name: "S" });
+    expect(() =>
+      resolvePayloadNames(document, "region.rename", {
+        regionId: "South",
+        name: "S",
+      }),
+    ).toThrow(/matches 2 Regions/);
     expect(
       resolvePayloadNames(document, "layer.group", {
         layerIds: ["Looks", "lay_1"],

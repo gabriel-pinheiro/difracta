@@ -57,6 +57,7 @@ function sampleFlashMatrix(
         opacity: 1,
         homography: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
         maskTexture: undefined,
+        maskRect: [0, 0, 1, 1],
       });
       const failure = programs.failure(flashMatrix.id);
       if (failure !== undefined) throw new Error(failure);

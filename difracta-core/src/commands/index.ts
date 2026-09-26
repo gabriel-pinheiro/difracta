@@ -65,6 +65,10 @@ import {
 import { pathRemove } from "./path.remove.ts";
 import { pathRename } from "./path.rename.ts";
 import { pathUpdate } from "./path.update.ts";
+import { regionCornerNudge, regionCornerSet } from "./region.corner.ts";
+import { regionCreate } from "./region.create.ts";
+import { regionRemove } from "./region.remove.ts";
+import { regionRename } from "./region.rename.ts";
 import { outputRemove } from "./output.remove.ts";
 import { outputRename } from "./output.rename.ts";
 import { outputUpdate } from "./output.update.ts";
@@ -94,6 +98,11 @@ export const builtInCommands: readonly CommandDefinition<never>[] = [
   surfaceCornerNudge,
   surfaceSize,
   surfaceRemove,
+  regionCreate,
+  regionRename,
+  regionCornerSet,
+  regionCornerNudge,
+  regionRemove,
   maskCreate,
   maskRename,
   maskUpdate,

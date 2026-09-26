@@ -8,10 +8,10 @@ import {
   type Mask,
   type Path,
   type Output,
+  type Region,
   type Surface,
   type Table,
 } from "@difracta/core";
-import { Spline, SquareDashed } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { AddressRow } from "@/inspector/fields/address-row";
@@ -30,6 +30,7 @@ import {
   type SessionTable,
 } from "@/entities/output/output-live";
 
+import { childBadge, childKinds } from "./child-rows";
 import { QuadEditor, quadPoints } from "./quad-editor";
 import { SizeField } from "./size-field";
 
@@ -48,6 +49,7 @@ export function SurfaceInspector({
   const { setExpanded } = useExpansion();
   const surface = useDocumentPath<Surface>(view, ["surfaces", id]);
   const outputs = useDocumentPath<Table<Output>>(view, ["outputs"]) ?? {};
+  const regions = useDocumentPath<Table<Region>>(view, ["regions"]) ?? {};
   const masks = useDocumentPath<Table<Mask>>(view, ["masks"]) ?? {};
   const paths = useDocumentPath<Table<Path>>(view, ["paths"]) ?? {};
 
@@ -55,7 +57,7 @@ export function SurfaceInspector({
     if (surface === undefined) select({ kind: "installation" });
   }, [surface, select]);
   if (surface === undefined) return null;
-  const children = surfaceChildren({ masks, paths }, id);
+  const children = surfaceChildren({ regions, masks, paths }, id);
 
   return (
     <>
@@ -99,47 +101,42 @@ export function SurfaceInspector({
         )}
         <Rendering view={view} surface={surface} />
         <div className="grid grid-cols-[minmax(0,1fr)] gap-1">
-          <span className="text-xs text-muted-foreground">Masks and Paths</span>
+          <span className="text-xs text-muted-foreground">
+            Regions, Masks and Paths
+          </span>
           {children.length === 0 ? (
             <p className="text-[0.6875rem]/relaxed text-muted-foreground">
-              No Masks, so the whole Surface is lit, and no Paths. Add either
-              from the Surface's row in the navigator.
+              No Regions to target parts of it, no Masks, so the whole Surface
+              is lit, and no Paths. Add any from the Surface's row in the
+              navigator.
             </p>
           ) : (
             <ul className="grid grid-cols-[minmax(0,1fr)] gap-px">
-              {children.map(({ table, entity }) => (
-                <li key={entity.id}>
-                  <button
-                    type="button"
-                    className="flex h-6 w-full items-center gap-1.5 rounded-sm px-1.5 text-left text-xs hover:bg-accent hover:text-accent-foreground"
-                    onClick={() => {
-                      // Selecting from here reveals the row in the navigator.
-                      setExpanded("surface", id, true);
-                      select({
-                        kind: table === "masks" ? "mask" : "path",
-                        id: entity.id,
-                      });
-                    }}
-                  >
-                    {table === "masks" ? (
-                      <SquareDashed className="size-3.5 shrink-0 text-muted-foreground" />
-                    ) : (
-                      <Spline className="size-3.5 shrink-0 text-muted-foreground" />
-                    )}
-                    <span className="truncate">{entity.name}</span>
-                    {table === "masks" && entity.mode === "exclude" && (
-                      <span className="ml-auto text-[0.625rem] text-muted-foreground">
-                        exclude
-                      </span>
-                    )}
-                    {table === "paths" && !entity.closed && (
-                      <span className="ml-auto text-[0.625rem] text-muted-foreground">
-                        open
-                      </span>
-                    )}
-                  </button>
-                </li>
-              ))}
+              {children.map((child) => {
+                const { kind, icon: Icon } = childKinds[child.table];
+                const badge = childBadge(child);
+                return (
+                  <li key={child.entity.id}>
+                    <button
+                      type="button"
+                      className="flex h-6 w-full items-center gap-1.5 rounded-sm px-1.5 text-left text-xs hover:bg-accent hover:text-accent-foreground"
+                      onClick={() => {
+                        // Selecting from here reveals the row in the navigator.
+                        setExpanded("surface", id, true);
+                        select({ kind, id: child.entity.id });
+                      }}
+                    >
+                      <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+                      <span className="truncate">{child.entity.name}</span>
+                      {badge !== undefined && (
+                        <span className="ml-auto text-[0.625rem] text-muted-foreground">
+                          {badge}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

@@ -1,7 +1,6 @@
 import type { Quad } from "@difracta/core";
 
 import { homography, invertHomography, project } from "./homography.ts";
-import type { SurfaceDraw } from "./plan.ts";
 
 /**
  * How far past the Surface's edge its quad is drawn, in frame pixels. The
@@ -102,38 +101,51 @@ interface Entry {
 }
 
 /**
- * One geometry per Surface, kept while the mapping's corners object and
- * the frame size stay the same: the corners are immutable per document
- * revision, so identity is the comparison. Undefined for a mapping that
- * cannot be projected (see `homography`).
+ * One geometry per Target (a Surface, or a Region of one), kept while its
+ * corners and the frame size stay the same. Corners are compared by value:
+ * a Surface's are one object per document revision, a Region's are
+ * computed from its bounds and the mapping, and eight numbers cost less
+ * than a homography. Undefined for corners that cannot be projected (see
+ * `homography`).
  */
 export class SurfaceGeometries {
   readonly #entries = new Map<string, Entry>();
 
   get(
-    draw: Pick<SurfaceDraw, "surface" | "corners">,
+    targetId: string,
+    corners: Quad,
     width: number,
     height: number,
   ): SurfaceGeometry | undefined {
-    const entry = this.#entries.get(draw.surface.id);
+    const entry = this.#entries.get(targetId);
     if (
-      entry?.corners === draw.corners &&
+      entry !== undefined &&
+      sameQuad(entry.corners, corners) &&
       entry.width === width &&
       entry.height === height
     )
       return entry.geometry;
-    const matrix = homography(draw.corners);
+    const matrix = homography(corners);
     if (matrix === undefined) {
-      this.#entries.delete(draw.surface.id);
+      this.#entries.delete(targetId);
       return undefined;
     }
     const geometry = { matrix, quad: expandedQuad(matrix, width, height) };
-    this.#entries.set(draw.surface.id, {
-      corners: draw.corners,
-      width,
-      height,
-      geometry,
-    });
+    this.#entries.set(targetId, { corners, width, height, geometry });
     return geometry;
   }
+}
+
+function sameQuad(a: Quad, b: Quad): boolean {
+  if (a === b) return true;
+  return (
+    a.topLeft.x === b.topLeft.x &&
+    a.topLeft.y === b.topLeft.y &&
+    a.topRight.x === b.topRight.x &&
+    a.topRight.y === b.topRight.y &&
+    a.bottomRight.x === b.bottomRight.x &&
+    a.bottomRight.y === b.bottomRight.y &&
+    a.bottomLeft.x === b.bottomLeft.x &&
+    a.bottomLeft.y === b.bottomLeft.y
+  );
 }

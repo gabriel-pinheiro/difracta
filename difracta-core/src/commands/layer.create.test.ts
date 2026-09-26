@@ -111,7 +111,9 @@ describe("layer.create Target", () => {
     });
     expect(missing).toMatchObject({ ok: false });
     if (!missing.ok)
-      expect(missing.error).toBe("Surface “nowhere” does not exist.");
+      expect(missing.error).toBe(
+        "Target “nowhere” does not exist as a Surface or a Region.",
+      );
     const onFilter = executeCommand(registry, document, "layer.create", {
       sceneId: "s",
       kind: "filter",

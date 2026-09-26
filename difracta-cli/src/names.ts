@@ -19,6 +19,7 @@ import {
 const NOUNS: Record<TableName, string> = {
   outputs: "Output",
   surfaces: "Surface",
+  regions: "Region",
   masks: "Mask",
   paths: "Path",
   media: "Media item",
@@ -43,7 +44,7 @@ const KEY_TABLES: Readonly<Record<string, TableName>> = {
   outputId: "outputs",
   output: "outputs",
   surfaceId: "surfaces",
-  target: "surfaces",
+  regionId: "regions",
   maskId: "masks",
   pathId: "paths",
   mediaId: "media",
@@ -82,7 +83,7 @@ function whereabouts(
     const scene = document.scenes[String(record.sceneId)];
     return scene === undefined ? undefined : `in Scene ${scene.name}`;
   }
-  if (table === "masks" || table === "paths") {
+  if (table === "regions" || table === "masks" || table === "paths") {
     const surface = document.surfaces[String(record.surfaceId)];
     return surface === undefined ? undefined : `on Surface ${surface.name}`;
   }
@@ -118,6 +119,56 @@ export function findId(
   throw new Error(
     `“${text}” matches ${matches.length} ${NOUNS[table]}s: ${candidates.join(", ")}`,
   );
+}
+
+/**
+ * A Region written `Surface/Region`, since its name is unique only on its
+ * Surface: the Region's id, or undefined when `text` has no slash.
+ */
+function findRegionOnSurface(
+  document: Document,
+  text: string,
+): string | undefined {
+  const slash = text.indexOf("/");
+  if (slash <= 0) return undefined;
+  const surfaceText = text.slice(0, slash);
+  const regionText = text.slice(slash + 1);
+  const surfaceId = resolveId(document, "surfaces", surfaceText);
+  const region = Object.values(document.regions).find(
+    (entry) =>
+      entry.surfaceId === surfaceId && sameName(entry.name, regionText),
+  );
+  if (region === undefined)
+    throw new Error(
+      `No Region of Surface “${surfaceText}” is called or identified “${regionText}”.`,
+    );
+  return region.id;
+}
+
+/** A Region by id, by `Surface/Region`, or by a bare name only one Region has. */
+export function resolveRegionName(document: Document, text: string): string {
+  if (text in document.regions) return text;
+  return (
+    findRegionOnSurface(document, text) ?? resolveId(document, "regions", text)
+  );
+}
+
+/**
+ * A Layer's Target: a Surface or a Region, by id or name. A Region may be
+ * written `Surface/Region`; a bare name is a Surface first, then a Region
+ * when one Region in the Installation has it.
+ */
+export function resolveTargetName(document: Document, text: string): string {
+  if (text in document.surfaces || text in document.regions) return text;
+  const onSurface = findRegionOnSurface(document, text);
+  if (onSurface !== undefined) return onSurface;
+  const id =
+    findId(document, "surfaces", text) ?? findId(document, "regions", text);
+  if (id === undefined)
+    throw new Error(
+      `No Surface or Region is called or identified “${text}”; a Region may be written Surface/Region.`,
+    );
+  return id;
 }
 
 /** Like `findId`, but a name nothing carries is an error too. */
@@ -163,7 +214,8 @@ export function resolvePathNames(document: Document, path: string): string {
 
 /**
  * A command payload with every entity reference turned into an id: the
- * `…Id` keys and `output`/`target`; `parentId` and `after` for the table the
+ * `…Id` keys and `output`; `target` as a Surface or a Region
+ * (`resolveTargetName`); `parentId` and `after` for the table the
  * command name says (or the payload's own `table`, as `entity.move` has);
  * `address`/`addresses`; lists such as `layerIds`; and objects inside arrays
  * (Macro actions) the same way.
@@ -212,6 +264,10 @@ function resolveField(
   key: string,
   value: unknown,
 ): unknown {
+  if (key === "target" && typeof value === "string")
+    return resolveTargetName(document, value);
+  if (key === "regionId" && typeof value === "string")
+    return resolveRegionName(document, value);
   const table = fieldTable(prefix, siblings, key);
   if (table !== undefined && typeof value === "string")
     return resolveId(document, table, value);

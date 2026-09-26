@@ -11,6 +11,7 @@ import {
   type MaskId,
   type MediaId,
   type PathId,
+  type RegionId,
   type SceneId,
   type OutputId,
   type SurfaceId,
@@ -145,6 +146,53 @@ export const MaskSchema = z
 export type Mask = Entity<typeof MaskSchema, MaskId>;
 export type MaskMode = Mask["mode"];
 
+/** The smallest side a Region may have, as a fraction of Surface Space. */
+export const REGION_MIN_SIDE = 0.01;
+/** Slack under the minimum side for float noise in rounded coordinates. */
+const SIDE_TOLERANCE = 1e-9;
+
+/** A Region's rectangle: its top-left and bottom-right corners in Surface Space. */
+export const RegionBoundsSchema = z
+  .object({ topLeft: PointSchema, bottomRight: PointSchema })
+  .strict()
+  .refine(
+    ({ topLeft, bottomRight }) =>
+      topLeft.x >= 0 &&
+      topLeft.y >= 0 &&
+      bottomRight.x <= 1 &&
+      bottomRight.y <= 1 &&
+      bottomRight.x - topLeft.x >= REGION_MIN_SIDE - SIDE_TOLERANCE &&
+      bottomRight.y - topLeft.y >= REGION_MIN_SIDE - SIDE_TOLERANCE,
+    {
+      message: `Region bounds stay inside Surface Space with sides of at least ${String(REGION_MIN_SIDE)}.`,
+    },
+  );
+export type RegionBounds = z.infer<typeof RegionBoundsSchema>;
+
+/** The corners a Region is edited by. */
+export const REGION_CORNERS = ["topLeft", "bottomRight"] as const;
+export const RegionCornerSchema = z.enum(REGION_CORNERS);
+export type RegionCorner = z.infer<typeof RegionCornerSchema>;
+
+/**
+ * An axis-aligned rectangle of Surface Space that Layers may target instead
+ * of the whole Surface. It inherits the Surface's mapping and Masks, so
+ * recalibrating the Surface moves every Region with it; it presents the
+ * unit square (Region Space) to the Visual, like a Surface does. Names are
+ * unique among the Regions of one Surface.
+ */
+export const RegionSchema = z
+  .object({
+    id: z.string().min(1),
+    name: EntityName,
+    surfaceId: z.string().min(1),
+    bounds: RegionBoundsSchema,
+    /** Position among the Regions, Masks and Paths of the same Surface, which share one order. */
+    order: z.string().min(1).default(DEFAULT_ORDER_KEY),
+  })
+  .strict();
+export type Region = Entity<typeof RegionSchema, RegionId>;
+
 export const PATH_POINTS = { min: 2, max: 16 } as const;
 
 /**
@@ -231,7 +279,12 @@ export const CalibrationSchema = z
     maskId: z.string().min(1).nullable(),
     /** Path being aligned, with the Masks applied; exclusive with `maskId`. */
     pathId: z.string().min(1).nullable(),
-    /** Corner, Mask point or Path point highlighted on the Output. */
+    /** Region being aligned, with the Masks applied; exclusive with both. */
+    regionId: z.string().min(1).nullable().default(null),
+    /**
+     * Corner, Mask point or Path point highlighted on the Output; while a
+     * Region is aligned, one of its two corners.
+     */
     corner: CornerNameSchema.nullable(),
     point: z.number().int().min(0).nullable(),
     /** What the other Surfaces of the Output show meanwhile. */
@@ -479,6 +532,7 @@ export const DocumentSchema = z
     installation: InstallationSchema,
     outputs: z.record(z.string(), OutputSchema),
     surfaces: z.record(z.string(), SurfaceSchema),
+    regions: z.record(z.string(), RegionSchema),
     masks: z.record(z.string(), MaskSchema),
     paths: z.record(z.string(), PathSchema),
     media: z.record(z.string(), MediaSchema),
@@ -495,6 +549,7 @@ export interface Document {
   readonly installation: Installation;
   readonly outputs: Table<Output>;
   readonly surfaces: Table<Surface>;
+  readonly regions: Table<Region>;
   readonly masks: Table<Mask>;
   readonly paths: Table<Path>;
   readonly media: Table<Media>;
@@ -510,6 +565,7 @@ export interface Document {
 export const TABLE_SCHEMAS = {
   outputs: OutputSchema,
   surfaces: SurfaceSchema,
+  regions: RegionSchema,
   masks: MaskSchema,
   paths: PathSchema,
   media: MediaSchema,
@@ -525,6 +581,7 @@ export type TableName = keyof typeof TABLE_SCHEMAS;
 export const ORDERED_TABLES = [
   "outputs",
   "surfaces",
+  "regions",
   "masks",
   "paths",
   "media",
@@ -542,6 +599,7 @@ export type OrderedTableName = (typeof ORDERED_TABLES)[number];
 export const PARENT_FIELDS: Partial<
   Record<OrderedTableName, readonly string[]>
 > = {
+  regions: ["surfaceId"],
   masks: ["surfaceId"],
   paths: ["surfaceId"],
   layers: ["sceneId", "parentId"],
@@ -580,6 +638,7 @@ export function emptyDocument(name: string): Document {
     installation: { id: generateId("installation"), name, activeScene: null },
     outputs: {},
     surfaces: {},
+    regions: {},
     masks: {},
     paths: {},
     media: {},

@@ -48,8 +48,9 @@ float edgeCoverage(vec2 uv) {
 
 /**
  * Modes: flat colour (fills and lines), the calibration pattern, a label
- * texture, a ring marker, and a Layer's canvas sampled across Surface Space
- * with the Layer's opacity in `u_color.a`. Output is premultiplied. The
+ * texture, a ring marker, and a Layer's canvas sampled across the Target's
+ * space (Surface Space, or a Region's) with the Layer's opacity in
+ * `u_color.a`. Output is premultiplied. The
  * pattern is computed from Surface Space coordinates and their screen-space
  * derivatives, so its lines stay about one pixel wide at any projection and
  * cost no geometry. `u_edge` is 1 for a draw of the whole Surface, whose
@@ -64,6 +65,7 @@ uniform int u_mode;
 uniform vec4 u_color;
 uniform sampler2D u_mask;
 uniform int u_mask_enabled;
+uniform vec4 u_mask_rect;
 uniform int u_edge;
 uniform sampler2D u_texture;
 uniform float u_divisions;
@@ -104,7 +106,11 @@ vec3 pattern(vec2 uv) {
 void main() {
   // Past the edge the Mask texture clamps to its border texel and the
   // coverage alone decides, so no Mask lights anything outside its Surface.
-  float mask = u_mask_enabled == 1 ? texture(u_mask, v_uv).a : 1.0;
+  // The Mask is in Surface Space; a Region's draw samples it through its
+  // rectangle, u_mask_rect, which is the whole square for a Surface.
+  float mask = u_mask_enabled == 1
+    ? texture(u_mask, u_mask_rect.xy + v_uv * u_mask_rect.zw).a
+    : 1.0;
   mask *= u_edge == 1 ? edgeCoverage(v_uv) : 1.0;
   if (u_mode == 0) {
     o_color = vec4(u_color.rgb * u_color.a, u_color.a) * mask;

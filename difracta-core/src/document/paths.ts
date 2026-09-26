@@ -1,18 +1,26 @@
 import type { Catalog } from "../catalog/catalog.ts";
-import type { Document, Mask, Path, VisualLayer } from "./document.ts";
+import type { Document, Mask, Path, Region, VisualLayer } from "./document.ts";
 import { compareOrdered } from "./order.ts";
+import { targetSurfaceId } from "./targets.ts";
 
-/** One of a Surface's children in the navigator: Masks and Paths share one order. */
+/** One of a Surface's children in the navigator: Regions, Masks and Paths share one order. */
 export type SurfaceChild =
+  | { readonly table: "regions"; readonly entity: Region }
   | { readonly table: "masks"; readonly entity: Mask }
   | { readonly table: "paths"; readonly entity: Path };
 
-/** The Masks and Paths of a Surface together, in their shared display order. */
+/** The tables a Surface's children live in. */
+export type SurfaceChildTable = SurfaceChild["table"];
+
+/** The Regions, Masks and Paths of a Surface together, in their shared display order. */
 export function surfaceChildren(
-  document: Pick<Document, "masks" | "paths">,
+  document: Pick<Document, "regions" | "masks" | "paths">,
   surfaceId: string,
 ): readonly SurfaceChild[] {
   const children: SurfaceChild[] = [];
+  for (const entity of Object.values(document.regions))
+    if (entity.surfaceId === surfaceId)
+      children.push({ table: "regions", entity });
   for (const entity of Object.values(document.masks))
     if (entity.surfaceId === surfaceId)
       children.push({ table: "masks", entity });
@@ -24,34 +32,43 @@ export function surfaceChildren(
 
 /** The Paths of a Surface in display order. */
 export function pathsOf(
-  document: Pick<Document, "masks" | "paths">,
+  document: Pick<Document, "paths">,
   surfaceId: string,
 ): readonly Path[] {
-  return surfaceChildren(document, surfaceId).flatMap((child) =>
-    child.table === "paths" ? [child.entity] : [],
-  );
+  return Object.values(document.paths)
+    .filter((path) => path.surfaceId === surfaceId)
+    .sort(compareOrdered);
 }
+
+/** What the Path helpers read: Paths, and the tables a Target resolves through. */
+export type PathContext = Pick<Document, "paths" | "surfaces" | "regions">;
 
 /**
  * The bindings a Visual Layer keeps for a Visual and a Target: one per Path
- * the Visual declares, kept only while its Path is on the Target's Surface.
- * Anything else is dropped rather than refused, so picking a Visual or a
- * Target always works and the Layer says what it still needs.
+ * the Visual declares, kept only while its Path is on the Target's Surface,
+ * so a move between a Surface and its Regions keeps them. Anything else is
+ * dropped rather than refused, so picking a Visual or a Target always works
+ * and the Layer says what it still needs.
  */
 export function fitPaths(
-  document: Pick<Document, "paths">,
+  document: PathContext,
   catalog: Catalog,
   visualId: string | null,
   target: string | null,
   current: Readonly<Record<string, string>>,
 ): Readonly<Record<string, string>> {
   const definition = visualId === null ? undefined : catalog.visual(visualId);
+  const surfaceId = targetSurfaceId(document, target);
   const kept: Record<string, string> = {};
   for (const requirement of definition?.paths ?? []) {
     const pathId = current[requirement.key];
     if (pathId === undefined) continue;
     const path = document.paths[pathId];
-    if (path !== undefined && target !== null && path.surfaceId === target)
+    if (
+      path !== undefined &&
+      surfaceId !== null &&
+      path.surfaceId === surfaceId
+    )
       kept[requirement.key] = pathId;
   }
   return kept;
@@ -59,7 +76,7 @@ export function fitPaths(
 
 /** The keys a Layer's Visual declares that have no usable Path bound. */
 export function unboundPaths(
-  document: Pick<Document, "paths">,
+  document: PathContext,
   catalog: Catalog,
   layer: VisualLayer,
 ): readonly string[] {
@@ -82,17 +99,18 @@ export function unboundPaths(
  * without every one of them.
  */
 export function resolveLayerPaths(
-  document: Pick<Document, "paths">,
+  document: PathContext,
   catalog: Catalog,
   layer: VisualLayer,
 ): Readonly<Record<string, Path>> | undefined {
   if (layer.visual === null) return undefined;
   const requirements = catalog.visual(layer.visual)?.paths ?? [];
+  const surfaceId = targetSurfaceId(document, layer.target);
   const resolved: Record<string, Path> = {};
   for (const requirement of requirements) {
     const pathId = layer.paths[requirement.key];
     const path = pathId === undefined ? undefined : document.paths[pathId];
-    if (path?.surfaceId !== layer.target) return undefined;
+    if (surfaceId === null || path?.surfaceId !== surfaceId) return undefined;
     resolved[requirement.key] = path;
   }
   return resolved;

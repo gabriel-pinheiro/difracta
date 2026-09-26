@@ -335,6 +335,7 @@ describe("DocumentStore", () => {
         installation: { id: "i" as never, name: "N", activeScene: null },
         outputs: {},
         surfaces: {},
+        regions: {},
         masks: {},
         paths: {},
         media: {},

@@ -8,6 +8,7 @@ export type Id<TKind extends string> = string & { readonly __kind: TKind };
 export type InstallationId = Id<"installation">;
 export type OutputId = Id<"output">;
 export type SurfaceId = Id<"surface">;
+export type RegionId = Id<"region">;
 export type MaskId = Id<"mask">;
 export type PathId = Id<"path">;
 export type SceneId = Id<"scene">;

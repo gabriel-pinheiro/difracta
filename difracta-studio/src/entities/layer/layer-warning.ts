@@ -1,4 +1,4 @@
-import type { Definition, Layer, Path, Table } from "@difracta/core";
+import type { Definition, Layer, Path, Region, Table } from "@difracta/core";
 
 /** What keeps a Layer from drawing, as a navigator warning. */
 export interface LayerWarning {
@@ -11,6 +11,8 @@ export interface LayerWarningContext {
   /** The Layer's Visual or Filter from the Catalog, undefined when unknown. */
   readonly definition: Definition | undefined;
   readonly paths: Table<Path>;
+  /** The Regions, so a Target that is one resolves to its Surface. */
+  readonly regions: Table<Region>;
 }
 
 /**
@@ -37,10 +39,12 @@ export function layerWarning(
       };
     const definition = context?.definition;
     if (definition?.kind === "visual" && context !== undefined) {
+      const surfaceId =
+        context.regions[layer.target]?.surfaceId ?? layer.target;
       const missing = (definition.paths ?? []).some((requirement) => {
         const pathId = layer.paths[requirement.key];
         const path = pathId === undefined ? undefined : context.paths[pathId];
-        return path?.surfaceId !== layer.target;
+        return path?.surfaceId !== surfaceId;
       });
       if (missing)
         return {

@@ -55,6 +55,7 @@ function stage(): Document {
     ],
     ["layer.visual", { layerId: "wash", visual: "solid" }],
     ["layer.update", { layerId: "wash", target: "sur", opacity: 0.5 }],
+    ["region.create", { id: "reg", surfaceId: "sur", name: "North" }],
     [
       "layer.create",
       { id: "looks", sceneId: "sc", kind: "group", name: "Looks" },
@@ -145,6 +146,17 @@ describe("sceneTree", () => {
       "  Filter “Blur”  blur  on (Group off)  (no Filter)  mix 25%",
       "Layer “Wash”  wash  on  solid  opacity 50% ← Energy  → Wall",
     ]);
+  });
+
+  it("names a Region Target under its Surface, as the CLI accepts it back", () => {
+    const result = executeCommand(registry, stage(), "layer.update", {
+      layerId: "wash",
+      target: "reg",
+    });
+    if (!result.ok) throw new Error(result.error);
+    const wash = sceneTree(result.document, "sc").find((n) => n.id === "wash");
+    expect(wash?.target).toEqual({ id: "reg", name: "Wall/North" });
+    expect(formatSceneTree([wash!])[0]).toContain("→ Wall/North");
   });
 
   it("names a Path the Visual follows that is unbound or off the Target", () => {

@@ -5,10 +5,17 @@ import {
   type Mask,
   type Output,
   type Path,
+  type Region,
   type Surface,
   type Table,
 } from "@difracta/core";
-import { Box, Spline, SquareDashed, Trash2 } from "lucide-react";
+import {
+  Box,
+  RectangleHorizontal,
+  Spline,
+  SquareDashed,
+  Trash2,
+} from "lucide-react";
 import { useState } from "react";
 
 import { NameDialog } from "@/components/name-dialog";
@@ -39,17 +46,18 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
   const { isExpanded, setExpanded } = useExpansion();
   const surfaces = useDocumentPath<Table<Surface>>(view, ["surfaces"]) ?? {};
   const outputs = useDocumentPath<Table<Output>>(view, ["outputs"]) ?? {};
+  const regions = useDocumentPath<Table<Region>>(view, ["regions"]) ?? {};
   const masks = useDocumentPath<Table<Mask>>(view, ["masks"]) ?? {};
   const paths = useDocumentPath<Table<Path>>(view, ["paths"]) ?? {};
   const [naming, setNaming] = useState<
     | { kind: "surface" }
-    | { kind: "mask" | "path"; surface: Surface }
+    | { kind: "region" | "mask" | "path"; surface: Surface }
     | undefined
   >(undefined);
   const ordered = orderedEntries(surfaces);
 
   function create(name: string): void {
-    if (naming?.kind === "mask" || naming?.kind === "path") {
+    if (naming !== undefined && naming.kind !== "surface") {
       const kind = naming.kind;
       const id = generateId(kind);
       const surfaceId = naming.surface.id;
@@ -64,16 +72,23 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
       select({ kind: "surface", id });
     });
   }
-  const maskCount = (surface: Surface): number =>
-    Object.values(masks).filter((mask) => mask.surfaceId === surface.id).length;
-  const pathCount = (surface: Surface): number =>
-    Object.values(paths).filter((path) => path.surfaceId === surface.id).length;
+  const count = (
+    table: Table<{ readonly id: string; readonly surfaceId: string }>,
+    surface: Surface,
+  ): number =>
+    Object.values(table).filter((entry) => entry.surfaceId === surface.id)
+      .length;
+  const regionCount = (surface: Surface): number => count(regions, surface);
+  const maskCount = (surface: Surface): number => count(masks, surface);
+  const pathCount = (surface: Surface): number => count(paths, surface);
+  const childCount = (surface: Surface): number =>
+    regionCount(surface) + maskCount(surface) + pathCount(surface);
 
   return (
     <>
       <NavigatorSection
         storageKey="surface"
-        holds={["surface", "mask", "path"]}
+        holds={["surface", "region", "mask", "path"]}
         label="Surfaces"
         empty={ordered.length === 0 ? "No Surfaces yet." : undefined}
         warnings={surfaceWarningCount(surfaces, outputs)}
@@ -108,6 +123,12 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
                       }
                       createItems={[
                         {
+                          label: "Region…",
+                          icon: RectangleHorizontal,
+                          onSelect: () =>
+                            setNaming({ kind: "region", surface }),
+                        },
+                        {
                           label: "Mask…",
                           icon: SquareDashed,
                           onSelect: () => setNaming({ kind: "mask", surface }),
@@ -133,6 +154,11 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
                   </ContextMenuTrigger>
                   <ContextMenuContent>
                     <ContextMenuItem
+                      onClick={() => setNaming({ kind: "region", surface })}
+                    >
+                      <RectangleHorizontal /> Add Region…
+                    </ContextMenuItem>
+                    <ContextMenuItem
                       onClick={() => setNaming({ kind: "mask", surface })}
                     >
                       <SquareDashed /> Add Mask…
@@ -152,9 +178,9 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
                   </ContextMenuContent>
                 </ContextMenu>
                 {expanded &&
-                  (maskCount(surface) + pathCount(surface) === 0 ? (
+                  (childCount(surface) === 0 ? (
                     <NavigatorEmptyRow depth={2}>
-                      No Masks or Paths yet.
+                      No Regions, Masks or Paths yet.
                     </NavigatorEmptyRow>
                   ) : (
                     <ChildRows view={view} surfaceId={surface.id} />
@@ -176,21 +202,29 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
                   submitLabel: "Create",
                   onSubmit: create,
                 }
-              : naming.kind === "mask"
+              : naming.kind === "region"
                 ? {
-                    title: `New Mask on ${naming.surface.name}`,
+                    title: `New Region on ${naming.surface.name}`,
                     label: "Name",
-                    initial: `Mask ${String(maskCount(naming.surface) + 1)}`,
+                    initial: `Region ${String(regionCount(naming.surface) + 1)}`,
                     submitLabel: "Create",
                     onSubmit: create,
                   }
-                : {
-                    title: `New Path on ${naming.surface.name}`,
-                    label: "Name",
-                    initial: `Path ${String(pathCount(naming.surface) + 1)}`,
-                    submitLabel: "Create",
-                    onSubmit: create,
-                  }
+                : naming.kind === "mask"
+                  ? {
+                      title: `New Mask on ${naming.surface.name}`,
+                      label: "Name",
+                      initial: `Mask ${String(maskCount(naming.surface) + 1)}`,
+                      submitLabel: "Create",
+                      onSubmit: create,
+                    }
+                  : {
+                      title: `New Path on ${naming.surface.name}`,
+                      label: "Name",
+                      initial: `Path ${String(pathCount(naming.surface) + 1)}`,
+                      submitLabel: "Create",
+                      onSubmit: create,
+                    }
         }
         onClose={() => setNaming(undefined)}
       />

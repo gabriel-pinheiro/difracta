@@ -19,15 +19,17 @@ const viewLabels: Record<CalibrationView, string> = {
 };
 
 /**
- * Enters and leaves Calibration Mode for one Surface, Mask or Path, and
- * picks what the Output's other Surfaces show meanwhile. While active, the corner or
- * point selected in the inspector is mirrored to the Output as it changes.
+ * Enters and leaves Calibration Mode for one Surface, Mask, Path or
+ * Region, and picks what the Output's other Surfaces show meanwhile. While
+ * active, the corner or point selected in the inspector is mirrored to the
+ * Output as it changes.
  */
 export function CalibrationControls({
   view,
   surfaceId,
   maskId,
   pathId = null,
+  regionId = null,
   corner,
   point,
   disabled = false,
@@ -36,13 +38,20 @@ export function CalibrationControls({
   readonly surfaceId: string;
   readonly maskId: string | null;
   readonly pathId?: string | null;
+  readonly regionId?: string | null;
   readonly corner: CornerName | null;
   readonly point: number | null;
   readonly disabled?: boolean;
 }) {
   const { calibration, set, exit } = useCalibration(view);
-  const active = calibrationFor(calibration, surfaceId, maskId, pathId);
-  const selection = { surfaceId, maskId, pathId, corner, point };
+  const active = calibrationFor(
+    calibration,
+    surfaceId,
+    maskId,
+    pathId,
+    regionId,
+  );
+  const selection = { surfaceId, maskId, pathId, regionId, corner, point };
 
   useEffect(() => {
     if (active === undefined) return;

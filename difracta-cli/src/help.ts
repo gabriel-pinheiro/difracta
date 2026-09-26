@@ -74,6 +74,14 @@ Working from a shell
              match ignoring case and must be unique in their table; an id
              always wins over a name. Replies and listings carry ids.
 
+  Regions    A Region is a rectangle of a Surface, in Surface Space, that a
+             Layer can target instead of the whole Surface; it follows the
+             Surface's calibration and Masks. run region.create
+             '{"surfaceId":"Wall","name":"North"}' makes one (centered, half
+             the Surface); region.corner.set / .nudge move its topLeft or
+             bottomRight corner. As a "target", write it Wall/North, or
+             North alone when no other Region has that name.
+
   Addresses  layer/<id|name>/enabled | opacity | blend (Visual Layers)
              layer/<id|name>/mix (Filter Layers)
              layer/<id|name>/param/<key>      layer/<id|name>/cue/<key>

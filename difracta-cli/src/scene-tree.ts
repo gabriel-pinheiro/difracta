@@ -1,11 +1,12 @@
 import {
-  type Catalog,
   childLayers,
   childrenOf,
   LAYER_LABELS,
   layerEffectivelyEnabled,
   linkAt,
   orderedEntries,
+  resolveTarget,
+  type Catalog,
   type Controller,
   type Document,
   type Layer,
@@ -90,8 +91,7 @@ function layerNode(
   };
   if (layer.kind === "filter")
     return { ...base, definition: layer.filter, level };
-  const surface =
-    layer.target === null ? undefined : document.surfaces[layer.target];
+  const target = resolveTarget(document, layer.target);
   const requirements =
     layer.visual === null || layer.target === null
       ? []
@@ -100,10 +100,18 @@ function layerNode(
     const pathId = layer.paths[requirement.key];
     if (pathId === undefined)
       return [{ key: requirement.key, reason: "unbound" }];
-    return document.paths[pathId]?.surfaceId === layer.target
+    return target !== undefined &&
+      document.paths[pathId]?.surfaceId === target.surface.id
       ? []
       : [{ key: requirement.key, reason: "not on the Target" }];
   });
+  // A Region is written under its Surface, as the CLI accepts it back.
+  const targetName =
+    target === undefined
+      ? undefined
+      : target.region === undefined
+        ? target.surface.name
+        : `${target.surface.name}/${target.region.name}`;
   return {
     ...base,
     definition: layer.visual,
@@ -111,7 +119,10 @@ function layerNode(
     target:
       layer.target === null
         ? null
-        : { id: layer.target, ...(surface ? { name: surface.name } : {}) },
+        : {
+            id: layer.target,
+            ...(targetName === undefined ? {} : { name: targetName }),
+          },
     ...(missingPaths.length === 0 ? {} : { missingPaths }),
   };
 }

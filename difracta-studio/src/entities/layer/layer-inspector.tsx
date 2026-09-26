@@ -13,6 +13,7 @@ import {
   type Layer,
   type Link,
   type Media,
+  type Region,
   type ResolvedAddress,
   type Surface,
   type Table,
@@ -67,6 +68,18 @@ export function LayerInspector({
   const { select } = useSelection();
   const layer = useDocumentPath<Layer>(view, ["layers", id]);
   const surfaces = useDocumentPath<Table<Surface>>(view, ["surfaces"]) ?? {};
+  const regions = useDocumentPath<Table<Region>>(view, ["regions"]) ?? {};
+  // Each Surface followed by its Regions: both are Targets, one list.
+  const targets = orderedEntries(surfaces).flatMap((surface) => [
+    { value: surface.id, label: surface.name, region: false },
+    ...orderedEntries(regions)
+      .filter((region) => region.surfaceId === surface.id)
+      .map((region) => ({
+        value: region.id,
+        label: `${surface.name} › ${region.name}`,
+        region: true,
+      })),
+  ]);
   // A media Parameter lists the Media files of its type as its options.
   const media = useDocumentPath<Table<Media>>(view, ["media"]) ?? {};
   const links = useDocumentPath<Table<Link>>(view, ["links"]) ?? {};
@@ -176,10 +189,7 @@ export function LayerInspector({
                     value={layer.target}
                     items={[
                       { value: null, label: "None" },
-                      ...orderedEntries(surfaces).map((surface) => ({
-                        value: surface.id,
-                        label: surface.name,
-                      })),
+                      ...targets.map(({ value, label }) => ({ value, label })),
                     ]}
                     onValueChange={(target: string | null) =>
                       void command("layer.update", { layerId: id, target })
@@ -190,9 +200,11 @@ export function LayerInspector({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value={null}>None</SelectItem>
-                      {orderedEntries(surfaces).map((surface) => (
-                        <SelectItem key={surface.id} value={surface.id}>
-                          {surface.name}
+                      {targets.map((target) => (
+                        <SelectItem key={target.value} value={target.value}>
+                          <span className={target.region ? "pl-3" : undefined}>
+                            {target.label}
+                          </span>
                         </SelectItem>
                       ))}
                     </SelectContent>

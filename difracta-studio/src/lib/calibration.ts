@@ -35,17 +35,19 @@ export function useCalibration(view: DocumentView): {
   return { calibration, set, exit };
 }
 
-/** The Calibration Mode entry when it shows this Surface, or this Mask or Path of it. */
+/** The Calibration Mode entry when it shows this Surface, or this Mask, Path or Region of it. */
 export function calibrationFor(
   calibration: Calibration | null,
   surfaceId: string,
   maskId: string | null,
   pathId: string | null = null,
+  regionId: string | null = null,
 ): Calibration | undefined {
   return calibration !== null &&
     calibration.surfaceId === surfaceId &&
     calibration.maskId === maskId &&
-    calibration.pathId === pathId
+    calibration.pathId === pathId &&
+    calibration.regionId === regionId
     ? calibration
     : undefined;
 }

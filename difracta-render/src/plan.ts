@@ -2,8 +2,10 @@ import {
   childLayers,
   CORNERS,
   orderedEntries,
+  REGION_CORNERS,
   resolveCalibration,
   resolveLayerPaths,
+  resolveTarget,
   type Catalog,
   type CornerName,
   type Document,
@@ -12,11 +14,26 @@ import {
   type Mask,
   type Path,
   type Quad,
+  type Rect,
+  type Region,
+  type RegionCorner,
   type Surface,
+  type SurfaceSize,
   type VisualLayer,
 } from "@difracta/core";
 
+import { regionCorners, regionPaths } from "./region-targets.ts";
+
 export type SurfaceStyle = "fill" | "pattern" | "outline";
+
+/** One Region of the calibrated Surface, drawn as an outline over the pattern. */
+export interface RegionOutline {
+  readonly region: Region;
+  /** The Region being aligned: brighter, with its two corners marked. */
+  readonly highlighted: boolean;
+  /** Its corner highlighted on the Output, when it is the one being aligned. */
+  readonly corner: RegionCorner | undefined;
+}
 
 /** One Surface's appearance on the Output this frame. */
 export interface SurfaceDraw {
@@ -34,17 +51,36 @@ export interface SurfaceDraw {
   /** The Path being aligned, drawn as a line with its points. */
   readonly pathOutline:
     { readonly path: Path; readonly point: number | undefined } | undefined;
+  /** The Surface's Regions, while the Surface or one of them is being aligned. */
+  readonly regions: readonly RegionOutline[];
 }
 
-/** One Visual Layer of the active Scene landing on this Output through its Target. */
+/**
+ * One Visual Layer of the active Scene landing on this Output through its
+ * Target: a Surface, or a Region of one, which inherits the Surface's
+ * mapping and Masks and presents its rectangle as the unit square.
+ */
 export interface LayerDraw {
   readonly layer: VisualLayer;
   /** The Visual's definition id; a Layer without one is not planned. */
   readonly visual: string;
+  /** The Target's id: the Surface's, or the Region's. */
+  readonly target: string;
   readonly surface: Surface;
+  /**
+   * Where the Target's unit square lands in the Projection Frame: the
+   * Surface's mapping, or the Region's rectangle pushed through it, so its
+   * own homography is the composed map.
+   */
   readonly corners: Quad;
+  /** The Surface's mapping, which the Mask texture is rasterized for. */
+  readonly surfaceCorners: Quad;
+  /** The Target inside Surface Space, for sampling the Masks; the whole square for a Surface. */
+  readonly rect: Rect;
+  /** The Target's physical size when the Surface states one: the Surface's, scaled by the rectangle. */
+  readonly size: SurfaceSize | null;
   readonly masks: readonly Mask[];
-  /** The Paths the Visual declares, bound and on this Surface, by key. */
+  /** The Paths the Visual declares, bound and on this Surface, by key, in the Target's space. */
   readonly paths: Readonly<Record<string, Path>>;
   /**
    * Opacity at zero: the Layer keeps its place and its instance, which
@@ -110,24 +146,34 @@ export function planFrame(
     const corners = surface.mappings[outputId]?.corners;
     if (corners === undefined) continue;
     if (surface.id === calibrating.surface.id) {
-      const { mask, path } = calibrating;
-      const shape = mask ?? path;
+      const { mask, path, region } = calibrating;
+      const shape = mask ?? path ?? region;
+      const corner = calibrating.calibration.corner ?? undefined;
       draws.push({
         surface,
         corners,
         style: "pattern",
         highlighted: true,
         // A Mask hides the corners being dragged, so Masks only apply while
-        // a Mask or Path is aligned, against the shape the audience sees.
+        // a Mask, Path or Region is aligned, against the shape the audience sees.
         masks: shape === undefined ? [] : masksOf(surface),
-        corner:
-          shape === undefined
-            ? (calibrating.calibration.corner ?? undefined)
-            : undefined,
+        corner: shape === undefined ? corner : undefined,
         maskOutline:
           mask === undefined ? undefined : { mask, point: calibrating.point },
         pathOutline:
           path === undefined ? undefined : { path, point: calibrating.point },
+        // Regions follow the quad, so they show while it or one of them is aligned.
+        regions:
+          mask !== undefined || path !== undefined
+            ? []
+            : regionsOf(document, surface).map((entry) => ({
+                region: entry,
+                highlighted: entry.id === region?.id,
+                corner:
+                  entry.id === region?.id && isRegionCorner(corner)
+                    ? corner
+                    : undefined,
+              })),
       });
       continue;
     }
@@ -142,9 +188,25 @@ export function planFrame(
       corner: undefined,
       maskOutline: undefined,
       pathOutline: undefined,
+      regions: [],
     });
   }
   return { blackout: false, draws, ...NOTHING };
+}
+
+function regionsOf(document: Document, surface: Surface): readonly Region[] {
+  return orderedEntries(document.regions).filter(
+    (region) => region.surfaceId === surface.id,
+  );
+}
+
+function isRegionCorner(
+  corner: CornerName | undefined,
+): corner is RegionCorner {
+  return (
+    corner !== undefined &&
+    (REGION_CORNERS as readonly string[]).includes(corner)
+  );
 }
 
 /**
@@ -212,19 +274,36 @@ function layerDraw(
   masksOf: (surface: Surface) => readonly Mask[],
 ): LayerDraw | undefined {
   if (layer.visual === null || layer.target === null) return undefined;
-  const surface = document.surfaces[layer.target];
-  if (surface?.output !== outputId) return undefined;
-  const corners = surface.mappings[outputId]?.corners;
-  if (corners === undefined) return undefined;
+  const resolved = resolveTarget(document, layer.target);
+  if (resolved === undefined) return undefined;
+  const { surface, region, rect } = resolved;
+  if (surface.output !== outputId) return undefined;
+  const surfaceCorners = surface.mappings[outputId]?.corners;
+  if (surfaceCorners === undefined) return undefined;
   const paths = resolveLayerPaths(document, catalog, layer);
   if (paths === undefined) return undefined;
+  const corners =
+    region === undefined
+      ? surfaceCorners
+      : regionCorners(region, surfaceCorners);
+  if (corners === undefined) return undefined;
   return {
     layer,
     visual: layer.visual,
+    target: layer.target,
     surface,
     corners,
+    surfaceCorners,
+    rect,
+    size:
+      surface.size === null || region === undefined
+        ? surface.size
+        : {
+            width: surface.size.width * rect.width,
+            height: surface.size.height * rect.height,
+          },
     masks: masksOf(surface),
-    paths,
+    paths: region === undefined ? paths : regionPaths(region, paths),
     hidden: layer.opacity <= 0,
   };
 }

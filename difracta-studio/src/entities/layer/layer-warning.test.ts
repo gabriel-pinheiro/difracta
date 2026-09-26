@@ -84,9 +84,10 @@ describe("layerWarning", () => {
       closed: false,
       order: "a0",
     });
-    const context = (paths: Record<string, Path>) => ({
+    const context = (paths: Record<string, Path>, regions = {}) => ({
       definition: lightning,
       paths,
+      regions,
     });
     const unbound = layerWarning(
       visual("lightning", "wall"),
@@ -117,10 +118,31 @@ describe("layerWarning", () => {
     expect(layerWarning(visual("lightning", null), context({}))?.label).toBe(
       "No Target",
     );
+    // On a Region, the Path must be on the Region's Surface.
+    const region = {
+      id: id("region", "north"),
+      name: "North",
+      surfaceId: "wall",
+      bounds: { topLeft: { x: 0, y: 0 }, bottomRight: { x: 0.5, y: 0.5 } },
+      order: "a0",
+    };
+    expect(
+      layerWarning(
+        visual("lightning", "north", { route: "p" }),
+        context({ p: path("wall") }, { north: region }),
+      ),
+    ).toBeUndefined();
+    expect(
+      layerWarning(
+        visual("lightning", "north", { route: "p" }),
+        context({ p: path("floor") }, { north: region }),
+      )?.label,
+    ).toBe("No Path");
     expect(
       layerWarning(visual("stars", "wall"), {
         definition: { ...lightning, paths: [] },
         paths: {},
+        regions: {},
       }),
     ).toBeUndefined();
   });
@@ -134,7 +156,7 @@ describe("layerWarningCount", () => {
       c: { ...visual("stars", null), id: id("layer", "c") },
       g: { ...base, id: id("layer", "g"), kind: "group" as const },
     };
-    const none = () => ({ definition: undefined, paths: {} });
+    const none = () => ({ definition: undefined, paths: {}, regions: {} });
     expect(layerWarningCount(layers, none)).toBe(2);
     expect(layerWarningCount({}, none)).toBe(0);
   });

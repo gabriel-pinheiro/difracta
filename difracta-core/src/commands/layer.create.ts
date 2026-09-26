@@ -11,6 +11,7 @@ import { uniqueName } from "../document/names.ts";
 import { orderedEntries } from "../document/order.ts";
 import { orderKeyForNew } from "../document/tree.ts";
 import { generateId, id } from "../ids.ts";
+import { resolveTarget } from "../document/targets.ts";
 
 /** The neighbour's Target when it has one, else the first Surface, else none. */
 function defaultTarget(
@@ -50,8 +51,9 @@ export const layerCreate = defineCommand({
       /** Sibling to land below; null or absent for the top. */
       after: z.string().min(1).nullable().optional(),
       /**
-       * Visual Layers only: Surface to render onto; null for none. Omitted
-       * picks the neighbouring sibling's Target, else the first Surface.
+       * Visual Layers only: Surface or Region to render onto; null for
+       * none. Omitted picks the neighbouring sibling's Target, else the
+       * first Surface.
        */
       target: z.string().min(1).nullable().optional(),
     })
@@ -79,8 +81,10 @@ export const layerCreate = defineCommand({
     if (payload.target !== undefined && payload.target !== null) {
       if (payload.kind !== "visual")
         return rejected("Only a Visual Layer has a Target.");
-      if (!(payload.target in document.surfaces))
-        return rejected(`Surface “${payload.target}” does not exist.`);
+      if (resolveTarget(document, payload.target) === undefined)
+        return rejected(
+          `Target “${payload.target}” does not exist as a Surface or a Region.`,
+        );
     }
     const order = orderKeyForNew(siblings, payload.after ?? null, "Layer");
     if (typeof order !== "string") return rejected(order.error);

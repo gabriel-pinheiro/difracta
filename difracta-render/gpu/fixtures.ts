@@ -191,6 +191,30 @@ export class Stage {
     return this;
   }
 
+  /** A Region of a Surface: a rectangle of it, corners in Surface Space. */
+  region(
+    id: string,
+    surfaceId: string,
+    topLeft: { readonly x: number; readonly y: number },
+    bottomRight: { readonly x: number; readonly y: number },
+  ): this {
+    this.#document = run(this.#document, "region.create", {
+      id,
+      surfaceId,
+      name: id,
+    });
+    for (const [corner, point] of [
+      ["topLeft", topLeft],
+      ["bottomRight", bottomRight],
+    ] as const)
+      this.#document = run(this.#document, "region.corner.set", {
+        regionId: id,
+        corner,
+        point,
+      });
+    return this;
+  }
+
   /** A Media item for a file next to the Installation. */
   media(id: string, path: string): this {
     this.#document = run(this.#document, "media.create", { id, path });

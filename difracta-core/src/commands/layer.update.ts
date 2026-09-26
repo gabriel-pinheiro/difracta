@@ -4,6 +4,7 @@ import { accepted, defineCommand, rejected } from "../command/command.ts";
 import { BlendModeSchema } from "../document/document.ts";
 import type { Patch } from "../document/patch.ts";
 import { fitPaths } from "../document/paths.ts";
+import { resolveTarget } from "../document/targets.ts";
 
 /**
  * Settings of a Layer, each optional so one call changes any subset. Fields
@@ -24,7 +25,7 @@ export const layerUpdate = defineCommand({
       opacity: z.number().min(0).max(1).optional(),
       blendMode: BlendModeSchema.optional(),
       mix: z.number().min(0).max(1).optional(),
-      /** Surface id, or null for no Target. */
+      /** Surface or Region id, or null for no Target. */
       target: z.string().min(1).nullable().optional(),
     })
     .strict(),
@@ -55,9 +56,11 @@ export const layerUpdate = defineCommand({
         field === "target" &&
         payload.target !== null &&
         payload.target !== undefined &&
-        !(payload.target in document.surfaces)
+        resolveTarget(document, payload.target) === undefined
       )
-        return rejected(`Surface “${payload.target}” does not exist.`);
+        return rejected(
+          `Target “${payload.target}” does not exist as a Surface or a Region.`,
+        );
       set(field, payload[field]);
       if (field === "target" && layer.kind === "visual") {
         const paths = fitPaths(

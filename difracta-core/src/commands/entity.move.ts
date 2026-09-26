@@ -18,6 +18,7 @@ import { surfaceChildren } from "../document/paths.ts";
 const labels: Record<OrderedTableName, string> = {
   outputs: "Output",
   surfaces: "Surface",
+  regions: "Region",
   masks: "Mask",
   paths: "Path",
   media: "Media",
@@ -33,8 +34,8 @@ function siblingTable(
   tableName: OrderedTableName,
   moving: Ordered & { readonly surfaceId?: string },
 ): Readonly<Record<string, Ordered & { readonly table: OrderedTableName }>> {
-  // Masks and Paths of one Surface share an order, so either moves among both.
-  if (tableName === "masks" || tableName === "paths")
+  // Regions, Masks and Paths of one Surface share an order, so any moves among all.
+  if (tableName === "regions" || tableName === "masks" || tableName === "paths")
     return Object.fromEntries(
       surfaceChildren(document, moving.surfaceId ?? "").map((child) => [
         child.entity.id,

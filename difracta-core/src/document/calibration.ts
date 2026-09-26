@@ -1,4 +1,11 @@
-import type { Calibration, Document, Mask, Path, Surface } from "./document.ts";
+import type {
+  Calibration,
+  Document,
+  Mask,
+  Path,
+  Region,
+  Surface,
+} from "./document.ts";
 
 /** Calibration Mode with its references checked against the document. */
 export interface ResolvedCalibration {
@@ -7,6 +14,7 @@ export interface ResolvedCalibration {
   readonly outputId: string;
   readonly mask: Mask | undefined;
   readonly path: Path | undefined;
+  readonly region: Region | undefined;
   /** Selected Mask or Path point, clamped to its points. */
   readonly point: number | undefined;
 }
@@ -36,6 +44,12 @@ export function resolveCalibration(
       : document.paths[calibration.pathId];
   if (calibration.pathId !== null && path?.surfaceId !== surface.id)
     return undefined;
+  const region =
+    calibration.regionId === null
+      ? undefined
+      : document.regions[calibration.regionId];
+  if (calibration.regionId !== null && region?.surfaceId !== surface.id)
+    return undefined;
   const shape = mask ?? path;
   const point =
     shape === undefined || calibration.point === null
@@ -47,6 +61,7 @@ export function resolveCalibration(
     outputId: surface.output,
     mask,
     path,
+    region,
     point,
   };
 }

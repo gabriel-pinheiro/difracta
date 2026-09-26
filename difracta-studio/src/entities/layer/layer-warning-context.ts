@@ -1,19 +1,21 @@
 import type { DocumentView } from "@difracta/client";
-import type { Layer, Path, Table } from "@difracta/core";
+import type { Layer, Path, Region, Table } from "@difracta/core";
 import { useCallback, useSyncExternalStore } from "react";
 
 import { definitionOf } from "@/lib/catalog";
 
 import { layerWarningCount, type LayerWarningContext } from "./layer-warning";
 
-/** What `layerWarning` reads besides the Layer, from the Catalog and the Installation's Paths. */
+/** What `layerWarning` reads besides the Layer, from the Catalog and the Installation's Paths and Regions. */
 export function layerWarningContext(
   paths: Table<Path>,
+  regions: Table<Region>,
 ): (layer: Layer) => LayerWarningContext {
   return (layer) => ({
     definition:
       layer.kind === "group" ? undefined : definitionOf(layer).definition,
     paths,
+    regions,
   });
 }
 
@@ -30,6 +32,9 @@ export function useLayerWarningCount(view: DocumentView): number {
     const document = view.get();
     return document === undefined
       ? 0
-      : layerWarningCount(document.layers, layerWarningContext(document.paths));
+      : layerWarningCount(
+          document.layers,
+          layerWarningContext(document.paths, document.regions),
+        );
   });
 }

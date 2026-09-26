@@ -36,9 +36,16 @@ export function PolygonEditor({
   onNudge,
   spaceLabel,
   closed = true,
+  shapeOf,
 }: {
   readonly points: readonly Point[];
   readonly names: readonly string[];
+  /**
+   * The shape to draw for the points as shown (the dragged one following
+   * the pointer), when it is not the polygon through them: a Region's
+   * rectangle from its two corners.
+   */
+  readonly shapeOf?: (points: readonly Point[]) => readonly Point[];
   /** Other shapes in the same space, drawn dashed for context. */
   readonly outlines: readonly Outline[];
   /** Width of the space divided by its height. */
@@ -123,7 +130,7 @@ export function PolygonEditor({
         ))}
         {closed ? (
           <polygon
-            points={polygon(shown)}
+            points={polygon(shapeOf?.(shown) ?? shown)}
             className="fill-selection/15 stroke-selection"
             vectorEffect="non-scaling-stroke"
           />

@@ -2,8 +2,11 @@ import type { DocumentView } from "@difracta/client";
 import {
   generateId,
   pathsOf,
+  targetSurfaceId,
   type Path,
   type PathRequirement,
+  type Region,
+  type Surface,
   type Table,
   type VisualLayer,
 } from "@difracta/core";
@@ -40,9 +43,11 @@ export function PathRows({
   const { select } = useSelection();
   const { setExpanded } = useExpansion();
   const paths = useDocumentPath<Table<Path>>(view, ["paths"]) ?? {};
-  const target = layer.target;
-  const candidates =
-    target === null ? [] : pathsOf({ masks: {}, paths }, target);
+  const surfaces = useDocumentPath<Table<Surface>>(view, ["surfaces"]) ?? {};
+  const regions = useDocumentPath<Table<Region>>(view, ["regions"]) ?? {};
+  // A Layer on a Region binds the Paths of the Region's Surface.
+  const target = targetSurfaceId({ surfaces, regions }, layer.target);
+  const candidates = target === null ? [] : pathsOf({ paths }, target);
   return (
     <>
       {requirements.map((requirement) => {

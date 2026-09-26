@@ -10,8 +10,8 @@ terms in code, UI text, docs, and conversation.
 
 One complete projection setup and its configuration.
 
-An Installation owns Outputs, Surfaces, Surface Mappings, Masks, Paths, Scenes,
-Controllers, Parameter Links, and Macros.
+An Installation owns Outputs, Surfaces, Surface Mappings, Regions, Masks, Paths,
+Media, Scenes, Controllers, Parameter Links, and Macros.
 
 ### Projector
 
@@ -46,9 +46,9 @@ overlap when mapped into the same Projection Frame.
 
 ### Surface Space
 
-The local coordinate system in which a Surface's Masks, Paths, and Visual
-content are described. Rendering is transformed from Surface Space through a
-Surface Mapping into an Output's Projection Frame.
+The local coordinate system in which a Surface's Regions, Masks, Paths, and
+Visual content are described. Rendering is transformed from Surface Space
+through a Surface Mapping into an Output's Projection Frame.
 
 Surface Space is the normalized unit rectangle from `(0, 0)` at its top-left to
 `(1, 1)` at its bottom-right.
@@ -66,6 +66,32 @@ A Surface's real width and height in any unit, only the ratio matters. Empty
 means automatic: the shape follows the mapping, which is right whenever the
 projector faces the Surface. Stated, it keeps Visuals unstretched on a Surface
 seen at a steep angle, where the projection alone hides the real shape.
+
+### Region
+
+A named axis-aligned rectangle of a Surface, in Surface Space, that a Layer may
+target instead of the whole Surface, such as `North Panel` on the `Wall`. It is
+stored as two corners, top-left and bottom-right, stays inside the Surface and
+has no rotation or skew. It inherits the Surface's calibration and Masks and
+adds no perspective of its own, so recalibrating the Surface moves every Region
+with it, which separate Surfaces drawn by eye never do. Regions on one Surface
+may overlap; each is cut hard at its edge and they composite by Layer order.
+Names are unique among the Regions of one Surface; the CLI writes one as
+`Wall/North Panel`.
+
+A Region has no Masks, Paths or Regions of its own: a Layer on it binds the
+Paths of its Surface. Use the whole Surface when no subsection is needed, and do
+not draw thin Regions to stand for lines; that is a Path.
+
+### Region Space
+
+The normalized unit rectangle a Region presents to the Visual targeting it, from
+`(0, 0)` at the Region's top-left corner to `(1, 1)` at its bottom-right. A
+Visual on a Region renders into a canvas sized to the Region's projected pixels,
+with the Surface's stated Size scaled to the rectangle, so it is exactly as
+sharp and as cheap as its part of the Surface. Paths reach the Visual in Region
+Space. Aspect is otherwise uncorrected: a tall narrow Region squashes a circle
+exactly as a wide Surface already does.
 
 ### Mask
 
@@ -114,10 +140,12 @@ physical alignment.
 
 ### Calibration Mode
 
-A temporary Output presentation used while editing Surface Mappings, Masks, or
-Paths. It replaces Scene playback on one selected Output with Surface patterns
-and bounds, or the Surface's pattern already masked with the Mask or Path being
-aligned drawn over it with its points marked.
+A temporary Output presentation used while editing Surface Mappings, Regions,
+Masks, or Paths. It replaces Scene playback on one selected Output with Surface
+patterns and bounds, or the Surface's pattern already masked with the Mask, Path
+or Region being aligned drawn over it with its points marked. While a Surface's
+quadrilateral or one of its Regions is aligned, all its Regions are drawn as
+named outlines, so the operator sees them follow the corners.
 
 Blackout takes precedence: while it is on, the calibrated Output shows black and
 the pattern returns when Blackout is released.
@@ -146,8 +174,8 @@ to choose offers it as a Parameter. Lightning Strikes offers Outward and Inward
 instead, judged against the Path's centroid, so a frame drawn clockwise or
 counterclockwise emits the same way.
 
-A Surface's Masks and Paths share one order in the navigator; the order is
-organizational only.
+A Surface's Regions, Masks and Paths share one order in the navigator; the order
+is organizational only.
 
 ## Composition and rendering
 
@@ -407,8 +435,10 @@ hides everything inside it without changing what those Layers have authored.
 
 ### Target
 
-The Surface into which a Layer may render. The Target provides bounds, clipping,
-and Surface Space; it is not an Output.
+The Surface, or the Region of a Surface, into which a Layer may render. The
+Target provides bounds, clipping and the unit space the Visual draws in; it is
+not an Output. Both kinds resolve to one owning Surface, which supplies the
+mapping, the Masks and the Paths a Layer on it may bind.
 
 ### Scene
 

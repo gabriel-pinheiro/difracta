@@ -9,6 +9,7 @@ import { maskEntity } from "./mask/mask-entity";
 import { mediaEntity } from "./media/media-entity";
 import { outputEntity } from "./output/output-entity";
 import { pathEntity } from "./path/path-entity";
+import { regionEntity } from "./region/region-entity";
 import { sceneEntity } from "./scene/scene-entity";
 import { surfaceEntity } from "./surface/surface-entity";
 
@@ -50,6 +51,7 @@ export interface EntityModule {
 export const entities = {
   output: outputEntity,
   surface: surfaceEntity,
+  region: regionEntity,
   mask: maskEntity,
   path: pathEntity,
   media: mediaEntity,

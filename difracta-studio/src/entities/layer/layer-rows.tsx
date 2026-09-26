@@ -8,6 +8,7 @@ import {
   type Layer,
   type Link,
   type Path,
+  type Region,
   type Table,
 } from "@difracta/core";
 import {
@@ -77,12 +78,13 @@ export function LayerRows({
     useDocumentPath<Table<Controller>>(view, ["controllers"]) ?? {};
   // A Visual that follows a Path warns while its Path is missing.
   const paths = useDocumentPath<Table<Path>>(view, ["paths"]) ?? {};
+  const regions = useDocumentPath<Table<Region>>(view, ["regions"]) ?? {};
   const document = view.get();
   const effective =
     document === undefined
       ? layers
       : effectiveDocument(document, catalog).layers;
-  const warningContext = layerWarningContext(paths);
+  const warningContext = layerWarningContext(paths, regions);
   const rows = childLayers(layers, sceneId, parentId);
   const moveInto = (layerId: string, target: Layer): void =>
     void command("layer.move", {

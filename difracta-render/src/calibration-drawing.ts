@@ -1,8 +1,8 @@
-import type { Point } from "@difracta/core";
+import type { Point, RegionBounds } from "@difracta/core";
 
 import { project } from "./homography.ts";
 import { Labels } from "./labels.ts";
-import { CORNER_INDEX, type SurfaceDraw } from "./plan.ts";
+import { CORNER_INDEX, type RegionOutline, type SurfaceDraw } from "./plan.ts";
 import {
   MODE,
   WHOLE,
@@ -17,9 +17,12 @@ const FILL: Color = [0.4, 0.4, 0.4, 1];
 const OUTLINE: Color = [1, 1, 1, 0.55];
 const MASK_EDGE: Color = [0.4, 0.85, 1, 0.9];
 const PATH_EDGE: Color = [1, 0.85, 0.3, 0.95];
+const REGION_EDGE: Color = [0.75, 1, 0.55, 0.95];
+const REGION_EDGE_DIM: Color = [0.75, 1, 0.55, 0.45];
 const MARKER: Color = [0.4, 0.85, 1, 0.9];
 const SELECTED_MARKER: Color = [1, 0.72, 0.2, 1];
 const LABEL_HEIGHT = 0.08;
+const REGION_LABEL_HEIGHT = 0.05;
 const CORNER_LABEL_HEIGHT = 0.045;
 const CORNER_LABEL_INSET = 0.07;
 const MARKER_SIZE = 0.03;
@@ -28,9 +31,11 @@ const SELECTED_MARKER_SIZE = 0.045;
 /**
  * What an Output shows in Calibration Mode: each Surface as a fill, an
  * outline or the pattern, the calibrated one with its name, corner labels
- * and, when a Mask or Path is being aligned, its line and point markers.
- * Everything is drawn in Surface Space through the shared program, so it
- * lands exactly where the Scene will.
+ * and, when a Mask or Path is being aligned, its line and point markers;
+ * its Regions as named rectangles while the quad or one of them is
+ * aligned, that one with its corners marked. Everything is drawn in
+ * Surface Space through the shared program, so it lands exactly where the
+ * Scene will.
  */
 export class CalibrationDrawing {
   readonly #program: SurfaceProgram;
@@ -101,6 +106,9 @@ export class CalibrationDrawing {
       this.#line(path.points, path.closed, PATH_EDGE, point);
       return;
     }
+    for (const outline of draw.regions) this.#region(outline, aspect);
+    // The quad's corner labels would sit under a Region's own corners.
+    if (draw.regions.some((outline) => outline.highlighted)) return;
     CORNER_LABELS.forEach((text, index) => {
       this.#label(text, CORNER_LABEL_HEIGHT, aspect, (w, h) => [
         index === 1 || index === 2
@@ -109,6 +117,39 @@ export class CalibrationDrawing {
         index >= 2 ? 1 - CORNER_LABEL_INSET - h : CORNER_LABEL_INSET,
       ]);
     });
+  }
+
+  /** A Region's rectangle with its name inside; the aligned one brighter, its two corners marked. */
+  #region(
+    { region, highlighted, corner }: RegionOutline,
+    surfaceAspect: number,
+  ): void {
+    const { topLeft, bottomRight } = region.bounds;
+    const points = rectanglePoints(region.bounds);
+    const program = this.#program;
+    const { gl } = program;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.#dynamic);
+    gl.bufferData(
+      gl.ARRAY_BUFFER,
+      new Float32Array(points.flatMap((p) => [p.x, p.y])),
+      gl.DYNAMIC_DRAW,
+    );
+    program.drawLoop(
+      this.#dynamic,
+      points.length,
+      highlighted ? REGION_EDGE : REGION_EDGE_DIM,
+    );
+    const width = bottomRight.x - topLeft.x;
+    const height = bottomRight.y - topLeft.y;
+    // The name shrinks to stay inside a small Region.
+    const labelHeight = Math.min(REGION_LABEL_HEIGHT, height * 0.5);
+    this.#label(region.name, labelHeight, surfaceAspect, (w, h) => [
+      topLeft.x + width / 2 - w / 2,
+      topLeft.y + height / 2 - h / 2,
+    ]);
+    if (!highlighted) return;
+    this.#marker(topLeft, corner === "topLeft");
+    this.#marker(bottomRight, corner === "bottomRight");
   }
 
   /** A shape's line through its points, with a marker on each and the selected one larger. */
@@ -174,6 +215,19 @@ export class CalibrationDrawing {
     gl.uniform4f(uniforms.rect, x, y, width, height);
     program.drawQuad();
   }
+}
+
+/** The rectangle's corners in drawing order, clockwise from the top left. */
+function rectanglePoints({
+  topLeft,
+  bottomRight,
+}: RegionBounds): readonly Point[] {
+  return [
+    topLeft,
+    { x: bottomRight.x, y: topLeft.y },
+    bottomRight,
+    { x: topLeft.x, y: bottomRight.y },
+  ];
 }
 
 /** Width over height of the Surface's bounding box on screen, so text keeps its proportions. */

@@ -128,6 +128,31 @@ function staged(): Document {
   return run(document, "scene.play", { sceneId: "s1" });
 }
 
+/** The staged Scene with a Region on the wall, top-right quarter, and A moved onto it. */
+function regioned(): Document {
+  let document = run(staged(), "region.create", {
+    id: "reg_north",
+    surfaceId: "sur_wall",
+    name: "North",
+  });
+  document = run(document, "region.corner.set", {
+    regionId: "reg_north",
+    corner: "topLeft",
+    point: { x: 0.5, y: 0 },
+  });
+  document = run(document, "region.corner.set", {
+    regionId: "reg_north",
+    corner: "bottomRight",
+    point: { x: 1, y: 0.5 },
+  });
+  document = run(document, "surface.corner.set", {
+    surfaceId: "sur_wall",
+    corner: "topRight",
+    point: { x: 0.8, y: 0.2 },
+  });
+  return run(document, "layer.update", { layerId: "A", target: "reg_north" });
+}
+
 const filtersOf = (plan: ReturnType<typeof planFrame>) =>
   plan.filters.map((draw) => [draw.layer.id, draw.below]);
 
@@ -166,6 +191,72 @@ describe("planFrame", () => {
     expect(
       planFrame(groupOff, "out_a", catalog).layers.map((d) => d.layer.id),
     ).toEqual(["A"]);
+  });
+
+  it("lands a Layer on a Region through its Surface's mapping, Masks and size", () => {
+    let document = regioned();
+    document = run(document, "surface.size", {
+      surfaceId: "sur_wall",
+      size: { width: 4, height: 2 },
+    });
+    const plan = planFrame(document, "out_a", catalog);
+    const a = plan.layers.find((draw) => draw.layer.id === "A");
+    expect(a?.target).toBe("reg_north");
+    expect(a?.surface.id).toBe("sur_wall");
+    expect(a?.masks).toHaveLength(1);
+    expect(a?.rect).toEqual({ x: 0.5, y: 0, width: 0.5, height: 0.5 });
+    expect(a?.size).toEqual({ width: 2, height: 1 });
+    // The Region's quad is the rectangle through the mapping: its top-right
+    // is the wall's moved corner and its top-left sits on the wall's top
+    // edge, past the midpoint as perspective foreshortens the far half.
+    expect(a?.surfaceCorners.topRight).toEqual({ x: 0.8, y: 0.2 });
+    expect(a?.corners.topRight).toEqual({ x: 0.8, y: 0.2 });
+    expect(a?.corners.topLeft.x).toBeCloseTo(4 / 9, 6);
+    expect(a?.corners.topLeft.y).toBeCloseTo(1 / 9, 6);
+    expect(a?.corners.bottomRight.x).toBeCloseTo(8 / 9, 6);
+    // Two frames with an unchanged document reuse the same corners object.
+    const again = planFrame(document, "out_a", catalog);
+    expect(again.layers.find((d) => d.layer.id === "A")?.corners).toBe(
+      a?.corners,
+    );
+    expect(plannedSurfaces(plan).has("sur_wall")).toBe(true);
+  });
+
+  it("hands a Layer on a Region its Paths in Region Space", () => {
+    let document = run(regioned(), "path.create", {
+      id: "path_edge",
+      surfaceId: "sur_wall",
+      name: "Edge",
+    });
+    document = run(document, "path.point.set", {
+      pathId: "path_edge",
+      index: 0,
+      point: { x: 0.75, y: 0.25 },
+    });
+    document = run(document, "layer.visual", { layerId: "A", visual: "bolt" });
+    document = run(document, "layer.path", {
+      layerId: "A",
+      key: "frame",
+      pathId: "path_edge",
+    });
+    const plan = planFrame(document, "out_a", catalog);
+    const a = plan.layers.find((draw) => draw.layer.id === "A");
+    expect(a?.paths.frame?.points[0]).toEqual({ x: 0.5, y: 0.5 });
+    const again = planFrame(document, "out_a", catalog);
+    expect(again.layers.find((d) => d.layer.id === "A")?.paths.frame).toBe(
+      a?.paths.frame,
+    );
+  });
+
+  it("drops a Layer whose Region's Surface is elsewhere or gone", () => {
+    const document = regioned();
+    expect(
+      planFrame(document, "out_b", catalog).layers.map((d) => d.layer.id),
+    ).toEqual(["E"]);
+    const removed = run(document, "region.remove", { regionId: "reg_north" });
+    expect(
+      planFrame(removed, "out_a", catalog).layers.map((d) => d.layer.id),
+    ).toEqual(["B"]);
   });
 
   it("places a Filter after the planned Layers below it on this Output, or drops it", () => {
@@ -375,5 +466,41 @@ describe("planFrame", () => {
     expect(wall?.corner).toBeUndefined();
     expect(wall?.maskOutline?.mask.id).toBe("mask_door");
     expect(wall?.maskOutline?.point).toBe(2);
+  });
+
+  it("outlines the Surface's Regions while its quad or one of them is aligned", () => {
+    const base = regioned();
+    const quad = run(base, "calibration.set", calibration);
+    const onQuad = planFrame(quad, "out_a", catalog).draws[0];
+    expect(onQuad?.corner).toBe("topRight");
+    expect(onQuad?.masks).toHaveLength(0);
+    expect(
+      onQuad?.regions.map((entry) => [
+        entry.region.id,
+        entry.highlighted,
+        entry.corner,
+      ]),
+    ).toEqual([["reg_north", false, undefined]]);
+    const region = run(base, "calibration.set", {
+      ...calibration,
+      regionId: "reg_north",
+      corner: "bottomRight",
+    });
+    const onRegion = planFrame(region, "out_a", catalog).draws[0];
+    expect(onRegion?.corner).toBeUndefined();
+    expect(onRegion?.masks).toHaveLength(1);
+    expect(
+      onRegion?.regions.map((entry) => [
+        entry.region.id,
+        entry.highlighted,
+        entry.corner,
+      ]),
+    ).toEqual([["reg_north", true, "bottomRight"]]);
+    const mask = run(base, "calibration.set", {
+      ...calibration,
+      maskId: "mask_door",
+      corner: null,
+    });
+    expect(planFrame(mask, "out_a", catalog).draws[0]?.regions).toEqual([]);
   });
 });

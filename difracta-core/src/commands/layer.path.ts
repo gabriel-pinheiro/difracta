@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { accepted, defineCommand, rejected } from "../command/command.ts";
+import { targetSurfaceId } from "../document/targets.ts";
 
 /**
  * Binds a Path to one of the Paths a Visual Layer's Visual declares, by the
@@ -38,7 +39,7 @@ export const layerPath = defineCommand({
       const path = document.paths[payload.pathId];
       if (path === undefined)
         return rejected(`Path “${payload.pathId}” does not exist.`);
-      if (layer.target === null || path.surfaceId !== layer.target)
+      if (path.surfaceId !== targetSurfaceId(document, layer.target))
         return rejected(
           `Path “${path.name}” is not on the Layer's Target Surface.`,
         );

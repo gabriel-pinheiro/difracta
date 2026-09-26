@@ -155,7 +155,7 @@ export class LayerPlayers {
           corners: draw.corners,
           outputWidth,
           outputHeight,
-          size: draw.surface.size,
+          size: draw.size,
           renderScale,
           maxDimension: this.#maxDimension,
         });

@@ -91,6 +91,10 @@ export const settings = {
       url: "https://github.com/gabriel-pinheiro/difracta-media/releases/download/v<version>/difracta-media-<version>.tar.gz",
     },
   },
+  regions: {
+    /** A new Region is the Surface minus this fraction on each side. */
+    defaultInset: 0.25,
+  },
   masks: {
     /** A new Mask is the Surface minus this fraction on each side. */
     defaultInset: 0.1,

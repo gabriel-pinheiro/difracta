@@ -64,6 +64,7 @@ Document
 ├── installation { id, name, activeScene }
 ├── outputs { [id]: Output }
 ├── surfaces { [id]: Surface }        output, mappings per Output
+├── regions { [id]: Region }          surfaceId, bounds (topLeft, bottomRight)
 ├── masks { [id]: Mask }              surfaceId, mode, points, feather
 ├── paths { [id]: Path }              surfaceId, points, closed
 ├── media { [id]: Media }             kind, parentId, order; file: path (relative to the folder)
@@ -128,6 +129,28 @@ its image alone cannot tell that from a tall Surface (the projector's optics
 would have to be known), so automatic is right whenever the projector faces the
 Surface, and the size is there for the steep ones.
 
+### Regions
+
+A Region is an axis-aligned rectangle of Surface Space, two corners, that a
+Layer targets instead of the whole Surface. A Layer's `target` is one id that
+names a Surface or a Region; `resolveTarget` (`document/targets.ts`) turns it
+into the owning Surface, the Region if any, and the rectangle, and everything
+that needs the Surface (mapping, Masks, Path Bindings, canvas size) reads it
+from there. Removing a Region, or its Surface, nulls the Target of the Layers on
+it, as removing a Surface always did. Regions live in their own table with a
+`surfaceId`, share the Surface's child order with Masks and Paths, and have
+`region.create`, `.rename`, `.corner.set`, `.corner.nudge` and `.remove`; corner
+commands replace the whole `bounds`, clamped inside the unit square and at least
+`REGION_MIN_SIDE` from the other corner. Bounds are not Addresses.
+
+**Why one id rather than a tagged Target:** every command, Macro action, CLI
+payload and wire field that carries a Target keeps working, and the one place
+that must tell the two apart is the resolver. **Why the rectangle inherits the
+homography rather than being a mapping of its own:** the reason Regions exist is
+that a projector nudge is one recalibration, not one per panel; a rectangle in
+Surface Space is that by construction, while a second quadrilateral would have
+to be dragged back into parallel by eye.
+
 ### Masks
 
 A Mask is a polygon in Surface Space, three to sixteen points, that decides
@@ -154,10 +177,10 @@ than refusing, and removing a Path or its Surface unbinds it everywhere. Paths
 live in their own table like Masks, with the same commands (`path.create`,
 `.rename`, `.update` for open or closed, `.point.set`, `.nudge`, `.add`,
 `.remove`, `.remove`); adding a point after the last one of an open Path
-continues the line instead of splitting a closing edge. Masks and Paths of one
-Surface share one order: `entity.move` on either takes its neighbours from both
-tables (`surfaceChildren`), and a new one appends after both. Point order is the
-Path's direction: Side A is the left of travel, Side B the right.
+continues the line instead of splitting a closing edge. Regions, Masks and Paths
+of one Surface share one order: `entity.move` on any takes its neighbours from
+all three tables (`surfaceChildren`), and a new one appends after them. Point
+order is the Path's direction: Side A is the left of travel, Side B the right.
 
 **Why bindings on the Layer rather than a Path Parameter:** a Parameter is a
 value in the Visual's own vocabulary; a binding is a reference into the
@@ -478,15 +501,16 @@ today, with one Layer flagged, rather than refuse as a whole.
 
 ### Calibration Mode
 
-`operational.calibration` names one Surface, or one Mask or Path of it, plus the
-highlighted corner or point, the view for the Output's other Surfaces (hidden,
-outlines, patterns) and the live session that entered it. `calibration.set`
-replaces the whole entry and `calibration.exit` clears it; both are performance
-commands, so they replicate at once and never enter undo history. The runtime
-clears the entry when its owner's session closes. Authoring commands do not
-touch it, so removing or unassigning the calibrated Surface leaves a stale entry
-behind briefly; readers go through `resolveCalibration`, which treats a dangling
-entry as no calibration, and the next `set` or `exit` overwrites it.
+`operational.calibration` names one Surface, or one Mask, Path or Region of it,
+plus the highlighted corner or point, the view for the Output's other Surfaces
+(hidden, outlines, patterns) and the live session that entered it.
+`calibration.set` replaces the whole entry and `calibration.exit` clears it;
+both are performance commands, so they replicate at once and never enter undo
+history. The runtime clears the entry when its owner's session closes. Authoring
+commands do not touch it, so removing or unassigning the calibrated Surface
+leaves a stale entry behind briefly; readers go through `resolveCalibration`,
+which treats a dangling entry as no calibration, and the next `set` or `exit`
+overwrites it.
 
 **Why:** the Output only needs the whole state, and one small object written
 atomically is easier to reason about than corner, view and Mask arriving as
@@ -1362,16 +1386,22 @@ a Blackout lands within one display frame.
 draw this frame. Outside Calibration Mode that is the active Scene's Visual
 Layers, bottom first, each one that is enabled with every Group above it
 enabled, has a Visual with every Path it declares bound on its Target, and
-targets a Surface on this Output with a mapping; Filters are passed over until
-they render, and a Group only gates. With no active Scene the frame is black. In
-Calibration Mode on that Output the Scene gives way to the calibrated Surface as
-a pattern (grid, diagonals, border, name, corner labels, the selected corner
-marked) and the others follow the view. Masks apply to the pattern only while a
-Mask or Path is being aligned, and that shape is then drawn over it with its
-points marked, a Mask as a loop and an open Path as a line. That drawing lives
-in `calibration-drawing.ts` and goes through the same Surface Space program as
-the Layers (`surface-program.ts`), so a pattern lands exactly where the Scene
-will.
+targets a Surface on this Output with a mapping, or a Region of one; Filters are
+passed over until they render, and a Group only gates. A Layer on a Region draws
+with the Region's projected quad, its rectangle's corners pushed through the
+Surface's homography, so its own homography is the composed map and the Layer's
+canvas is sized to the Region's pixels; the Surface's Mask texture is sampled
+through the rectangle (`u_mask_rect`), and Paths reach the Visual in Region
+Space (`plan.ts`). With no active Scene the frame is black. In Calibration Mode
+on that Output the Scene gives way to the calibrated Surface as a pattern (grid,
+diagonals, border, name, corner labels, the selected corner marked) and the
+others follow the view. Masks apply to the pattern only while a Mask, Path or
+Region is being aligned, and that shape is then drawn over it with its points
+marked, a Mask as a loop and an open Path as a line; while the quad or a Region
+is aligned, the Surface's Regions are drawn as named rectangles, the aligned one
+brighter with its two corners marked. That drawing lives in
+`calibration-drawing.ts` and goes through the same Surface Space program as the
+Layers (`surface-program.ts`), so a pattern lands exactly where the Scene will.
 
 Each planned Layer has a Visual instance (`layer-players.ts`). A canvas Visual's
 draws on its own canvas, sized by `surfaceCanvasSize` and capped at the GPU's
@@ -1429,8 +1459,8 @@ Geometry: every vertex is a Surface Space position pushed through the Surface's
 homography in the vertex shader, with clip-space `w` carrying the projective
 term, so the GPU interpolates Surface Space perspective-correctly and every
 later shape drawn in Surface Space (Masks, Paths) inherits the mapping for free.
-The homography and the quad a Surface is drawn with are computed once per
-mapping change or frame resize and cached by the corners object's identity
+The homography and the quad a Target is drawn with are computed once per corner
+change or frame resize and cached per Target by the corner values
 (`surface-geometry.ts`). The pattern is computed in the fragment shader from
 Surface Space coordinates and their screen-space derivatives, so its lines are
 about one pixel wide at any projection and cost no geometry. Labels are text
@@ -1653,8 +1683,8 @@ shows one card per Output. Selection is Studio-local state and never reaches the
 runtime; the selected row and card carry an outline so the inspector's subject
 is visible at a glance. Rows with children open and close with a chevron: Output
 rows start open so their live sessions stay in view, Surface rows start closed
-so Masks and Paths do not crowd the list; creating a child or selecting one from
-an inspector opens its parent. Column sizes and section open states are
+so Regions, Masks and Paths do not crowd the list; creating a child or selecting
+one from an inspector opens its parent. Column sizes and section open states are
 remembered per browser in localStorage; row open states live in memory and reset
 with the Installation. An empty section says how to add its first entity, and an
 open row without children says so in one dim line.
@@ -1774,12 +1804,13 @@ The Surface, Mask and Path inspectors carry a Calibrate toggle and, while
 active, the view for the other Surfaces; the corner or point selected in the
 inspector is mirrored to the Output as it changes, and focusing a corner or
 point button selects it, so Tab and the arrow keys agree. While the mode is on,
-selecting another Surface, Mask or Path moves the pattern to it; selecting
-anything else leaves it on. A Visual Layer whose Visual follows Paths shows one
-row per Path below its Target, a select over the Target's Paths with a "+" that
-creates one named after the Layer, binds it and selects it. The status strip
-shows what is being calibrated with an exit link, so a forgotten Calibration
-Mode stays visible. Escape clears the selection outside text fields and dialogs.
+selecting another Surface, Mask, Path or Region moves the pattern to it;
+selecting anything else leaves it on. A Visual Layer whose Visual follows Paths
+shows one row per Path below its Target, a select over the Target's Paths with a
+"+" that creates one named after the Layer, binds it and selects it. The status
+strip shows what is being calibrated with an exit link, so a forgotten
+Calibration Mode stays visible. Escape clears the selection outside text fields
+and dialogs.
 
 Blackout sits in the menu bar because it is the one control a performer must
 reach without looking; it writes `installation/blackout` through the input
