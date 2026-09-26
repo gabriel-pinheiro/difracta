@@ -21,7 +21,7 @@ const NOUNS: Record<TableName, string> = {
   surfaces: "Surface",
   masks: "Mask",
   paths: "Path",
-  media: "Media",
+  media: "Media item",
   scenes: "Scene",
   layers: "Layer",
   controllers: "Controller",
@@ -57,6 +57,7 @@ const KEY_TABLES: Readonly<Record<string, TableName>> = {
 /** `parentId` and `after` belong to the table the command's prefix names. */
 const PREFIX_TABLES: Readonly<Record<string, TableName>> = {
   layer: "layers",
+  media: "media",
   controller: "controllers",
   macro: "macros",
 };

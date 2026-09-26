@@ -1,18 +1,43 @@
 import type { Catalog } from "../catalog/catalog.ts";
 import { settings } from "../settings.ts";
-import type { Document } from "./document.ts";
+import type { Document, Media, MediaFile, Table } from "./document.ts";
 import type { Patch } from "./patch.ts";
+import { childrenOf, descendantsOf, flattenTree } from "./tree.ts";
 
 /**
- * A Media item is one image or video file the Installation refers to. Its
- * `path` is relative to the Installation file's folder, with POSIX
- * separators and `..` allowed, so a show folder moves between machines with
- * its files. The kind is read from the extension and never stored. These
- * helpers run in the browser as well as in Node, so paths are handled here
- * rather than with `node:path`.
+ * A Media file is one image or video the Installation refers to. Its `path`
+ * is relative to the Installation file's folder, with POSIX separators and
+ * `..` allowed, so a show folder moves between machines with its files. The
+ * type is read from the extension and never stored. These helpers run in
+ * the browser as well as in Node, so paths are handled here rather than
+ * with `node:path`.
  */
-export const MEDIA_KINDS = ["image", "video"] as const;
-export type MediaKind = (typeof MEDIA_KINDS)[number];
+export const MEDIA_TYPES = ["image", "video"] as const;
+export type MediaType = (typeof MEDIA_TYPES)[number];
+
+/** The Media items directly under the root (`parentId` null) or a Group, in order. */
+export const childMedia = (
+  media: Table<Media>,
+  parentId: string | null,
+): readonly Media[] => childrenOf(media, parentId);
+
+/** Every Media item in navigator order: depth first from the root. */
+export const flattenMedia = (media: Table<Media>): readonly Media[] =>
+  flattenTree(media);
+
+/** Every Media item below `mediaId`, depth first in display order; empty unless it is a Group. */
+export const descendantMedia = (
+  media: Table<Media>,
+  mediaId: string,
+): readonly Media[] => descendantsOf(media, mediaId);
+
+/** The Media files, Groups left out, in navigator order. */
+export const mediaFiles = (media: Table<Media>): readonly MediaFile[] =>
+  flattenTree(media).filter((item): item is MediaFile => item.kind === "file");
+
+/** The type of a Media item: its file's, or undefined for a Group or a file Difracta cannot show. */
+export const mediaItemType = (item: Media): MediaType | undefined =>
+  item.kind === "file" ? mediaTypeOf(item.path) : undefined;
 
 const IMAGE_EXTENSIONS: readonly string[] = settings.media.imageExtensions;
 const VIDEO_EXTENSIONS: readonly string[] = settings.media.videoExtensions;
@@ -25,8 +50,8 @@ export function mediaExtension(path: string): string | undefined {
   return name.slice(dot + 1).toLowerCase();
 }
 
-/** The kind a path's extension says it is; undefined for one Difracta cannot show. */
-export function mediaKindOf(path: string): MediaKind | undefined {
+/** The type a path's extension says it is; undefined for one Difracta cannot show. */
+export function mediaTypeOf(path: string): MediaType | undefined {
   const extension = mediaExtension(path);
   if (extension === undefined) return undefined;
   if (IMAGE_EXTENSIONS.includes(extension)) return "image";
@@ -39,7 +64,7 @@ export function mediaPathProblem(path: string): string | undefined {
   const normalized = normalizeMediaPath(path);
   if (normalized === "." || normalized.endsWith("/"))
     return "A Media path must name a file.";
-  if (mediaKindOf(normalized) !== undefined) return undefined;
+  if (mediaTypeOf(normalized) !== undefined) return undefined;
   const all = [...IMAGE_EXTENSIONS, ...VIDEO_EXTENSIONS];
   return `“${fileNameOf(normalized)}” is not an image or video Difracta can show; the file must end in ${all.slice(0, -1).join(", ")} or ${all.at(-1) ?? ""}.`;
 }
@@ -154,35 +179,38 @@ export function withinFolder(folder: string, resolved: string): boolean {
 /**
  * Why `value` cannot be the value of a Media Parameter accepting `accepts`,
  * or undefined when it can: the empty string for none, or the id of a Media
- * item of that kind.
+ * file of that type. A Group is never a value.
  */
 export function mediaValueProblem(
   document: Pick<Document, "media">,
-  accepts: MediaKind,
+  accepts: MediaType,
   value: unknown,
 ): string | undefined {
+  const expected = `must be the id of ${anOf(accepts)} Media item, or "" for none`;
   if (value === "") return undefined;
-  if (typeof value !== "string")
-    return `must be the id of ${anOf(accepts)} Media item, or "" for none`;
+  if (typeof value !== "string") return expected;
   const item = document.media[value];
   if (item === undefined)
-    return `must be the id of ${anOf(accepts)} Media item, or "" for none; there is no Media item “${value}”`;
-  if (mediaKindOf(item.path) !== accepts)
-    return `must be the id of ${anOf(accepts)} Media item, or "" for none; “${item.name}” is ${anOf(mediaKindOf(item.path) ?? "image")} ${mediaKindOf(item.path) ?? "file of another kind"}`;
+    return `${expected}; there is no Media item “${value}”`;
+  if (item.kind === "group")
+    return `${expected}; “${item.name}” is a Media Group`;
+  const type = mediaTypeOf(item.path);
+  if (type !== accepts)
+    return `${expected}; “${item.name}” is ${type === undefined ? "a file of another type" : `${anOf(type)} ${type}`}`;
   return undefined;
 }
 
-const anOf = (kind: MediaKind): string => (kind === "image" ? "an" : "a");
+const anOf = (type: MediaType): string => (type === "image" ? "an" : "a");
 
 /**
  * Patches setting to `""` every Media Parameter value that `clear` rejects,
  * on every Layer whose definition the Catalog knows: what removing a Media
- * item, or changing its kind, takes with it.
+ * item, or changing its type, takes with it.
  */
 export function clearMediaValues(
   document: Pick<Document, "layers">,
   catalog: Catalog,
-  clear: (accepts: MediaKind, value: string) => boolean,
+  clear: (accepts: MediaType, value: string) => boolean,
 ): Patch[] {
   const patches: Patch[] = [];
   for (const layer of Object.values(document.layers)) {

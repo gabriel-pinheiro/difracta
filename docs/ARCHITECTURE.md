@@ -66,7 +66,7 @@ Document
 ├── surfaces { [id]: Surface }        output, mappings per Output
 ├── masks { [id]: Mask }              surfaceId, mode, points, feather
 ├── paths { [id]: Path }              surfaceId, points, closed
-├── media { [id]: Media }             name, path (relative to the file's folder)
+├── media { [id]: Media }             kind, parentId, order; file: path (relative to the folder)
 ├── scenes { [id]: Scene }            name, order
 ├── layers { [id]: Layer }            kind, sceneId, parentId, enabled, order, + per kind
 │                                     visual: visual, parameters, target, paths, opacity, blendMode
@@ -186,35 +186,51 @@ lose steps, whereas deltas apply in full in any order.
 
 ### Media
 
-A Media item is one image or video file the Installation shows: a name, unique
-in the table, and a `path` relative to the Installation file's folder, POSIX
-separators, `..` allowed. Its kind, image or video, is read from the extension
-(`settings.media` lists them; `document/media.ts` derives it) and never stored;
-a path with any other extension is refused. `media.create` names the item after
-its file unless told otherwise, `media.rename`, `media.path` and `media.remove`
-are the rest, all authoring, and `entity.move` orders them. The path helpers in
+A Media item is one image or video file the Installation shows, or a Media Group
+arranging items in the navigator. The `media` table has the Controllers' and
+Macros' tree shape (`kind` of `file` or `group`, `parentId`, `order`;
+`document/tree.ts`), and a name is unique among its siblings. A file has a
+`path` relative to the Installation file's folder, POSIX separators, `..`
+allowed. Its type, image or video, is read from the extension (`settings.media`
+lists them; `document/media.ts` derives it) and never stored; a path with any
+other extension is refused. An item written before Groups existed, with no
+`kind` or `parentId`, reads as a file at the root.
+
+`media.create` adds a file (kind `file`, the default, with a path) or a Group
+(kind `group`, no path) last in its parent unless `after` places it, naming a
+file after its file unless told otherwise. `media.move` places an item in
+another Group or at the root, carrying a Group's contents and refusing cycles;
+`entity.move` reorders among siblings; `media.ungroup` dissolves a Group;
+`media.rename`; `media.path` for a file only; `media.remove`, which takes a
+Group's contents with it. All are authoring. The CLI has shortcuts for the
+everyday ones: `difracta media add <path> [--group G]`,
+`difracta media group <name> [--group G]` and `difracta media list`, the tree
+indented by Group with kind, type, status and path. The path helpers in
 `document/media.ts` are pure and run in the browser too: one relativizes an
 absolute path against the document's folder, which Desktop's picker and the CLI
 use, and one says whether a resolved path stays under that folder.
 
 A Visual refers to an item through a Parameter of kind `media`
-(`{ kind: "media", accepts: "image" | "video", default: "" }`), whose value is
-an item's id or `""` for none. Its Address is of type `media`: the options are
-none plus the items of the accepted kind, `address.set` and `address.edit`
-refuse anything else, a Macro `set` action swaps artwork, and a Link is refused.
-`layer.visual` checks the value the same way; `layer.reset` puts `""` back.
-`media.remove` clears every Parameter holding the item to `""`, as removing a
-Surface clears Targets, and drops the Macro actions that would set it;
-`media.path` does the same when the new extension changes the kind, since the
-Parameters that held it accept only the kind it was. The file on disk is never
-touched.
+(`{ kind: "media", accepts: "image" | "video", default: "" }`), whose value is a
+file's id or `""` for none. Its Address is of type `media`: the options are none
+plus the files of the accepted type in navigator order, Groups never among them,
+`address.set` and `address.edit` refuse anything else, a Macro `set` action
+swaps artwork, and a Link is refused. `layer.visual` checks the value the same
+way; `layer.reset` puts `""` back. `media.remove` clears every Parameter holding
+the item, or any item inside a removed Group, to `""`, as removing a Surface
+clears Targets, and drops the Macro actions that would set it; `media.path` does
+the same when the new extension changes the type, since the Parameters that held
+it accept only the type it was. The file on disk is never touched.
 
 **Why a table and a reference rather than a path on the Layer:** the same file
 is shown by several Layers and swapped by Macros; one entity gives it a name, a
 status and one place to change the path. **Why relative paths:** a show folder
 is copied to the stage machine or mounted into a container, and the file must
-still be found beside the Installation. **Why the kind is derived:** the
+still be found beside the Installation. **Why the type is derived:** the
 extension already says it; storing it would be one more thing to keep in step.
+**Why `kind` is file or group and image or video is `type`:** every tree in the
+document keys on `kind === "group"`, so the Media tree reuses the same move,
+ungroup and rename helpers.
 
 ### Scenes and Layers
 
@@ -385,7 +401,7 @@ id and check values.
 
 A Parameter is declared once, in the definition, as one of five kinds: number
 (with min, max, step and unit), color (four components from 0 to 1), choice
-(named options), boolean or media (a Media item's id, of the accepted kind, or
+(named options), boolean or media (a Media file's id, of the accepted type, or
 `""`; see Media). Values live on the Layer in `parameters`, keyed by Parameter
 name; picking a definition writes its id and the defaults in one command, and a
 complete set of values can come along instead, which is how a pick is put back.
@@ -561,15 +577,15 @@ table's type makes a request without a handler a compile error.
 
 ### Media status
 
-`["live", "media", <id>]` holds `{ status }` for every Media item of the open
-document: `ok`, `missing` (no file at the resolved path), `outside` (the path
-leaves the Installation file's folder and the runtime does not allow that) or
-`unsaved` (the Installation has no path yet, so nothing resolves). The runtime
-(`live/media-status.ts`) stats every file when a document opens or is replaced,
-when it is saved to a new path and after any command that touches `media`, and
-replicates only the entries that changed; there is no file watcher, so a file
-that appears later is noticed at the next of those moments.
-`difracta media list` prints it beside each item.
+`["live", "media", <id>]` holds `{ status }` for every Media file of the open
+document (a Media Group has no file and no entry): `ok`, `missing` (no file at
+the resolved path), `outside` (the path leaves the Installation file's folder
+and the runtime does not allow that) or `unsaved` (the Installation has no path
+yet, so nothing resolves). The runtime (`live/media-status.ts`) stats every file
+when a document opens or is replaced, when it is saved to a new path and after
+any command that touches `media`, and replicates only the entries that changed;
+there is no file watcher, so a file that appears later is noticed at the next of
+those moments. `difracta media list` prints it beside each item.
 
 **Why stat on those moments and not watch:** the moments are when the answer can
 change from the document's side, which is what an operator asks about; a watcher
@@ -799,9 +815,9 @@ item's path against the open document's folder and streams the file
 `Cache-Control: no-cache` and an ETag from size and modification time, so an
 Output page revalidates cheaply and sees a replaced file, and with Range
 requests honoured (206, `Content-Range`, 416), which video seeking needs. 404
-for an unknown id, a missing file or a document without a path; 403 when the
-resolved path leaves the folder, unless the runtime was started with
-`--media-anywhere` (or `DIFRACTA_MEDIA_ANYWHERE=1`), which turns
+for an unknown id, a Media Group, a missing file or a document without a path;
+403 when the resolved path leaves the folder, unless the runtime was started
+with `--media-anywhere` (or `DIFRACTA_MEDIA_ANYWHERE=1`), which turns
 `settings.media.allowOutsideShowFolder` on for that runtime alone: a machine
 setting, never in the file. In a container the show folder is mounted for the
 file already, so media beside it is reachable and `scp` puts files there.
@@ -1593,7 +1609,7 @@ label, the control for the Address's type and, when the value is not the
 default, a reset button; numbers are a slider with a readout that turns into an
 input when clicked (typed values clamp to the range), colors are the browser's
 color input with an editable hex and an alpha slider, choices a select, booleans
-a switch. A media Parameter is a select over the Media items of the kind it
+a switch. A media Parameter is a select over the Media files of the type it
 accepts, None first, with a "+" beside it that adds an item through the Media
 section's picker and picks it on the Layer in one flow, as the "+" on a Path row
 makes a Path; a value whose item is gone shows as None. The options come with
@@ -1677,22 +1693,28 @@ Blackout sits in the menu bar because it is the one control a performer must
 reach without looking; it writes `installation/blackout` through the input
 channel and is not undoable.
 
-The Media section, below Surfaces, lists the Media items with their kind's icon
-and, at the row's end, the kind as a dim word or, when the runtime cannot serve
-the file, an amber warning naming the status (`live/media/<id>`: missing,
-outside the show folder, or unsaved) explained on hover, the way a Layer without
-a Target warns; each row subscribes to its own status. The section's "+" asks
-for the file first: in Desktop it opens the native picker straight away, in a
-browser a dialog with a path field, then sends `media.create` with the path
-relativized against the Installation file's folder, and selects the new item.
-Without a file for the Installation yet, the path is sent as it came, and the
-row's "unsaved" warning says to save first. The Media inspector has the name,
-the path as text committed on blur (`media.path`) with, in Desktop, a Browse
-button running the same picker, the kind its extension says, the status with its
-reason, and "Used by": the Layers whose media Parameter holds the item, found by
-reading each Layer's definition for which Parameter is a media one; clicking one
-selects the Layer and opens its Scene row. Remove works from the context menu,
-the Delete key and Edit ▸ Remove like every entity.
+The Media section, below Surfaces, lists the Media items as a tree of Media
+Groups, as the Controllers section does: Groups expand and collapse, rows drag
+within and between Groups (`media.move`). A file row has its type's icon and, at
+the row's end, the type as a dim word or, when the runtime cannot serve the
+file, an amber warning naming the status (`live/media/<id>`: missing, outside
+the show folder, or unsaved) explained on hover, the way a Layer without a
+Target warns; each row subscribes to its own status, and the collapsed section's
+warning count skips Groups. The section's "+" is a menu of File… and Group, and
+a Group row's "+" and context menu offer the same (Add File…, Add Group) with
+Ungroup and Remove; a new item lands last in the Group whose menu was used, and
+Group asks for a name. File… asks for the file first: in Desktop it opens the
+native picker straight away, in a browser a dialog with a path field, then sends
+`media.create` with the path relativized against the Installation file's folder
+and the Group as `parentId`, and selects the new item. Without a file for the
+Installation yet, the path is sent as it came, and the row's "unsaved" warning
+says to save first. A Group's inspector has only its name. A file's inspector
+has the name, the path as text committed on blur (`media.path`) with, in
+Desktop, a Browse button running the same picker, the type its extension says,
+the status with its reason, and "Used by": the Layers whose media Parameter
+holds the item, found by reading each Layer's definition for which Parameter is
+a media one; clicking one selects the Layer and opens its Scene row. Remove
+works from the context menu, the Delete key and Edit ▸ Remove like every entity.
 
 **Why the "+" opens the picker before creating:** `media.create` names the item
 after its file, so there is nothing to ask until the file is known, and an item

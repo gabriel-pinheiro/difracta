@@ -1,4 +1,9 @@
-import { mediaKindOf, type MediaKind } from "@difracta/core";
+import {
+  mediaTypeOf,
+  type Media,
+  type MediaType,
+  type Table,
+} from "@difracta/core";
 
 import {
   countVideoFrames,
@@ -10,7 +15,7 @@ import type { MediaContext, MediaHandle, MediaVideo } from "./sdk/media.ts";
 
 /**
  * The Output's Media, loaded ahead of use: on every document revision
- * `sync` gives each item of the `media` table an element, an image that
+ * `sync` gives each file of the `media` table an element, an image that
  * decodes or a video that preloads, and drops the ones the table lost, so
  * a Layer that starts showing an item finds it ready and nothing is
  * evicted while the Installation is open. Files come from `mediaUrl(id)`:
@@ -33,16 +38,19 @@ export interface MediaLoaderOptions {
   readonly pageOrigin?: string;
 }
 
-/** The `media` table, of which only the paths matter here. */
-export type MediaTable = Readonly<Record<string, { readonly path: string }>>;
+/** The `media` table, of which only the files' paths matter here; a Group has none. */
+export type MediaTable = Table<Media>;
 
 interface Entry {
   readonly path: string;
-  readonly kind: MediaKind;
+  readonly type: MediaType;
   readonly url: string;
   readonly handle: MediaHandle;
   readonly release: () => void;
 }
+
+const pathOf = (item: Media | undefined): string | undefined =>
+  item?.kind === "file" ? item.path : undefined;
 
 const DOM_ELEMENTS: MediaElements = {
   image: () => document.createElement("img"),
@@ -79,12 +87,12 @@ export class MediaLoader implements MediaContext {
     if (media === this.#table) return;
     this.#table = media;
     for (const [id, entry] of this.#entries)
-      if (media[id]?.path !== entry.path) {
+      if (pathOf(media[id]) !== entry.path) {
         entry.release();
         this.#entries.delete(id);
       }
     for (const [id, item] of Object.entries(media))
-      if (!this.#entries.has(id)) {
+      if (item.kind === "file" && !this.#entries.has(id)) {
         const entry = this.#load(id, item.path);
         if (entry !== undefined) this.#entries.set(id, entry);
       }
@@ -96,7 +104,7 @@ export class MediaLoader implements MediaContext {
 
   video(id: string): MediaVideo | undefined {
     const entry = this.#entries.get(id);
-    if (entry?.kind !== "video") return undefined;
+    if (entry?.type !== "video") return undefined;
     const element = this.#elements.video();
     prepareVideoElement(
       element,
@@ -113,11 +121,11 @@ export class MediaLoader implements MediaContext {
   }
 
   #load(id: string, path: string): Entry | undefined {
-    const kind = mediaKindOf(path);
+    const type = mediaTypeOf(path);
     const url = this.#options.mediaUrl(id);
-    if (kind === undefined || url === undefined) return undefined;
+    if (type === undefined || url === undefined) return undefined;
     const crossOrigin = needsCrossOrigin(url, this.#pageOrigin);
-    return kind === "image"
+    return type === "image"
       ? this.#loadImage(id, path, url, crossOrigin)
       : this.#loadVideo(id, path, url, crossOrigin);
   }
@@ -145,7 +153,7 @@ export class MediaLoader implements MediaContext {
     element.src = url;
     return {
       path,
-      kind: "image",
+      type: "image",
       url,
       handle: {
         id,
@@ -183,7 +191,7 @@ export class MediaLoader implements MediaContext {
     let alive = true;
     return {
       path,
-      kind: "video",
+      type: "video",
       url,
       handle: videoHandle(id, element, frames, () => alive),
       release() {

@@ -21,15 +21,27 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-function withMedia(items: Record<string, string>, filePath: string | null) {
+/** Media files by id and path; a null path makes a Media Group. */
+function withMedia(
+  items: Record<string, string | null>,
+  filePath: string | null,
+) {
   const document = emptyDocument("Show");
+  const base = (id: string) => ({
+    id: brand("media", id),
+    name: id,
+    parentId: null,
+    order: "a0",
+  });
   return {
     document: {
       ...document,
       media: Object.fromEntries(
         Object.entries(items).map(([id, itemPath]) => [
           id,
-          { id: brand("media", id), name: id, path: itemPath, order: "a0" },
+          itemPath === null
+            ? { ...base(id), kind: "group" as const }
+            : { ...base(id), kind: "file" as const, path: itemPath },
         ]),
       ),
     },
@@ -38,13 +50,14 @@ function withMedia(items: Record<string, string>, filePath: string | null) {
 }
 
 describe("MediaStatuses", () => {
-  it("stats every item and replicates only what changed", async () => {
+  it("stats every file, skips Groups and replicates only what changed", async () => {
     const statuses = new MediaStatuses({ allowOutsideShowFolder: false });
     const patches: Patch[] = [];
     statuses.onChange((emitted) => patches.push(...emitted));
     const file = path.join(dir, "show", "show.difracta");
     const items = {
       m_logo: "art/logo.png",
+      g_art: null,
       m_loop: "../loop.mp4",
       m_gone: "art/gone.png",
     };

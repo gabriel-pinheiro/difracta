@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   isAbsoluteMediaPath,
   mediaExtension,
-  mediaKindOf,
+  mediaTypeOf,
   mediaNameOf,
   installationFolder,
   mediaPathProblem,
@@ -19,11 +19,11 @@ describe("Media kinds", () => {
     expect(mediaExtension("noext")).toBeUndefined();
     expect(mediaExtension(".hidden")).toBeUndefined();
     expect(mediaExtension("trailing.")).toBeUndefined();
-    expect(mediaKindOf("Logo.PNG")).toBe("image");
-    expect(mediaKindOf("clips/loop.webm")).toBe("video");
-    expect(mediaKindOf("clip.MOV")).toBe("video");
-    expect(mediaKindOf("notes.txt")).toBeUndefined();
-    expect(mediaKindOf("noext")).toBeUndefined();
+    expect(mediaTypeOf("Logo.PNG")).toBe("image");
+    expect(mediaTypeOf("clips/loop.webm")).toBe("video");
+    expect(mediaTypeOf("clip.MOV")).toBe("video");
+    expect(mediaTypeOf("notes.txt")).toBeUndefined();
+    expect(mediaTypeOf("noext")).toBeUndefined();
   });
 
   it("names an item after its file and refuses what it cannot show", () => {

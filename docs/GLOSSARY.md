@@ -212,21 +212,23 @@ by Parameter name; picking a definition sets them to the definition's defaults.
 
 ### Media
 
-One image or video file the Installation refers to, as an entity in the `media`
-table: a name, unique in the table, and a `path` relative to the Installation
-File's folder, with POSIX separators and `..` allowed. Its kind, image or video,
-is read from the file's extension (png, jpg, jpeg, webp, gif, svg; mp4, webm,
-mov) and never stored. The Runtime serves the file at `GET /media/<id>` and
-reports in the live state whether it is there: `ok`, `missing`, `outside` the
-folder, or `unsaved` while the Installation has no file for the path to be
+One image or video the Installation refers to, as an entity in the `media`
+table. A Media item is of kind `file`, with a `path` relative to the
+Installation File's folder, POSIX separators and `..` allowed. Its type, image
+or video, is read from the file's extension (png, jpg, jpeg, webp, gif, svg;
+mp4, webm, mov) and never stored. Items are arranged in Media Groups, and a name
+is unique among its siblings. The Runtime serves the file at `GET /media/<id>`
+and reports in the live state whether it is there: `ok`, `missing`, `outside`
+the folder, or `unsaved` while the Installation has no file for the path to be
 relative to.
 
 ### Media Parameter
 
 A Parameter of kind `media` a Visual declares, holding a Media id or `""` for
-none, restricted to one kind (`accepts: "image" | "video"`). Its Address lists
-the Media items of that kind as its options, so a Macro can swap artwork; it is
-not linkable. Removing the Media item clears every Media Parameter holding it.
+none, restricted to one type (`accepts: "image" | "video"`). Its Address lists
+the Media files of that type as its options, in navigator order and without
+Groups, so a Macro can swap artwork; it is not linkable. Removing the Media
+item, or the Group holding it, clears every Media Parameter holding it.
 
 ### Image
 
@@ -307,6 +309,11 @@ still moves on. Chance is per action; there is no Chance on a Macro.
 
 A named folder of Macros in the navigator, nested as needed. A Group only
 arranges; it has no run of its own.
+
+### Media Group
+
+A folder in the Media section of the navigator. It arranges Media items and
+other Groups and has no file of its own; a Media Parameter never holds one.
 
 ### Cue
 

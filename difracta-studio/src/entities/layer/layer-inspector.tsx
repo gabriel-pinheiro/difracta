@@ -67,7 +67,7 @@ export function LayerInspector({
   const { select } = useSelection();
   const layer = useDocumentPath<Layer>(view, ["layers", id]);
   const surfaces = useDocumentPath<Table<Surface>>(view, ["surfaces"]) ?? {};
-  // A media Parameter lists the Media items of its kind as its options.
+  // A media Parameter lists the Media files of its type as its options.
   const media = useDocumentPath<Table<Media>>(view, ["media"]) ?? {};
   const links = useDocumentPath<Table<Link>>(view, ["links"]) ?? {};
   const controllers =

@@ -1,5 +1,5 @@
 import type { DocumentView } from "@difracta/client";
-import { mediaKindOf, type Media } from "@difracta/core";
+import { mediaTypeOf, type Media, type MediaFile } from "@difracta/core";
 import { FolderOpen } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -16,17 +16,12 @@ import { useSelection } from "@/selection/selection";
 
 import { layerIcons } from "@/entities/layer/layer-icons";
 
-import { mediaKindLabels } from "./media-icons";
+import { mediaTypeLabels } from "./media-icons";
 import { requestMediaPath } from "./media-path-request";
 import { describeMediaStatus, type MediaLive } from "./media-status";
 import { layersUsing } from "./media-usage";
 
-/**
- * A Media item's name, its path as text (Browse in Desktop opens the native
- * picker over the same file types), the kind its extension says, what the
- * runtime reports about the file, and the Layers showing it, each a way to
- * that Layer.
- */
+/** A Media item's inspector: a Group has only its name; a file has the rest. */
 export function MediaInspector({
   view,
   id,
@@ -36,20 +31,54 @@ export function MediaInspector({
 }) {
   const command = useCommand(view);
   const { select } = useSelection();
-  const { setExpanded } = useExpansion();
-  const { selected } = useDocumentCommands();
   const item = useDocumentPath<Media>(view, ["media", id]);
-  const live = useDocumentPath<MediaLive>(view, ["live", "media", id]);
-  // Uses read every Layer's Parameters: a change anywhere may add one.
-  const document = useSignal(view.document);
-  const [request, setRequest] = useState<NameRequest | undefined>(undefined);
-  const desktop = desktopBridge() !== undefined;
 
   useEffect(() => {
     if (item === undefined) select({ kind: "installation" });
   }, [item, select]);
   if (item === undefined) return null;
-  const kind = mediaKindOf(item.path);
+  if (item.kind === "file")
+    return <MediaFileInspector view={view} item={item} />;
+  return (
+    <>
+      <InspectorHeading name={item.name} id={item.id} />
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 p-3">
+        <NameField
+          label="Name"
+          value={item.name}
+          onCommit={(name) =>
+            void command("media.rename", { mediaId: id, name })
+          }
+        />
+      </div>
+    </>
+  );
+}
+
+/**
+ * A Media file's name, its path as text (Browse in Desktop opens the native
+ * picker over the same file types), the type its extension says, what the
+ * runtime reports about the file, and the Layers showing it, each a way to
+ * that Layer.
+ */
+function MediaFileInspector({
+  view,
+  item,
+}: {
+  readonly view: DocumentView;
+  readonly item: MediaFile;
+}) {
+  const id = item.id;
+  const command = useCommand(view);
+  const { select } = useSelection();
+  const { setExpanded } = useExpansion();
+  const { selected } = useDocumentCommands();
+  const live = useDocumentPath<MediaLive>(view, ["live", "media", id]);
+  // Uses read every Layer's Parameters: a change anywhere may add one.
+  const document = useSignal(view.document);
+  const [request, setRequest] = useState<NameRequest | undefined>(undefined);
+  const desktop = desktopBridge() !== undefined;
+  const type = mediaTypeOf(item.path);
   const status =
     live === undefined ? undefined : describeMediaStatus(live.status);
   const uses = document === undefined ? [] : layersUsing(document, catalog, id);
@@ -93,11 +122,11 @@ export function MediaInspector({
           )}
         </div>
         <div className="grid gap-1">
-          <span className="text-xs text-muted-foreground">Kind</span>
+          <span className="text-xs text-muted-foreground">Type</span>
           <span className="text-xs">
-            {kind === undefined
+            {type === undefined
               ? "Not an image or video"
-              : mediaKindLabels[kind]}
+              : mediaTypeLabels[type]}
           </span>
         </div>
         <div className="grid gap-1">
@@ -124,7 +153,7 @@ export function MediaInspector({
           {uses.length === 0 ? (
             <p className="text-[0.6875rem]/relaxed text-muted-foreground">
               No Layer shows this item. Pick it in a Layer's{" "}
-              {kind === "video" ? "Video" : "Image"} row.
+              {type === "video" ? "Video" : "Image"} row.
             </p>
           ) : (
             <ul className="grid grid-cols-[minmax(0,1fr)] gap-px">

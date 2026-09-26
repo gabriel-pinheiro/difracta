@@ -3,10 +3,19 @@ import { describe, expect, it } from "vitest";
 
 import { mediaWarning, mediaWarningCount } from "./media-status";
 
+const file = (id: string, path: string) => ({
+  id,
+  kind: "file",
+  name: id,
+  parentId: null,
+  path,
+  order: id,
+});
 const media = {
-  a: { id: "a", name: "a", path: "a.png", order: "a" },
-  b: { id: "b", name: "b", path: "b.png", order: "b" },
-  c: { id: "c", name: "c", path: "c.mp4", order: "c" },
+  a: file("a", "a.png"),
+  b: file("b", "b.png"),
+  c: file("c", "c.mp4"),
+  g: { id: "g", kind: "group", name: "g", parentId: null, order: "g" },
 } as unknown as Table<Media>;
 
 describe("Media status", () => {
@@ -22,11 +31,12 @@ describe("Media status", () => {
     );
   });
 
-  it("counts the rows that warn for the collapsed section", () => {
+  it("counts the file rows that warn for the collapsed section, never a Group", () => {
     expect(
       mediaWarningCount(media, {
         a: { status: "ok" },
         b: { status: "missing" },
+        g: { status: "missing" },
       }),
     ).toBe(1);
     expect(mediaWarningCount({}, {})).toBe(0);

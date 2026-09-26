@@ -22,7 +22,8 @@ export type MediaLocation =
 
 /**
  * Where a Media item's file is, before looking at the disk: the item's
- * path resolved against the Installation file's folder. `unsaved` when
+ * path resolved against the Installation file's folder. `unknown` for no
+ * such item and for a Media Group, which has no file; `unsaved` when
  * the Installation has no file yet, so nothing resolves; `outside` when the
  * resolved path leaves the folder and the runtime does not allow that.
  */
@@ -32,7 +33,7 @@ export function locateMedia(
   allowOutsideShowFolder: boolean,
 ): MediaLocation {
   const item = source.document.media[id];
-  if (item === undefined) return { status: "unknown" };
+  if (item === undefined || item.kind === "group") return { status: "unknown" };
   if (source.path === null) return { status: "unsaved" };
   const folder = path.dirname(source.path);
   const file = resolveMediaPath(folder, item.path);
@@ -60,7 +61,7 @@ export async function statMediaFile(
   }
 }
 
-/** The item's status for the live state: undefined when no such item exists. */
+/** The item's status for the live state: undefined when no such item exists or it is a Group. */
 export async function mediaStatusOf(
   source: MediaSource,
   id: string,

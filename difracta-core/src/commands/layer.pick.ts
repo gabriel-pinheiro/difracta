@@ -152,7 +152,7 @@ function pick(
   return accepted(patches);
 }
 
-/** A media Parameter's value must be an existing item of the kind it accepts; the schema alone cannot tell. */
+/** A media Parameter's value must be an existing file of the type it accepts; the schema alone cannot tell. */
 function mediaValuesProblem(
   document: CommandContext<unknown>["document"],
   definition: Definition,

@@ -1,4 +1,4 @@
-import { generateId, mediaKindOf, type MediaKind } from "@difracta/core";
+import { generateId, mediaTypeOf, type MediaType } from "@difracta/core";
 import type { CommandResult } from "@difracta/protocol";
 import { useCallback, useState, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -7,21 +7,24 @@ import { NameDialog, type NameRequest } from "@/components/name-dialog";
 import { useDocumentCommands } from "@/documents/document-commands";
 import { showWarnings, useClient } from "@/lib/client";
 
-import { mediaKindLabels } from "./media-icons";
+import { mediaTypeLabels } from "./media-icons";
 import { requestMediaPath } from "./media-path-request";
 
 export interface CreateMediaOptions {
-  /** The kind the caller can take; an item of the other kind is added but not handed on. */
-  readonly accepts?: MediaKind | undefined;
+  /** The type the caller can take; a file of the other type is added but not handed on. */
+  readonly accepts?: MediaType | undefined;
+  /** The Media Group to add into; the root when absent. */
+  readonly parentId?: string | null | undefined;
   readonly onCreated?: ((id: string) => void) | undefined;
 }
 
 /**
- * Adds a Media item from wherever a "+" for one sits: the Media section, a
- * Layer's media row, a Macro action's. In Desktop the native picker opens
+ * Adds a Media file from wherever a "+" for one sits: the Media section or
+ * a Media Group's row (into that Group), a Layer's media row, a Macro
+ * action's. In Desktop the native picker opens
  * straight away and the item is named after the file by `media.create`; in
  * a browser the path is typed into `dialog`, which the caller renders. With
- * `accepts`, a file of the other kind is added all the same but not handed
+ * `accepts`, a file of the other type is added all the same but not handed
  * on, since the Parameter would refuse it, and a toast says so.
  */
 export function useCreateMedia(): {
@@ -45,19 +48,20 @@ export function useCreateMedia(): {
             .command<CommandResult>(view.documentId, "media.create", {
               id,
               path,
+              parentId: options?.parentId ?? null,
             })
             .then(
               (result) => {
                 showWarnings(result.warnings ?? []);
-                const kind = mediaKindOf(path);
+                const type = mediaTypeOf(path);
                 const accepts = options?.accepts;
                 if (
                   accepts !== undefined &&
-                  kind !== undefined &&
-                  kind !== accepts
+                  type !== undefined &&
+                  type !== accepts
                 ) {
                   toast.message(
-                    `Added ${mediaKindLabels[kind]} “${path}” to Media; this Parameter takes ${accepts === "image" ? "an Image" : "a Video"}.`,
+                    `Added ${mediaTypeLabels[type]} “${path}” to Media; this Parameter takes ${accepts === "image" ? "an Image" : "a Video"}.`,
                   );
                   return;
                 }

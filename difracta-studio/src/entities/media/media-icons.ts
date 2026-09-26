@@ -1,12 +1,19 @@
-import type { MediaKind } from "@difracta/core";
-import { FileImage, FileVideoCamera, type LucideIcon } from "lucide-react";
+import type { MediaType } from "@difracta/core";
+import {
+  FileImage,
+  FileVideoCamera,
+  Folder,
+  type LucideIcon,
+} from "lucide-react";
 
-export const mediaIcons: Record<MediaKind, LucideIcon> = {
+export const mediaTypeIcons: Record<MediaType, LucideIcon> = {
   image: FileImage,
   video: FileVideoCamera,
 };
 
-export const mediaKindLabels: Record<MediaKind, string> = {
+export const mediaTypeLabels: Record<MediaType, string> = {
   image: "Image",
   video: "Video",
 };
+
+export const mediaGroupIcon: LucideIcon = Folder;

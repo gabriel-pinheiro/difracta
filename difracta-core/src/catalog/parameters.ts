@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { MediaKind } from "../document/media.ts";
+import type { MediaType } from "../document/media.ts";
 import { settings } from "../settings.ts";
 
 /**
@@ -76,13 +76,13 @@ export interface BooleanParameter extends ParameterBase {
 }
 
 /**
- * A Media item to show, by id, or `""` for none; only items of the accepted
- * kind fit. Its value is a reference into the Installation, so the
+ * A Media item to show, by id, or `""` for none; only files of the accepted
+ * type fit. Its value is a reference into the Installation, so the
  * Address is not linkable and removing the item clears the value.
  */
 export interface MediaParameter extends ParameterBase {
   readonly kind: "media";
-  readonly accepts: MediaKind;
+  readonly accepts: MediaType;
   readonly default: "";
 }
 

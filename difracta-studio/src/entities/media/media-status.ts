@@ -54,11 +54,12 @@ export function mediaWarning(
   return describeMediaStatus(live.status);
 }
 
-/** How many Media rows warn, for the collapsed Media section. */
+/** How many Media file rows warn, for the collapsed Media section; a Group has no file to warn about. */
 export function mediaWarningCount(
   media: Table<Media>,
   live: MediaLiveTable,
 ): number {
-  return Object.keys(media).filter((id) => mediaWarning(live[id]) !== undefined)
-    .length;
+  return Object.values(media).filter(
+    (item) => item.kind === "file" && mediaWarning(live[item.id]) !== undefined,
+  ).length;
 }

@@ -1,3 +1,4 @@
+import { id as brand } from "@difracta/core";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -112,7 +113,14 @@ function loader(mediaUrl = (id: string): string | undefined => `/media/${id}`) {
   return { instance, images, videos };
 }
 
-const item = (id: string, path: string) => ({ id, name: id, path, order: "a" });
+const item = (id: string, path: string) => ({
+  id: brand("media", id),
+  kind: "file" as const,
+  name: id,
+  parentId: null,
+  path,
+  order: "a",
+});
 
 describe("MediaLoader", () => {
   it("loads every item of the table once, decodes images and preloads videos muted", () => {
@@ -162,12 +170,23 @@ describe("MediaLoader", () => {
     expect(images[0]?.src).toBe("");
   });
 
-  it("skips items with no URL or an extension it cannot show", () => {
+  it("skips Groups and items with no URL or an extension it cannot show", () => {
     const { instance, images } = loader((id) =>
       id === "far" ? undefined : `/media/${id}`,
     );
-    instance.sync({ far: item("far", "far.png"), odd: item("odd", "odd.txt") });
+    instance.sync({
+      far: item("far", "far.png"),
+      odd: item("odd", "odd.txt"),
+      art: {
+        id: brand("media", "art"),
+        kind: "group",
+        name: "Art",
+        parentId: null,
+        order: "a",
+      },
+    });
     expect(images).toHaveLength(0);
+    expect(instance.get("art")).toBeUndefined();
     expect(instance.get("far")).toBeUndefined();
   });
 

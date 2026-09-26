@@ -131,7 +131,7 @@ describe("Media items", () => {
     ).toContain("does not exist");
   });
 
-  it("resolves a media Address with none and the items of the accepted kind", () => {
+  it("resolves a media Address with none and the files of the accepted type", () => {
     const document = installation();
     const resolved = resolveAddress(
       document,
@@ -309,7 +309,9 @@ describe("Media items", () => {
       mediaId: "m_logo",
       path: "art/logo.webp",
     });
-    expect(repointed.document.media.m_logo?.path).toBe("art/logo.webp");
+    expect(repointed.document.media.m_logo).toMatchObject({
+      path: "art/logo.webp",
+    });
     expect(layerOf(repointed.document).parameters.media).toBe("m_logo");
     expect(
       run(document, "media.path", { mediaId: "m_logo", path: "art/Logo.PNG" })

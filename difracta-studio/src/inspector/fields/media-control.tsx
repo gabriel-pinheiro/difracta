@@ -12,8 +12,8 @@ import {
 import { useCreateMedia } from "@/entities/media/use-create-media";
 
 /**
- * The control for a media Address: a select over the Media items of the
- * kind it accepts, None first, and a "+" that adds an item through the
+ * The control for a media Address: a select over the Media files of the
+ * type it accepts, None first, and a "+" that adds an item through the
  * same picker the Media section uses and picks it here in one flow, as the
  * Target row's "+" makes a Surface. A value whose item is gone shows as
  * None. The options come with the Address, resolved against the Media

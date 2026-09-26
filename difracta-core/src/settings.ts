@@ -65,7 +65,7 @@ export const settings = {
     stepTolerance: 1e-9,
   },
   media: {
-    /** File extensions a Media item may have; the kind is read from the extension, never stored. */
+    /** File extensions a Media file may have; the type is read from the extension, never stored. */
     imageExtensions: ["png", "jpg", "jpeg", "webp", "gif", "svg"],
     videoExtensions: ["mp4", "webm", "mov"],
     /**

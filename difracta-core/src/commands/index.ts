@@ -39,9 +39,11 @@ import { macroUngroup } from "./macro.ungroup.ts";
 import { installationRename } from "./installation.rename.ts";
 import { maskCreate } from "./mask.create.ts";
 import { mediaCreate } from "./media.create.ts";
+import { mediaMove } from "./media.move.ts";
 import { mediaPath } from "./media.path.ts";
 import { mediaRemove } from "./media.remove.ts";
 import { mediaRename } from "./media.rename.ts";
+import { mediaUngroup } from "./media.ungroup.ts";
 import {
   maskPointAdd,
   maskPointNudge,
@@ -110,6 +112,8 @@ export const builtInCommands: readonly CommandDefinition<never>[] = [
   mediaCreate,
   mediaRename,
   mediaPath,
+  mediaMove,
+  mediaUngroup,
   mediaRemove,
   sceneCreate,
   sceneRename,

@@ -1,4 +1,4 @@
-import { mediaKindOf, settings } from "@difracta/core";
+import { mediaTypeOf, settings } from "@difracta/core";
 import { describe, expect, it } from "vitest";
 
 import { mediaDialogFilters } from "./media-dialog.ts";
@@ -11,10 +11,10 @@ describe("mediaDialogFilters", () => {
       ...settings.media.imageExtensions,
       ...settings.media.videoExtensions,
     ]);
-    expect(images?.extensions.map((ext) => mediaKindOf(`a.${ext}`))).toEqual(
+    expect(images?.extensions.map((ext) => mediaTypeOf(`a.${ext}`))).toEqual(
       images?.extensions.map(() => "image"),
     );
-    expect(videos?.extensions.map((ext) => mediaKindOf(`a.${ext}`))).toEqual(
+    expect(videos?.extensions.map((ext) => mediaTypeOf(`a.${ext}`))).toEqual(
       videos?.extensions.map(() => "video"),
     );
   });

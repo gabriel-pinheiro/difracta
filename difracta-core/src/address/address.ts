@@ -15,7 +15,7 @@ import {
   type Layer,
   type Surface,
 } from "../document/document.ts";
-import { mediaKindOf, type MediaKind } from "../document/media.ts";
+import { mediaFiles, mediaTypeOf, type MediaType } from "../document/media.ts";
 import { orderedEntries } from "../document/order.ts";
 import { flattenTree } from "../document/tree.ts";
 import type { PatchPath } from "../document/patch.ts";
@@ -58,10 +58,10 @@ export interface ResolvedAddress {
   /** What the property starts at; a trigger has none. */
   readonly default?: AddressValue;
   readonly range?: NumberRange;
-  /** A choice's values, or for a media Address none (`""`) and the Media items of the accepted kind. */
+  /** A choice's values, or for a media Address none (`""`) and the Media files of the accepted type. */
   readonly options?: readonly ChoiceOption[];
-  /** The kind of Media item a media Address takes. */
-  readonly accepts?: MediaKind;
+  /** The type of Media file a media Address takes. */
+  readonly accepts?: MediaType;
 }
 
 /** What resolving needs from a Document: the tables that own Addresses. */
@@ -107,15 +107,15 @@ export function layerDefinition(layer: Layer, catalog: Catalog) {
   return undefined;
 }
 
-/** None first, then the Media items of `kind` in their order, so a control lists them as they are. */
+/** None first, then the Media files of `type` in navigator order, Groups left out, so a control lists them as they are. */
 function mediaOptions(
   source: AddressSource,
-  kind: MediaKind,
+  type: MediaType,
 ): readonly ChoiceOption[] {
   return [
     { value: "", label: "None" },
-    ...orderedEntries(source.media)
-      .filter((item) => mediaKindOf(item.path) === kind)
+    ...mediaFiles(source.media)
+      .filter((item) => mediaTypeOf(item.path) === type)
       .map((item) => ({ value: item.id, label: item.name })),
   ];
 }

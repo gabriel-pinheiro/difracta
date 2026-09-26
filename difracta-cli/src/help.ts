@@ -45,19 +45,24 @@ Working from a shell
              <display>" takes it off. Works from any machine.
 
   Media      Images (png, jpg, jpeg, webp, gif, svg) and videos (mp4, webm,
-             mov) are Media items, files stored by a path relative to the
-             Installation file's folder. "media add <file> [--name N]" adds
-             one from a path on this machine (the Installation must be
-             saved; ".." paths are fine, and served only with the runtime's
-             --media-anywhere). "media list" shows each with its status:
-             ok, missing, outside, unsaved. A Visual's media Parameter takes
-             an item's id or name, or "" for none:
-             edit layer/Wall/param/media Logo. The runtime serves a file at
-             GET /media/<id>.
+             mov) are Media items of kind file, stored by a path relative to
+             the Installation file's folder; their type, image or video,
+             comes from the extension. "media add <file> [--name N]
+             [--group G]" adds one from a path on this machine (the
+             Installation must be saved; ".." paths are fine, and served
+             only with the runtime's --media-anywhere). "media group <name>
+             [--group G]" adds a Media Group to arrange them; media.move and
+             media.ungroup rearrange. "media list" shows the tree with each
+             file's status: ok, missing, outside, unsaved. A Visual's media
+             Parameter takes a file's id or name, or "" for none:
+             edit layer/Wall/param/media Logo. Names are unique within a
+             Group, so a name used in two Groups is ambiguous: give the id.
+             The runtime serves a file at GET /media/<id>.
 
-  Order      A create lands first in its Group (a Layer: on top). Pass
-             "after": <sibling id|name> to place it below that sibling, or
-             null for first; entity.move, layer.move and the others rearrange.
+  Order      A create lands first in its Group (a Layer: on top; a Media
+             item: last). Pass "after": <sibling id|name> to place it below
+             that sibling, or null for first; entity.move, layer.move and the
+             others rearrange.
 
   Names      Wherever an Address or a payload field takes an entity id, its
              name works too: layer/Wash/opacity, '{"sceneId":"Live"}'. Names

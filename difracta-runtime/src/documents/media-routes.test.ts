@@ -58,6 +58,18 @@ describe("GET /media/<id>", () => {
     const unknown = await app.inject({ url: `${route}/nope` });
     expect(unknown.statusCode).toBe(404);
     expect(unknown.json()).toEqual({ error: "No Media item “nope”." });
+    store
+      .currentSession()!
+      .execute(
+        "media.create",
+        { id: "g_art", kind: "group", name: "Art" },
+        "t",
+      );
+    const group = await app.inject({ url: `${route}/g_art` });
+    expect(group.statusCode).toBe(404);
+    expect(group.json()).toEqual({
+      error: "“Art” is a Media Group, which has no file.",
+    });
     const gone = await app.inject({ url: `${route}/m_gone` });
     expect(gone.statusCode).toBe(404);
     expect(gone.json<{ error: string }>().error).toContain("no file at");

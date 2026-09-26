@@ -54,7 +54,7 @@ export function parseByteRange(
  * honoured, which video seeking needs. Any origin may read it, so an
  * Output page served from elsewhere (a dev server, another runtime's
  * Studio) can upload the picture to a texture. 404 for an unknown id, a
- * missing file or an Installation without a path; 403 when the resolved
+ * Media Group, a missing file or an Installation without a path; 403 when the resolved
  * path leaves the Installation's folder and the runtime does not allow
  * that.
  */
@@ -74,12 +74,16 @@ export function registerMediaRoutes(
         request.params.id,
         options.allowOutsideShowFolder,
       );
-      const name = session.document.media[request.params.id]?.name ?? "";
+      const item = session.document.media[request.params.id];
+      const name = item?.name ?? "";
       switch (location.status) {
         case "unknown":
-          return reply
-            .status(404)
-            .send({ error: `No Media item “${request.params.id}”.` });
+          return reply.status(404).send({
+            error:
+              item?.kind === "group"
+                ? `“${name}” is a Media Group, which has no file.`
+                : `No Media item “${request.params.id}”.`,
+          });
         case "unsaved":
           return reply.status(404).send({
             error: `Media “${name}” cannot be found: the Installation has no file yet, so its Media paths resolve nowhere. Save it first.`,

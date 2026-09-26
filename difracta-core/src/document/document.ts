@@ -171,22 +171,39 @@ export const PathSchema = z
   .strict();
 export type Path = Entity<typeof PathSchema, PathId>;
 
+/** Fields every Media item has, whatever its kind. */
+const MediaBase = {
+  id: z.string().min(1),
+  name: EntityName,
+  /** The Group containing the item, or null at the section's root; absent in older files. */
+  parentId: z.string().min(1).nullable().default(null),
+  /** Position among the Media items of the same parent; see `order.ts`. */
+  order: z.string().min(1).default(DEFAULT_ORDER_KEY),
+};
+
+export const MEDIA_KINDS = ["file", "group"] as const;
+export type MediaKind = (typeof MEDIA_KINDS)[number];
+
 /**
- * One image or video file the Installation refers to. `path` is relative to
- * the Installation file's folder, POSIX separators, `..` allowed; the kind
- * (image or video) is read from its extension (`document/media.ts`) and
- * never stored. Names are unique in the table.
+ * A Media item is one image or video file the Installation refers to, or a
+ * Group arranging items in the navigator. A file's `path` is relative to
+ * the Installation file's folder, POSIX separators, `..` allowed; its type
+ * (image or video) is read from the extension (`document/media.ts`) and
+ * never stored. Names are unique among siblings. An item without a `kind`,
+ * as older files hold, is a file.
  */
-export const MediaSchema = z
-  .object({
-    id: z.string().min(1),
-    name: EntityName,
-    path: z.string().min(1),
-    /** Position among Media items; see `order.ts`. */
-    order: z.string().min(1).default(DEFAULT_ORDER_KEY),
-  })
-  .strict();
+export const MediaSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      ...MediaBase,
+      kind: z.literal("file").default("file"),
+      path: z.string().min(1),
+    })
+    .strict(),
+  z.object({ ...MediaBase, kind: z.literal("group") }).strict(),
+]);
 export type Media = Entity<typeof MediaSchema, MediaId>;
+export type MediaFile = Extract<Media, { kind: "file" }>;
 
 export const CALIBRATION_VIEWS = ["selected", "outlines", "patterns"] as const;
 export const CalibrationViewSchema = z.enum(CALIBRATION_VIEWS);
@@ -518,6 +535,7 @@ export const PARENT_FIELDS: Partial<
   masks: ["surfaceId"],
   paths: ["surfaceId"],
   layers: ["sceneId", "parentId"],
+  media: ["parentId"],
   controllers: ["parentId"],
   macros: ["parentId"],
 };
