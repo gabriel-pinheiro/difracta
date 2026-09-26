@@ -50,8 +50,12 @@ export class LaunchPage {
     });
   }
 
+  /**
+   * The open window. One already destroyed counts as closed: its `closed`
+   * event can come after File ▸ Connect to... asks for the page again.
+   */
   get window(): BrowserWindow | undefined {
-    return this.#window;
+    return this.#window?.isDestroyed() === false ? this.#window : undefined;
   }
 
   /**
@@ -65,7 +69,7 @@ export class LaunchPage {
     readonly onClosed: () => void;
   }): void {
     this.#problem = options.problem;
-    if (this.#window !== undefined) return;
+    if (this.window !== undefined) return;
     const { runtimes, distDir } = this.#options;
     const window = createLaunchWindow(
       path.join(distDir, "launch-preload.cjs"),
@@ -78,6 +82,8 @@ export class LaunchPage {
         window.webContents.send(launchChannels.runtimesChanged, list);
     });
     window.on("closed", () => {
+      // A window opened since is not this one's to close down.
+      if (this.#window !== window) return;
       runtimes.close();
       this.#window = undefined;
       options.onClosed();
@@ -85,7 +91,7 @@ export class LaunchPage {
   }
 
   close(): void {
-    this.#window?.close();
+    this.window?.close();
   }
 
   /** The name the runtime at `origin` announces now, else the one it was remembered with. */

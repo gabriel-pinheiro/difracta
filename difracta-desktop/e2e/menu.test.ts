@@ -168,7 +168,9 @@ describe("Difracta Desktop's native menu", () => {
       }, response);
     const asked = answer(2);
     await address.fill(`127.0.0.1:${port}`);
-    await address.press("Enter");
+    // Enter closes the page it is pressed in, which can happen before the
+    // press itself settles; what follows checks the outcome.
+    await address.press("Enter").catch(() => undefined);
     expect(await asked).toBe("Save the changes to “Changed”?");
     await eventually(
       () => Promise.resolve(chooser.isClosed()),
@@ -183,7 +185,9 @@ describe("Difracta Desktop's native menu", () => {
     void answer(1);
     const again = chooser.getByRole("textbox");
     await again.fill(`127.0.0.1:${port}`);
-    const remote = await windowAfter(() => again.press("Enter"));
+    const remote = await windowAfter(() =>
+      again.press("Enter").catch(() => undefined),
+    );
     await remote.waitForFunction(() => document.title.startsWith("Elsewhere"));
     await eventually(
       () => Promise.resolve(page.isClosed() && chooser.isClosed()),
