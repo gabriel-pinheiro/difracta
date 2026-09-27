@@ -308,9 +308,9 @@ Its Animation is how a digit becomes the next: Cut, Roll, Flip or Pop.
 ### Image
 
 The built-in shader Visual that shows an image Media item on its Target, through
-a Fit (stretch, cover or contain) and a Tint. The Output loads every Media item
-ahead of use and uploads the picture to a texture once; the Layer is blank until
-the picture is decoded or while the Parameter is `""`.
+a Fit (cover by default, contain or stretch) and a Tint. The Output loads every
+Media item ahead of use and uploads the picture to a texture once; the Layer is
+blank until the picture is decoded or while the Parameter is `""`.
 
 ### Video
 

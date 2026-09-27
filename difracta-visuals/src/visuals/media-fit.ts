@@ -19,14 +19,14 @@ export const MEDIA_FIT_PARAMETERS = {
   fit: {
     kind: "choice",
     label: "Fit",
-    default: "stretch",
+    default: "cover",
     options: [
       { value: "stretch", label: "Stretch" },
       { value: "cover", label: "Cover" },
       { value: "contain", label: "Contain" },
     ],
     description:
-      "Stretch fills the Surface whatever the picture's shape; Cover keeps the shape and crops; Contain keeps the shape and leaves the rest clear.",
+      "Cover keeps the picture's shape and crops what overflows; Contain keeps the shape and leaves the rest clear; Stretch fills the Surface whatever the picture's shape.",
   },
 } as const;
 

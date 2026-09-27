@@ -34,7 +34,9 @@ describe("Image pixels", () => {
     const stage = new Stage()
       .media("pic", "sample.png")
       .surface("wall")
-      .visual("image", "wall", "image", { params: { media: "pic" } });
+      .visual("image", "wall", "image", {
+        params: { media: "pic", fit: "stretch" },
+      });
     const frame = await renderer().render(stage.document(), 128, 72, 10, media);
     expectColor(pixel(frame, 88, 36), WHITE); // on the ring
     expectColor(pixel(frame, 64, 36), BLACK); // inside it
@@ -46,7 +48,7 @@ describe("Image pixels", () => {
       .media("pic", "sample.png")
       .surface("wall")
       .visual("image", "wall", "image", {
-        params: { media: "pic", tint: [1, 0, 0, 1] },
+        params: { media: "pic", fit: "stretch", tint: [1, 0, 0, 1] },
       });
     const red = await renderer().render(tinted.document(), 128, 72, 10, media);
     expectColor(pixel(red, 88, 36), RED);

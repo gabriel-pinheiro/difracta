@@ -104,7 +104,7 @@ describe("Image", () => {
     const shown = frame({ media: "logo" });
     expect(shown).toMatchObject({ blank: false, changed: true });
     expect(frame({ media: "logo" }).changed).toBe(false);
-    expect(frame({ media: "logo", fit: "cover" }).changed).toBe(true);
+    expect(frame({ media: "logo", fit: "stretch" }).changed).toBe(true);
     expect(frame({ media: "" })).toMatchObject({ blank: true, changed: true });
   });
 });
