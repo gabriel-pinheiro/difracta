@@ -44,6 +44,8 @@ export interface FrameMetrics {
     readonly running: number;
     readonly planned: number;
   };
+  /** Video Layers planned, video elements held and the ones playing, from the last frame. */
+  readonly videos: FrameReport["videos"];
   /** The Layers the last frame reported as unable to run. */
   readonly issues: readonly RenderIssue[];
 }
@@ -68,13 +70,13 @@ export class FrameCanvas {
   #shadersPerFrame = 0;
   #executedPerFrame = 0;
   #frameError: string | undefined;
-  #lastReport: Pick<FrameReport, "layers" | "shaders" | "filters" | "issues"> =
-    {
-      layers: { planned: 0, running: 0, rendered: 0 },
-      shaders: { planned: 0, running: 0, rendered: 0 },
-      filters: { planned: 0, running: 0, executed: 0 },
-      issues: [],
-    };
+  #lastReport: Omit<FrameReport, "drew"> = {
+    layers: { planned: 0, running: 0, rendered: 0 },
+    shaders: { planned: 0, running: 0, rendered: 0 },
+    filters: { planned: 0, running: 0, executed: 0 },
+    videos: { layers: 0, players: 0, playing: 0 },
+    issues: [],
+  };
 
   constructor(canvas: HTMLCanvasElement, options: CompositorOptions) {
     this.#canvas = canvas;
@@ -117,6 +119,7 @@ export class FrameCanvas {
         running: this.#lastReport.filters.running,
         planned: this.#lastReport.filters.planned,
       },
+      videos: this.#lastReport.videos,
       issues: this.#lastReport.issues,
     };
   }

@@ -31,12 +31,16 @@ interface FrameCounting {
   readonly stop: () => void;
 }
 
-/** Counts presented frames on `element`, from the first decoded one on. */
+/**
+ * Counts presented frames on `element`, from the first decoded one on; an
+ * element that already holds a frame, as one handed over warm does, counts
+ * from one.
+ */
 export function countVideoFrames(
   element: HTMLVideoElement,
   onFrame?: () => void,
 ): FrameCounting {
-  let version = 0;
+  let version = element.readyState >= HAVE_CURRENT_DATA ? 1 : 0;
   let callback: number | undefined;
   const advance = (): void => {
     if (element.readyState < HAVE_CURRENT_DATA) return;
@@ -90,9 +94,11 @@ export function videoHandle(
   };
 }
 
+/** A playback over `element`; `released` is told once, when it is disposed. */
 export function createMediaVideo(
   id: string,
   element: HTMLVideoElement,
+  released?: () => void,
 ): MediaVideo {
   let alive = true;
   const frames = countVideoFrames(element);
@@ -126,6 +132,7 @@ export function createMediaVideo(
       element.pause();
       element.removeAttribute("src");
       element.load();
+      released?.();
     },
   };
 }

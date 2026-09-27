@@ -67,6 +67,17 @@ export interface FrameReport {
     readonly running: number;
     readonly executed: number;
   };
+  /**
+   * Video: planned Layers whose Visual takes a video, the video elements
+   * the Output holds (one kept ready per video Media item, one per
+   * playback a Layer holds), each of which holds a decoder, and the ones
+   * playing.
+   */
+  readonly videos: {
+    readonly layers: number;
+    readonly players: number;
+    readonly playing: number;
+  };
   /** Planned Layers drawing nothing because their Visual or Filter cannot run. */
   readonly issues: readonly RenderIssue[];
 }
@@ -158,6 +169,7 @@ class WebGLCompositor implements Compositor {
         layers: NO_LAYERS,
         shaders: NO_LAYERS,
         filters: NO_FILTERS,
+        videos: { layers: 0, ...this.#loader.videos() },
         issues: NO_ISSUES,
       };
     const dt =
@@ -191,6 +203,7 @@ class WebGLCompositor implements Compositor {
       running: chain.running,
       executed: passes.length,
     };
+    const videos = { layers: step.videoLayers, ...this.#loader.videos() };
     const issues = frameIssues(
       step,
       chain,
@@ -211,6 +224,7 @@ class WebGLCompositor implements Compositor {
         layers,
         shaders: { ...shaders, rendered: 0 },
         filters: { ...filters, executed: 0 },
+        videos,
         issues,
       };
     this.#last = { document, outputId, width, height };
@@ -229,7 +243,8 @@ class WebGLCompositor implements Compositor {
     gl.viewport(0, 0, width, height);
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    if (plan.blackout) return { drew: true, layers, shaders, filters, issues };
+    if (plan.blackout)
+      return { drew: true, layers, shaders, filters, videos, issues };
 
     // With a Filter to run, the Layers accumulate in the chain's target
     // instead of the screen, each pass transforms what is there so far,
@@ -299,7 +314,7 @@ class WebGLCompositor implements Compositor {
     // Mask textures follow the plan, not the draw: a Surface whose Layer is
     // hidden or blank this frame keeps its Masks rasterized.
     resources.masks.retain(plannedSurfaces(plan));
-    return { drew: true, layers, shaders, filters, issues };
+    return { drew: true, layers, shaders, filters, videos, issues };
   }
 
   trigger(layerId: string, key: string): void {

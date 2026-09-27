@@ -110,107 +110,170 @@ describe("Image", () => {
 });
 
 describe("Video", () => {
+  /** One Media item: its shared first frame, and the playbacks opened on it, in order. */
   function stage(values: Record<string, unknown> = {}) {
-    const clip = fakeVideo("clip");
-    const player = shader(video, context({}, { clip: () => clip }));
+    const poster = fakeHandle("clip");
+    const clips: ReturnType<typeof fakeVideo>[] = [];
+    const player = shader(
+      video,
+      context(
+        { clip: poster },
+        {
+          clip: () => {
+            const clip = fakeVideo("clip");
+            clips.push(clip);
+            return clip;
+          },
+        },
+      ),
+    );
     const frame = (more: Record<string, unknown> = {}) =>
       player.frame({ media: "clip", ...values, ...more });
-    return { ...player, frame, clip };
+    const clip = (index = clips.length - 1) => {
+      const found = clips[index];
+      if (found === undefined) throw new Error("No playback was opened.");
+      return found;
+    };
+    return { ...player, frame, clip, clips, poster };
   }
 
   it("autoplays from the first frame when planned and reports frames as they arrive", () => {
     const { frame, clip } = stage();
     const first = frame();
-    expect(clip.calls).toEqual(["rewind", "play", "loop true"]);
+    expect(clip().calls).toEqual(["play", "loop true"]);
     expect(first).toMatchObject({ blank: true, changed: true });
-    clip.handle.version = 1;
+    clip().handle.version = 1;
     expect(frame()).toMatchObject({ blank: false, changed: true });
     expect(frame().changed).toBe(false);
-    clip.handle.version = 2;
+    clip().handle.version = 2;
     expect(frame().changed).toBe(true);
   });
 
-  it("waits stopped with autoplay off, hidden or showing its first frame", () => {
+  it("waits stopped with autoplay off, holding no playback, hidden or showing the first frame", () => {
     const hidden = stage({ autoplay: false });
-    hidden.frame();
-    expect(hidden.clip.calls).toEqual(["loop true"]);
-    hidden.clip.handle.version = 1;
+    hidden.poster.version = 1;
     expect(hidden.frame().blank).toBe(true);
+    expect(hidden.clips).toHaveLength(0);
     const still = stage({ autoplay: false, hideOnStop: false });
-    still.clip.handle.version = 1;
-    expect(still.frame().blank).toBe(false);
+    expect(still.frame().blank).toBe(true); // not decoded yet
+    still.poster.version = 1;
+    expect(still.frame()).toMatchObject({
+      blank: false,
+      changed: true,
+      textures: { media: still.poster },
+    });
+    expect(still.frame().changed).toBe(false);
+    expect(still.clips).toHaveLength(0);
   });
 
   it("follows play, pause and stop as the transport says", () => {
-    const { frame, cue, clip } = stage({ autoplay: false });
+    const { frame, cue, clip, clips } = stage({ autoplay: false });
     frame();
-    clip.handle.version = 1;
-    clip.calls.length = 0;
-    cue("play"); // stopped → playing, from the start
-    expect(frame().blank).toBe(false);
-    expect(clip.calls).toEqual(["rewind", "play"]);
-    clip.calls.length = 0;
+    cue("play"); // stopped → playing, a playback opened on its first frame
+    clip().handle.version = 1;
+    expect(frame()).toMatchObject({
+      blank: false,
+      textures: { media: clip().handle },
+    });
+    expect(clip().calls).toEqual(["play", "loop true"]);
+    clip().calls.length = 0;
     cue("pause"); // playing → paused, the frame held
     frame();
-    expect(clip.calls).toEqual(["pause"]);
+    expect(clip().calls).toEqual(["pause"]);
     expect(frame().blank).toBe(false);
-    clip.calls.length = 0;
+    clip().calls.length = 0;
     cue("pause"); // paused stays paused
     cue("play"); // paused → playing, resuming
     frame();
-    expect(clip.calls).toEqual(["play"]);
-    clip.calls.length = 0;
+    expect(clip().calls).toEqual(["play"]);
+    clip().calls.length = 0;
     cue("play"); // playing → restarts
     frame();
-    expect(clip.calls).toEqual(["rewind", "play"]);
-    clip.calls.length = 0;
-    cue("stop"); // → stopped, at the start, hidden
+    expect(clip().calls).toEqual(["rewind", "play"]);
+    clip().calls.length = 0;
+    cue("stop"); // → stopped, hidden, the playback given up
     expect(frame().blank).toBe(true);
-    expect(clip.calls).toEqual(["pause", "rewind"]);
-    clip.calls.length = 0;
+    expect(clip().calls).toEqual(["pause", "dispose"]);
     cue("pause"); // stopped stays stopped
     frame();
-    expect(clip.calls).toEqual([]);
+    expect(clips).toHaveLength(1);
+    cue("play"); // and Play opens another
+    frame();
+    expect(clips).toHaveLength(2);
+    expect(clip().calls).toEqual(["play", "loop true"]);
   });
 
-  it("lands in stopped when a playback without Loop ends", () => {
+  it("lands in stopped when a playback without Loop ends, and gives it up", () => {
     const { frame, clip } = stage({ loop: false });
     frame();
-    clip.handle.version = 1;
+    clip().handle.version = 1;
     expect(frame().blank).toBe(false);
-    clip.calls.length = 0;
-    clip.end();
+    clip().calls.length = 0;
+    clip().end();
     expect(frame()).toMatchObject({ blank: true, changed: true });
-    expect(clip.calls).toEqual(["pause", "rewind"]);
+    expect(clip().calls).toEqual(["pause", "dispose"]);
     const shown = stage({ loop: false, hideOnStop: false });
+    shown.poster.version = 1;
     shown.frame();
-    shown.clip.handle.version = 1;
-    shown.clip.end();
-    expect(shown.frame().blank).toBe(false);
+    shown.clip().handle.version = 1;
+    shown.clip().end();
+    expect(shown.frame()).toMatchObject({
+      blank: false,
+      textures: { media: shown.poster },
+    });
+  });
+
+  it("holds its playback while stopped with Keep Warm, and follows the Parameter live", () => {
+    const { frame, cue, clip, clips } = stage({
+      autoplay: false,
+      keepWarm: true,
+      hideOnStop: false,
+    });
+    frame();
+    expect(clips).toHaveLength(1);
+    expect(clip().calls).toEqual(["loop true"]);
+    clip().handle.version = 1;
+    expect(frame()).toMatchObject({
+      blank: false,
+      textures: { media: clip().handle },
+    });
+    clip().calls.length = 0;
+    cue("play"); // the playback it holds, from the start
+    frame();
+    expect(clip().calls).toEqual(["rewind", "play"]);
+    clip().calls.length = 0;
+    cue("stop");
+    frame();
+    expect(clip().calls).toEqual(["pause", "rewind"]);
+    expect(clips).toHaveLength(1);
+    frame({ keepWarm: false }); // turned off while stopped: given up
+    expect(clip().calls).toContain("dispose");
+    frame({ keepWarm: true }); // and on again: another is opened
+    expect(clips).toHaveLength(2);
   });
 
   it("applies Speed and Loop live", () => {
     const { frame, clip } = stage();
     frame();
-    clip.calls.length = 0;
+    clip().calls.length = 0;
     frame({ speed: 2, loop: false });
-    expect(clip.calls).toEqual(["rate 2", "loop false"]);
+    expect(clip().calls).toEqual(["rate 2", "loop false"]);
   });
 
   it("pauses the element while the Layer is hidden and resumes it when shown", () => {
     const { frame, hide, cue, clip } = stage();
     frame();
-    clip.calls.length = 0;
+    clip().calls.length = 0;
     hide();
-    expect(clip.calls).toEqual(["pause"]);
-    clip.calls.length = 0;
+    expect(clip().calls).toEqual(["pause"]);
+    clip().calls.length = 0;
     frame();
-    expect(clip.calls).toEqual(["play"]);
+    expect(clip().calls).toEqual(["play"]);
     cue("pause");
-    clip.calls.length = 0;
+    clip().calls.length = 0;
     hide(); // paused already: nothing to pause
     frame();
-    expect(clip.calls).toEqual([]);
+    expect(clip().calls).toEqual([]);
   });
 
   it("swaps the playback when the Media Parameter changes and disposes with the Layer", () => {
@@ -221,7 +284,7 @@ describe("Video", () => {
       context({}, { one: () => first, two: () => second }),
     );
     player.frame({ media: "one" });
-    player.frame({ media: "two", autoplay: false });
+    player.frame({ media: "two", autoplay: false, keepWarm: true });
     expect(first.calls).toContain("dispose");
     expect(second.calls).toEqual(["loop true"]);
     expect(player.frame({ media: "" })).toMatchObject({ blank: true });
@@ -246,6 +309,6 @@ describe("Video", () => {
     player.frame({ media: "clip" });
     expect(opened).toBe(2);
     expect(clips[0]?.calls).toContain("dispose");
-    expect(clips[1]?.calls).toEqual(["rewind", "play", "loop true"]);
+    expect(clips[1]?.calls).toEqual(["play", "loop true"]);
   });
 });

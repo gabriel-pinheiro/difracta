@@ -1,6 +1,7 @@
 import {
   surfaceCanvasSize,
   type Catalog,
+  type ParameterSchema,
   type ParameterValues,
 } from "@difracta/core";
 
@@ -56,6 +57,8 @@ export interface StepReport {
   readonly changed: boolean;
   readonly canvas: Workload;
   readonly shaders: Workload;
+  /** Planned Layers, hidden ones included, whose Visual has a Parameter that takes a video. */
+  readonly videoLayers: number;
   /** The Layers whose instance failed, one issue each, on every frame they stay planned. */
   readonly issues: readonly RenderIssue[];
   /** Every Media handle a planned shader instance holds, hidden ones included: what keeps its texture. */
@@ -93,6 +96,12 @@ interface ShaderEntry {
 type Entry = CanvasEntry | ShaderEntry;
 
 type Counter = { -readonly [K in keyof Workload]: number };
+
+function takesVideo(parameters: ParameterSchema): boolean {
+  return Object.values(parameters).some(
+    (parameter) => parameter.kind === "media" && parameter.accepts === "video",
+  );
+}
 
 /**
  * The Visual instances of one Output, one per planned Layer. A canvas
@@ -138,9 +147,11 @@ export class LayerPlayers {
     let changed = false;
     const canvas: Counter = { planned: 0, running: 0, rendered: 0 };
     const shaders: Counter = { planned: 0, running: 0, rendered: 0 };
+    let videoLayers = 0;
     draws.forEach((draw, index) => {
       const definition = this.#catalog.visual(draw.visual);
       if (definition === undefined) return;
+      if (takesVideo(definition.parameters)) videoLayers += 1;
       const counter = definition.backend === "canvas" ? canvas : shaders;
       counter.planned += 1;
       // A hidden Layer's instance idles: kept as it is, neither stepped nor
@@ -248,7 +259,15 @@ export class LayerPlayers {
         for (const handle of Object.values(entry.textures))
           textures.add(handle);
     }
-    return { frames, changed, canvas, shaders, issues, textures };
+    return {
+      frames,
+      changed,
+      canvas,
+      shaders,
+      videoLayers,
+      issues,
+      textures,
+    };
   }
 
   /** Delivers a Cue fired on a Layer to its instance, if it is running. */

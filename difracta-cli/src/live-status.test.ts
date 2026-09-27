@@ -39,6 +39,7 @@ const telemetry: OutputTelemetry = {
     canvasVisuals: { executedPerFrame: 1, enabled: 1, relevant: 1 },
     shaderVisuals: { executedPerFrame: 0, enabled: 0, relevant: 0 },
     filters: { executedPerFrame: 0, enabled: 0, relevant: 0 },
+    videos: { playing: 1, players: 4, layers: 6 },
   },
   issues: [{ layerId: "lay", definition: "plasma", message: "No WebGL2" }],
 };
@@ -86,6 +87,7 @@ describe("liveStatus", () => {
               fps: 60,
               renderMs: 3.3,
               resolution: "1920×1080",
+              videos: { playing: 1, players: 4, layers: 6 },
               issues: [
                 {
                   layerId: "lay",
@@ -101,6 +103,7 @@ describe("liveStatus", () => {
               fps: null,
               renderMs: null,
               resolution: null,
+              videos: null,
               issues: [],
             },
           ],
@@ -138,7 +141,7 @@ describe("liveStatus", () => {
   it("formats one line per Output, Session and issue", () => {
     expect(formatLiveStatus(liveStatus(stage(), live))).toEqual([
       "TV  out_tv",
-      "  s1  connected  60 fps  3.3 ms  1920×1080",
+      "  s1  connected  60 fps  3.3 ms  1920×1080  videos 1 playing / 4 players / 6 Layers",
       "    issue: Wash (plasma): No WebGL2",
       "  s2  stale  — fps  —  —",
       "Wall  out_wall  no Output Session",

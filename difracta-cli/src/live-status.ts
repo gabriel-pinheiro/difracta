@@ -5,7 +5,7 @@ import type { LiveState, OscLive, OutputSessionLive } from "@difracta/protocol";
  * What is happening around the Outputs right now, read from the live state
  * a `live` subscription carries: each Output's Sessions with their telemetry
  * reduced to what a shell reader wants (fps from the frame interval, render
- * time, resolution, the Layers that failed), and the OSC door.
+ * time, resolution, video players, the Layers that failed), and the OSC door.
  */
 export interface IssueStatus {
   readonly layerId: string;
@@ -22,6 +22,12 @@ export interface SessionStatus {
   readonly fps: number | null;
   readonly renderMs: number | null;
   readonly resolution: string | null;
+  /** Video players playing, held, and the Layers that take a video; null until reported. */
+  readonly videos: {
+    readonly playing: number;
+    readonly players: number;
+    readonly layers: number;
+  } | null;
   readonly issues: readonly IssueStatus[];
 }
 
@@ -66,6 +72,7 @@ function sessionStatus(
       telemetry === null || telemetry === undefined
         ? null
         : `${String(telemetry.width)}×${String(telemetry.height)}`,
+    videos: telemetry?.workload.videos ?? null,
     // A report without the list means every Layer ran.
     issues: (telemetry?.issues ?? []).map((issue) => ({
       layerId: issue.layerId,
@@ -84,7 +91,7 @@ export function formatLiveStatus(status: LiveStatus): string[] {
     );
     for (const session of output.sessions) {
       lines.push(
-        `  ${session.sessionId}  ${session.connected ? "connected" : "stale"}  ${session.fps === null ? "—" : String(session.fps)} fps  ${session.renderMs === null ? "—" : `${String(session.renderMs)} ms`}  ${session.resolution ?? "—"}`,
+        `  ${session.sessionId}  ${session.connected ? "connected" : "stale"}  ${session.fps === null ? "—" : String(session.fps)} fps  ${session.renderMs === null ? "—" : `${String(session.renderMs)} ms`}  ${session.resolution ?? "—"}${session.videos === null ? "" : `  videos ${String(session.videos.playing)} playing / ${String(session.videos.players)} players / ${String(session.videos.layers)} Layers`}`,
       );
       for (const issue of session.issues)
         lines.push(

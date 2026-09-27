@@ -287,7 +287,9 @@ on Stop, and the Cues Play, Pause and Stop. Its transport is stopped, paused or
 playing: Play from stopped starts at the first frame, from paused resumes, from
 playing restarts; Pause holds the frame; Stop returns to the first frame, as
 does ending without Loop. Every Layer on every Output plays its own copy of the
-file on the browser's clock, and a hidden Layer pauses it.
+file on the browser's clock, and a hidden Layer pauses it. A stopped Layer holds
+no video player, and Play takes the one the Output keeps ready for the Media
+item; Keep Warm has the Layer hold its own while stopped.
 
 ### Controller
 
@@ -580,7 +582,9 @@ client's last observed Revision.
 
 Live performance measurements an Output Session reports once a second and the
 Runtime relays to Studio as live state: resolution, pixel ratio, Frame Interval,
-Render Work and workload counts.
+Render Work and workload counts: the canvas Layers, shader Layers and Filters
+run per frame, and the video players playing, the ones held and the Layers that
+take a video.
 
 ### Frame Interval
 

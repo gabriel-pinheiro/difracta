@@ -25,8 +25,11 @@ export interface MediaHandle {
 
 /**
  * One playback of a video item, owned by the instance that asked for it:
- * every Layer showing a video plays its own copy, since two may be at
- * different positions. The clock is the browser's, the one exception to
+ * every Layer playing a video plays its own copy, since two may be at
+ * different positions. It holds a video element, and so a decoder, until
+ * it is disposed, so an instance opens one when it starts playing and
+ * disposes it when it stops. It starts paused on the first frame. The
+ * clock is the browser's, the one exception to
  * "integrate, never sample": the element decodes at its own rate and
  * `handle.version` advances as frames arrive. Always muted.
  */
@@ -49,9 +52,8 @@ export interface MediaVideo {
 
 export interface MediaContext {
   /**
-   * The item's shared picture: an image once decoded, or a video's
-   * preloaded element showing its first frame; undefined when no item has
-   * this id (`""` included).
+   * The item's shared picture: an image once decoded, or a video's first
+   * frame; undefined when no item has this id (`""` included).
    */
   get(id: string): MediaHandle | undefined;
   /** A playback of the video item, to dispose with the instance; undefined for anything else. */

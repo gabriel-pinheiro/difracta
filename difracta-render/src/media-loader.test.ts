@@ -104,10 +104,14 @@ const bundle = new Catalog({
   })),
 });
 
-function loader(mediaUrl = (id: string): string | undefined => `/media/${id}`) {
+function loader(
+  mediaUrl = (id: string): string | undefined => `/media/${id}`,
+  poster?: MediaElements["poster"],
+) {
   const images: FakeImage[] = [];
   const videos: FakeVideo[] = [];
   const elements: MediaElements = {
+    poster,
     image: () => {
       const image = new FakeImage();
       images.push(image);
@@ -265,6 +269,61 @@ describe("MediaLoader", () => {
     expect(playback.handle.version).toBe(0);
     element.present(); // a late callback changes nothing
     expect(playback.handle.version).toBe(0);
+  });
+
+  it("hands a playback the warm element once the poster is cut, and warms another", async () => {
+    const posters: { closed: boolean; close(): void }[] = [];
+    const { instance, videos } = loader(undefined, () => {
+      const poster = {
+        closed: false,
+        close() {
+          poster.closed = true;
+        },
+      };
+      posters.push(poster);
+      return Promise.resolve(poster as unknown as ImageBitmap);
+    });
+    instance.sync({ clip: item("clip", "clip.webm") });
+    const shared = instance.get("clip");
+    const warm = videos[0];
+    if (shared === undefined || warm === undefined) throw new Error();
+    // Not loaded yet: a playback opens an element of its own.
+    const cold = instance.video("clip");
+    expect(videos).toHaveLength(2);
+    expect(instance.videos()).toEqual({ players: 2, playing: 0 });
+    cold?.dispose();
+    expect(instance.videos()).toEqual({ players: 1, playing: 0 });
+    warm.loadAs(128, 72);
+    expect(shared).toMatchObject({ version: 1, width: 128, height: 72 });
+    expect(shared.image).toBe(warm);
+    await Promise.resolve();
+    expect(shared.version).toBe(2);
+    expect(shared.image).toBe(posters[0]);
+    const playback = instance.video("clip");
+    if (playback === undefined) throw new Error();
+    // The warm element plays, already on its first frame; a third one preloads.
+    expect(videos).toHaveLength(3);
+    expect(playback.handle.image).toBe(warm);
+    expect(playback.handle.version).toBe(1);
+    expect(videos[2]).toMatchObject({ src: "/media/clip", preload: "auto" });
+    expect(instance.get("clip")).toBe(shared);
+    expect(shared.image).toBe(posters[0]);
+    playback.play();
+    expect(instance.videos()).toEqual({ players: 2, playing: 1 });
+    // The next one is not loaded yet, so a second playback opens its own.
+    const second = instance.video("clip");
+    expect(videos).toHaveLength(4);
+    expect(second?.handle.image).toBeNull();
+    expect(instance.videos()).toEqual({ players: 3, playing: 1 });
+    playback.dispose();
+    second?.dispose();
+    expect(warm.src).toBe("");
+    expect(instance.videos()).toEqual({ players: 1, playing: 0 });
+    instance.sync({});
+    expect(videos[2]?.src).toBe("");
+    expect(posters[0]?.closed).toBe(true);
+    expect(shared).toMatchObject({ image: null, version: 0 });
+    expect(instance.videos()).toEqual({ players: 0, playing: 0 });
   });
 
   it("asks for CORS only for a file on another origin", () => {

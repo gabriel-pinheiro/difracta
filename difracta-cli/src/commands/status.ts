@@ -37,7 +37,7 @@ export function registerStatus(program: Command, cli: Cli): void {
   program
     .command("outputs")
     .description(
-      "List the Outputs with their Output Sessions: connected or stale, fps, render time, resolution, Layers that failed.",
+      "List the Outputs with their Output Sessions: connected or stale, fps, render time, resolution, video players (playing, held, Layers that take a video), Layers that failed.",
     )
     .action(() =>
       cli.withDocument(async (client, summary) => {

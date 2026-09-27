@@ -12,11 +12,14 @@ import { MEDIA_FIT_FRAGMENT, MEDIA_FIT_PARAMETERS } from "./media-fit.ts";
  * to the first frame; a playback ending without Loop lands in stopped. The
  * element's clock is the browser's, the one exception to "integrate, never
  * sample": the Visual only steers it, and reports a change when a frame
- * was presented. A hidden Layer pauses the element and showing resumes it,
- * so a faded-out video does not decode for nothing. When the item it shows
- * is pointed at another file or Bundled Media entry, the Output reloads the
- * item under a new handle and the Visual opens a fresh playback of it,
- * playing on if it was.
+ * was presented. A playback, and the decoder behind it, is held only
+ * while playing or paused: stopped, the Layer shows the item's shared first
+ * frame or nothing, unless Keep Warm holds the playback for the next Play.
+ * A hidden Layer pauses the element and showing resumes it, so a faded-out
+ * video does not decode for nothing. When the item it shows is pointed at
+ * another file or Bundled Media entry, the Output reloads the item under a
+ * new handle and the Visual opens a fresh playback of it, playing on if it
+ * was.
  */
 type Transport = "stopped" | "paused" | "playing";
 
@@ -27,7 +30,7 @@ export const video = defineShaderVisual({
     "A video from the Installation's Media over the Target, with Play, Pause and Stop Cues, looping, speed and a tint.",
   recommended: true,
   notes:
-    "Plays one video Media item on the Target, muted, with the same Fit choices as Image: Stretch maps it corner to corner, Cover keeps its shape and crops, Contain keeps its shape and leaves the rest clear. Autoplay starts it the moment the Layer is planned (a Scene played, the Layer enabled); off, it waits stopped on its first frame for the Play Cue. Play from stopped starts at the beginning, from paused resumes, and while playing restarts, so a Macro that fires Play on the downbeat re-syncs it; Pause holds the frame; Stop returns to the first frame, and with Hide on Stop the Layer goes dark until the next Play, so a clip can be a one-shot hit. Loop off ends in stopped the same way. Speed is the playback rate, 1/16 to 16 times, live. A white-on-black clip in Additive blend mode needs no keying: black adds nothing and the Tint paints the rest; link Tint to a Color Controller for the palette. Each Output plays its own copy of the file, so two Outputs may drift by a frame or two, and every Layer showing the clip decodes it separately. Costs a decode and one texture upload per video frame while playing, nothing while paused, stopped or faded out (a Layer at opacity zero pauses it). Stack Filters over it for treatment and Blink or Strobe in Additive above it for hits.",
+    "Plays one video Media item on the Target, muted, with the same Fit choices as Image: Stretch maps it corner to corner, Cover keeps its shape and crops, Contain keeps its shape and leaves the rest clear. Autoplay starts it the moment the Layer is planned (a Scene played, the Layer enabled); off, it waits stopped on its first frame for the Play Cue. Play from stopped starts at the beginning, from paused resumes, and while playing restarts, so a Macro that fires Play on the downbeat re-syncs it; Pause holds the frame; Stop returns to the first frame, and with Hide on Stop the Layer goes dark until the next Play, so a clip can be a one-shot hit. Loop off ends in stopped the same way. Speed is the playback rate, 1/16 to 16 times, live. A white-on-black clip in Additive blend mode needs no keying: black adds nothing and the Tint paints the rest; link Tint to a Color Controller for the palette. Each Output plays its own copy of the file, so two Outputs may drift by a frame or two, and every Layer playing the clip decodes it separately. Costs a decode and one texture upload per video frame while playing, nothing while paused, stopped or faded out (a Layer at opacity zero pauses it). A stopped Layer holds no video player: Play takes the one the Output keeps ready for each Media item, so it starts at once, and a Layer that fires Play while another just took that clip's player opens its own, a frame or two later. Keep Warm makes the Layer hold its own player while stopped, for a Play that is always immediate, at the price of one more video decoder held; a browser gives hardware decoding to a limited number of them (16 in Chromium) and the rest decode on the CPU, so leave it off except on the few hits that re-trigger fast on a clip other Layers play too. Stack Filters over it for treatment and Blink or Strobe in Additive above it for hits.",
   parameters: {
     media: {
       kind: "media",
@@ -59,6 +62,13 @@ export const video = defineShaderVisual({
       unit: "×",
       description: "The playback rate; 1 is the clip's own.",
     },
+    keepWarm: {
+      kind: "boolean",
+      label: "Keep Warm",
+      default: false,
+      description:
+        "Hold a video player while stopped, so Play is always immediate; costs one more video decoder held. Off, a stopped Layer holds none and Play takes the one kept ready for the Media item.",
+    },
     hideOnStop: {
       kind: "boolean",
       label: "Hide on Stop",
@@ -76,15 +86,24 @@ export const video = defineShaderVisual({
   create({ media }) {
     let id: string | undefined;
     let playback: MediaVideo | undefined;
-    // The item's shared handle when the playback opened: a new one means the item was repointed.
+    // The item's shared handle, its first frame: a new one means the item was repointed.
     let loaded: MediaHandle | undefined;
     let transport: Transport = "stopped";
     let hidden = false;
+    let keepWarm = false;
     let seen = -1;
+    let lastHandle: MediaHandle | undefined;
     let lastTransport: Transport | undefined;
+    const close = (): void => {
+      playback?.dispose();
+      playback = undefined;
+    };
     const play = (): void => {
+      // A playback just opened is on its first frame already.
+      const opened = playback === undefined;
+      if (opened && id !== undefined && id !== "") playback = media.video(id);
       if (playback === undefined) return;
-      if (transport !== "paused") playback.rewind();
+      if (!opened && transport !== "paused") playback.rewind();
       transport = "playing";
       if (!hidden) playback.play();
     };
@@ -94,16 +113,17 @@ export const video = defineShaderVisual({
       transport = "paused";
     };
     const stop = (): void => {
-      if (playback === undefined) return;
-      playback.pause();
-      playback.rewind();
+      if (playback !== undefined) {
+        playback.pause();
+        if (keepWarm) playback.rewind();
+        else close();
+      }
       transport = "stopped";
     };
-    const open = (next: string, autoplay: boolean): void => {
-      playback?.dispose();
+    const retarget = (next: string, autoplay: boolean): void => {
+      close();
       id = next;
       loaded = next === "" ? undefined : media.get(next);
-      playback = next === "" ? undefined : media.video(next);
       transport = "stopped";
       seen = -1;
       if (autoplay) play();
@@ -123,18 +143,28 @@ export const video = defineShaderVisual({
         if (transport === "playing") playback?.play();
       },
       update({ params, changed }) {
-        if (params.media !== id) open(params.media, params.autoplay);
+        keepWarm = params.keepWarm;
+        if (params.media !== id) retarget(params.media, params.autoplay);
         else if (id !== "" && media.get(id) !== loaded)
-          open(id, params.autoplay || transport === "playing");
-        const current = playback;
-        if (current === undefined)
-          return { changed, blank: true, textures: {} };
-        current.setRate(params.speed);
-        current.setLoop(params.loop);
-        if (transport === "playing" && current.ended) stop();
-        const { handle } = current;
-        const fresh = handle.version !== seen || transport !== lastTransport;
+          retarget(id, params.autoplay || transport === "playing");
+        if (transport === "stopped") {
+          if (keepWarm && id !== undefined && id !== "")
+            playback ??= media.video(id);
+          else close();
+        }
+        if (playback !== undefined) {
+          playback.setRate(params.speed);
+          playback.setLoop(params.loop);
+          if (transport === "playing" && playback.ended) stop();
+        }
+        const handle = playback?.handle ?? loaded;
+        if (handle === undefined) return { changed, blank: true, textures: {} };
+        const fresh =
+          handle !== lastHandle ||
+          handle.version !== seen ||
+          transport !== lastTransport;
         seen = handle.version;
+        lastHandle = handle;
         lastTransport = transport;
         return {
           changed: changed || fresh,
@@ -145,8 +175,7 @@ export const video = defineShaderVisual({
         };
       },
       dispose() {
-        playback?.dispose();
-        playback = undefined;
+        close();
       },
     };
   },

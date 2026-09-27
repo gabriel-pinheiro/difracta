@@ -136,7 +136,7 @@ export class OutputPage {
   }
 
   #report(): void {
-    const { layers, shaders, filters, issues, ...metrics } =
+    const { layers, shaders, filters, videos, issues, ...metrics } =
       this.#frame.metrics();
     const telemetry: OutputTelemetry = {
       ...metrics,
@@ -156,6 +156,7 @@ export class OutputPage {
           enabled: filters.running,
           relevant: filters.planned,
         },
+        videos,
       },
       issues: issues.slice(0, MAX_TELEMETRY_ISSUES),
     };

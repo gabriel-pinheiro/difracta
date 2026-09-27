@@ -8,11 +8,11 @@ import {
 } from "@difracta/core";
 
 import {
-  countVideoFrames,
-  createMediaVideo,
-  prepareVideoElement,
-  videoHandle,
-} from "./media-video.ts";
+  createVideoPreload,
+  type CutPoster,
+  type VideoPreload,
+} from "./media-preload.ts";
+import { createMediaVideo, prepareVideoElement } from "./media-video.ts";
 import type { MediaContext, MediaHandle, MediaVideo } from "./sdk/media.ts";
 
 /**
@@ -26,13 +26,24 @@ import type { MediaContext, MediaHandle, MediaVideo } from "./sdk/media.ts";
  * thumbnail harness. An item repointed to another file or entry is loaded
  * again under `?v=<n>`, since the browser keeps what it fetched per URL and
  * would otherwise show the old picture. Element creation is injected so the loader is tested
- * without a browser. A video's preloaded element is only ever shown as its
- * first frame; a Layer that plays it asks `video(id)` for an element of
- * its own over the same URL, which the browser serves from its cache.
+ * without a browser. A video is kept warm (see `media-preload.ts`): its
+ * shared handle shows the first frame, and a Layer that plays it asks
+ * `video(id)` for a playback of its own, which takes the warm element when
+ * it is ready and otherwise opens one over the same URL, which the browser
+ * serves from its cache. `videos()` counts the elements held, each of
+ * which holds a decoder.
  */
 export interface MediaElements {
   image(): HTMLImageElement;
   video(): HTMLVideoElement;
+  /** Cuts a video's current frame into a picture of its own; the browser's `createImageBitmap` by default. */
+  poster?: CutPoster | undefined;
+}
+
+/** The video elements an Output holds: every one of them, and the ones playing. */
+export interface VideoCount {
+  readonly players: number;
+  readonly playing: number;
 }
 
 export interface MediaLoaderOptions {
@@ -54,6 +65,8 @@ interface Entry {
   readonly type: MediaType;
   readonly url: string;
   readonly handle: MediaHandle;
+  /** Set for a video: its warm element and poster. */
+  readonly preload?: VideoPreload;
   readonly release: () => void;
 }
 
@@ -66,6 +79,10 @@ const sourceOf = (item: Media | undefined): string | undefined => {
 const DOM_ELEMENTS: MediaElements = {
   image: () => document.createElement("img"),
   video: () => document.createElement("video"),
+  poster:
+    typeof createImageBitmap === "function"
+      ? (element) => createImageBitmap(element, { premultiplyAlpha: "none" })
+      : undefined,
 };
 
 /** `url` for the `loads`-th load of an item: the first as it is, later ones with `v=<n>`; data and blob URLs as they are. */
@@ -93,6 +110,8 @@ export class MediaLoader implements MediaContext {
   readonly #entries = new Map<string, Entry>();
   /** How many times each item was loaded, for the reload's URL. */
   readonly #loads = new Map<string, number>();
+  /** The elements of the playbacks Layers hold, until each is disposed. */
+  readonly #playbacks = new Set<HTMLVideoElement>();
   #table: MediaTable | undefined;
 
   constructor(options: MediaLoaderOptions) {
@@ -129,13 +148,26 @@ export class MediaLoader implements MediaContext {
   video(id: string): MediaVideo | undefined {
     const entry = this.#entries.get(id);
     if (entry?.type !== "video") return undefined;
-    const element = this.#elements.video();
-    prepareVideoElement(
-      element,
-      entry.url,
-      needsCrossOrigin(entry.url, this.#pageOrigin),
-    );
-    return createMediaVideo(id, element);
+    const element =
+      entry.preload?.take() ??
+      this.#videoElement(
+        entry.url,
+        needsCrossOrigin(entry.url, this.#pageOrigin),
+      );
+    this.#playbacks.add(element);
+    return createMediaVideo(id, element, () => {
+      this.#playbacks.delete(element);
+    });
+  }
+
+  videos(): VideoCount {
+    let players = this.#playbacks.size;
+    for (const entry of this.#entries.values())
+      if (entry.preload !== undefined) players += 1;
+    let playing = 0;
+    for (const element of this.#playbacks)
+      if (!element.paused && !element.ended) playing += 1;
+    return { players, playing };
   }
 
   dispose(): void {
@@ -212,21 +244,26 @@ export class MediaLoader implements MediaContext {
     url: string,
     crossOrigin: boolean,
   ): Entry {
-    const element = this.#elements.video();
-    prepareVideoElement(element, url, crossOrigin);
-    const frames = countVideoFrames(element);
-    let alive = true;
+    const preload = createVideoPreload(
+      id,
+      () => this.#videoElement(url, crossOrigin),
+      this.#elements.poster,
+    );
     return {
       source,
       type: "video",
       url,
-      handle: videoHandle(id, element, frames, () => alive),
-      release() {
-        alive = false;
-        frames.stop();
-        element.removeAttribute("src");
-        element.load();
+      handle: preload.handle,
+      preload,
+      release: () => {
+        preload.release();
       },
     };
+  }
+
+  #videoElement(url: string, crossOrigin: boolean): HTMLVideoElement {
+    const element = this.#elements.video();
+    prepareVideoElement(element, url, crossOrigin);
+    return element;
   }
 }

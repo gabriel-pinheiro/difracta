@@ -18,6 +18,20 @@ const Count = z
   .strict();
 export type WorkloadCount = z.infer<typeof Count>;
 
+/**
+ * Video on an Output: the video elements playing, the ones it holds (one
+ * kept ready per video Media item and one per playback a Layer holds, a
+ * decoder each), and the planned Layers whose Visual takes a video.
+ */
+const VideoCount = z
+  .object({
+    playing: z.number().int().nonnegative(),
+    players: z.number().int().nonnegative(),
+    layers: z.number().int().nonnegative(),
+  })
+  .strict();
+export type VideoCount = z.infer<typeof VideoCount>;
+
 /** How many issues one telemetry report carries at most; the Output keeps the first ones. */
 export const MAX_TELEMETRY_ISSUES = 8;
 
@@ -47,6 +61,8 @@ export const OutputTelemetrySchema = z
         canvasVisuals: Count,
         shaderVisuals: Count,
         filters: Count,
+        /** Optional so a report without it still validates. */
+        videos: VideoCount.optional(),
       })
       .strict(),
     /**

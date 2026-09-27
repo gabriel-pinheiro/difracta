@@ -1,6 +1,6 @@
 import type { DocumentView } from "@difracta/client";
 import type { Output } from "@difracta/core";
-import type { WorkloadCount } from "@difracta/protocol";
+import type { VideoCount, WorkloadCount } from "@difracta/protocol";
 import { Link, MonitorUp } from "lucide-react";
 import { useState } from "react";
 
@@ -109,7 +109,7 @@ export function OutputCard({
         <Metric label="Resolution" value={formatResolution(primary)} />
         <Metric label="Scale" value={formatScale(primary)} />
       </div>
-      <div className="grid grid-cols-3 gap-1">
+      <div className="grid grid-cols-4 gap-1">
         {workloadKinds.map((kind) => (
           <Tooltip key={kind.key}>
             <TooltipTrigger
@@ -127,6 +127,22 @@ export function OutputCard({
             </TooltipContent>
           </Tooltip>
         ))}
+        <Tooltip>
+          <TooltipTrigger
+            render={<div />}
+            className="rounded-sm bg-muted/40 px-2 py-1.5"
+          >
+            <Metric
+              label="Videos"
+              value={formatVideos(primary?.telemetry?.workload.videos)}
+              bare
+            />
+          </TooltipTrigger>
+          <TooltipContent>
+            Videos: players playing / players held / Layers. Each player held
+            uses a video decoder.
+          </TooltipContent>
+        </Tooltip>
       </div>
       {sessions.length > 0 && (
         <ul className="grid gap-px text-[0.6875rem]">
@@ -199,6 +215,11 @@ export function OutputCard({
 function formatCount(count: WorkloadCount | undefined): string {
   if (count === undefined) return "— / — / —";
   return `${count.executedPerFrame.toFixed(1)} / ${String(count.enabled)} / ${String(count.relevant)}`;
+}
+
+function formatVideos(count: VideoCount | undefined): string {
+  if (count === undefined) return "— / — / —";
+  return `${String(count.playing)} / ${String(count.players)} / ${String(count.layers)}`;
 }
 
 function Metric({

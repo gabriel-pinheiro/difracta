@@ -615,10 +615,11 @@ they could not notice, so the runtime sends each of them a new `snapshot`.
   document. Output pages never ask for it.
 - `attach` declares the connection an Output page showing one Output; the
   runtime keeps an **Output Session** per attached connection. `telemetry`
-  reports frame interval, render work, resolution, pixel ratio and workload once
-  a second (`settings.live`). A session with no report for a few seconds shows
-  as stale, one silent for minutes is dropped, and a closed socket drops it at
-  once. Removing the Output drops its sessions.
+  reports frame interval, render work, resolution, pixel ratio and workload
+  (Layers and Filters run per frame, and the video players playing and held)
+  once a second (`settings.live`). A session with no report for a few seconds
+  shows as stale, one silent for minutes is dropped, and a closed socket drops
+  it at once. Removing the Output drops its sessions.
 - `display-host` declares a connection of kind `desktop` a **Display Host**: its
   name, its Displays (id, label, bounds, scale factor, primary, internal) and
   `showing`, Display id → Output id. The host sends it again, whole, on every
@@ -1510,10 +1511,15 @@ handle, which is how the Video Visual knows to open a fresh playback. The loader
 is kept outside the GPU resources, so a lost context costs no reload. An
 instance reaches it through `media` in its context (`sdk/media.ts`): `get(id)`
 is the shared handle, whose `image` is null until the file is decoded and whose
-`version` counts the pictures behind it, once for an image and once per
-presented video frame; `video(id)` is a playback of the instance's own, an
-element over the same URL that the browser serves from its cache, since two
-Layers showing one clip may be at different positions. The GPU side
+`version` counts the pictures behind it; `video(id)` is a playback of the
+instance's own, since two Layers showing one clip may be at different positions,
+whose handle counts one version per presented frame. A video item is kept warm
+(`media-preload.ts`): one element preloaded to its first frame, and a poster cut
+from that frame with `createImageBitmap`, which is what the shared handle shows.
+A playback takes the warm element, so its first frame is there at once, and a
+fresh one preloads in its place; a playback asked for while none is warm opens
+an element over the same URL, which the browser serves from its cache. The
+loader counts the elements it holds, for telemetry. The GPU side
 (`media-textures.ts`) keeps one texture per handle a running instance holds,
 uploads when the handle's version is newer than the texture's, straight alpha
 and rows top first like a canvas Layer's, binds it on the units after the mask's
@@ -1523,7 +1529,14 @@ fetching:** a Layer that starts showing an item mid-set must find it decoded,
 and the table is the one list of what a show may need. **Why a version on the
 handle:** the instance and the uploader read the same counter, so a Visual
 reports `changed` exactly when the texture would differ and a paused video
-uploads nothing.
+uploads nothing. **Why a playback is held only while playing or paused:** every
+video element holds a decoder, a browser gives hardware decoding to a limited
+number of them (16 in Chromium) and leaves the rest to the CPU, and a show has
+many more Layers waiting for a Play Cue than playing; holding none while stopped
+makes the count follow what plays, not what is planned. **Why the warm element
+is handed over rather than kept as the poster:** a player opened on Play starts
+a frame or two late, one already on its first frame starts at once, and the
+poster needs no decoder.
 
 **Why WebGL2 only:** the projector machines and smart TVs this runs on all have
 it, WebGPU still does not reach every such browser, and one engine is half the
@@ -1638,8 +1651,10 @@ built on that: a `media` Parameter names the item, `media-fit.ts` holds the Tint
 and Fit they share and the GLSL that maps the Surface's `uv` onto the picture
 from `u_resolution` and `u_media_size`, and each reports `blank` while there is
 no picture and `changed` only when a Parameter or the handle's version moved.
-Video owns a playback per instance and a transport of stopped, paused and
-playing driven by its Cues, Autoplay and the element's end.
+Video has a transport of stopped, paused and playing driven by its Cues,
+Autoplay and the element's end, and holds a playback while playing or paused;
+stopped, it shows the shared handle or nothing, unless Keep Warm has it hold the
+playback for the next Play.
 
 Cues reach the instance, canvas or shader, as `cue(key)` before its next
 `update`, and the instance keeps whatever it needs: a list of live envelopes, a
