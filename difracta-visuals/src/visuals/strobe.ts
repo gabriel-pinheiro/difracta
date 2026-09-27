@@ -5,6 +5,7 @@ export const strobe = defineShaderVisual({
   name: "Strobe",
   description:
     "Flashes between two colors at a steady rate, each flash a set number of milliseconds long; Rate changes never skip a beat.",
+  recommended: true,
   notes:
     "A two-state light: On Color for Flash Duration at the start of every cycle, Off Color the rest of the time. Off Color defaults to transparent, so the Layer disappears between flashes and whatever is below shows through; a dark Off Color turns it into a hard on/off wall. Rate is flashes per second and integrates, so sweeping it live speeds up or slows down without a jump. Phase Offset shifts where in the cycle the flash sits, for two Strobe Layers alternating on two Surfaces from one Rate. Flash Duration above the cycle length keeps it on. It costs one full-Surface shader pass only on the frames where the state flips.",
   parameters: {

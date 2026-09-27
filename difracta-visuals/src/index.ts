@@ -224,7 +224,7 @@ export function thumbnailFile(id: string): string {
 /**
  * The sample Media the package ships: one small white-on-black picture and
  * one short white-on-black clip, written by `npm run sample-media`, which
- * the thumbnail harness and the GPU suite show through Image and Video.
+ * the GPU suite shows through Image and Video.
  */
 export const sampleMediaRoot = new URL("../media/", import.meta.url);
 export const SAMPLE_IMAGE = "sample.png";

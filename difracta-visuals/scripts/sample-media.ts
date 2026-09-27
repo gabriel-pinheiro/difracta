@@ -1,7 +1,6 @@
 // Writes the sample Media the Visuals package ships in `media/`: one small
-// white-on-black PNG and one short white-on-black VP9 webm, for the Image
-// and Video thumbnails and the GPU pixel tests. Run it when the pictures
-// should change:
+// white-on-black PNG and one short white-on-black VP9 webm, for the GPU
+// pixel tests. Run it when the pictures should change:
 //
 //   npm run sample-media -w @difracta/visuals
 //

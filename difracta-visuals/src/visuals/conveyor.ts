@@ -5,6 +5,7 @@ export const conveyor = defineShaderVisual({
   name: "Conveyor",
   description:
     "Horizontal lanes carry solid packets of light across the Surface, neighbouring lanes running opposite ways in two colors.",
+  recommended: true,
   notes:
     "A mechanical, rhythmic backdrop: every lane is a belt, even lanes run one way in Color A and odd lanes the other way in Color B. Lanes is how many belts stack down the Surface and Packets how many packets each belt carries across it, so Lanes 8 with Packets 5 is coarse and legible from far away while 24 and 10 is a fine texture. Packet Fill is the lit share of each packet's slot, from thin dashes to almost solid belts. Edge Softness feathers the gap between belts. Speed integrates, so it can be swept live and stopped without a jump, and a stopped Conveyor costs nothing. Additive blend mode makes crossings between Layers glow. Costs one full-Surface pass per frame while moving.",
   parameters: {

@@ -4,7 +4,7 @@
 //
 //   npm run thumbnails -w @difracta/visuals            every definition
 //   npm run thumbnails -w @difracta/visuals koi-pond   some of them
-//   … --seconds=5                                       run longer first
+//   … --seconds=5                                       run this long first
 //
 // Needs Chromium for Playwright (`npx playwright install chromium`).
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -14,27 +14,29 @@ import { build } from "esbuild";
 import { chromium } from "playwright";
 
 import {
-  SAMPLE_IMAGE,
-  SAMPLE_VIDEO,
   builtInCatalog,
+  bundledRoot,
   fontsRoot,
-  sampleMediaRoot,
   thumbnailFile,
   thumbnailsRoot,
 } from "../src/index.ts";
 import type {
   FontFiles,
-  SampleMedia,
   ThumbnailKind,
+  ThumbnailMedia,
 } from "./thumbnail-page.ts";
+import {
+  THUMBNAIL_IMAGE_ENTRY,
+  THUMBNAIL_VIDEO_ENTRY,
+} from "./thumbnail-setups.ts";
 
 const ORIGIN = "https://thumbnails.invalid/";
 const WIDTH = 480;
 const HEIGHT = 270;
-const DEFAULT_SECONDS = 3;
 
 const wanted = new Set<string>();
-let seconds = DEFAULT_SECONDS;
+/** Null leaves each definition the length its setup asks for, or the page's own. */
+let seconds: number | null = null;
 for (const argument of process.argv.slice(2)) {
   const match = /^--seconds=(\d+(?:\.\d+)?)$/.exec(argument);
   if (match?.[1] !== undefined) seconds = Number(match[1]);
@@ -72,20 +74,24 @@ const bundle = await build({
 const script = bundle.outputFiles[0]?.text;
 if (script === undefined) throw new Error("The page did not bundle.");
 
-/** The sample files and the Bundled Fonts, as data URLs the page can load without a server. */
+/** The Bundled Media shown and the Bundled Fonts, as data URLs the page can load without a server. */
 async function dataUrl(file: URL, type: string): Promise<string> {
   const bytes = await readFile(file);
   return `data:${type};base64,${bytes.toString("base64")}`;
 }
-const media: SampleMedia = {
-  sample_image: await dataUrl(
-    new URL(SAMPLE_IMAGE, sampleMediaRoot),
+const clip = builtInCatalog.mediaEntry(THUMBNAIL_VIDEO_ENTRY);
+if (clip === undefined) {
+  console.error(
+    `The Bundled Media has no “${THUMBNAIL_VIDEO_ENTRY}”; run npm run media:fetch.`,
+  );
+  process.exit(1);
+}
+const media: ThumbnailMedia = {
+  thumbnail_image: await dataUrl(
+    new URL(`thumbnails/${thumbnailFile(THUMBNAIL_IMAGE_ENTRY)}`, bundledRoot),
     "image/png",
   ),
-  sample_video: await dataUrl(
-    new URL(SAMPLE_VIDEO, sampleMediaRoot),
-    "video/webm",
-  ),
+  thumbnail_video: await dataUrl(new URL(clip.file, bundledRoot), "video/webm"),
 };
 const fonts: FontFiles = Object.fromEntries(
   await Promise.all(

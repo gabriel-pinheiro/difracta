@@ -478,12 +478,16 @@ Thumbnails are rendered, not drawn: `npm run thumbnails` in `difracta-visuals`
 runs each definition through the compositor in a headless Chromium (Playwright),
 a Visual on a full-frame Surface for a few seconds with its first Cue fired a
 few times near the end, a Filter over a gray checkerboard with a ring, and
-writes one PNG per definition. **Why rendered:** a thumbnail is then what the
-definition does, and adding a definition costs one command rather than an
-illustration; Filters over the same picture compare with each other, and the
-ring shows displacements a checkerboard alone would hide. Every command's
-`apply` receives it, so `layer.visual` and `layer.filter` can refuse an unknown
-id and check values.
+writes one PNG per definition. Image and Video show Bundled Media, the picture
+being a clip's thumbnail. Where the defaults would make a poor picture, the
+definition has a setup in `scripts/thumbnail-setups.ts`: Parameter values over
+the defaults, how long it runs, and whether the Cue fires (Counter rests, since
+a Cue that close to the picture catches its digits rolling). **Why rendered:** a
+thumbnail is then what the definition does, and adding a definition costs one
+command rather than an illustration; Filters over the same picture compare with
+each other, and the ring shows displacements a checkerboard alone would hide.
+Every command's `apply` receives it, so `layer.visual` and `layer.filter` can
+refuse an unknown id and check values.
 
 A Parameter is declared once, in the definition, as one of six kinds: number
 (with min, max, step and unit), color (four components from 0 to 1), choice

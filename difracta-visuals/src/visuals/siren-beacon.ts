@@ -8,6 +8,7 @@ export const sirenBeacon = defineShaderVisual({
   name: "Siren Beacon",
   description:
     "A rotating emergency beacon: broad soft beams in alternating colors sweep around a pivot and flare the whole Surface as each one points down.",
+  recommended: true,
   notes:
     "An alarm for builds and drops, built to be held on a pad: the beams are already turning on the first frame, from a random angle each press. Beams cones of light turn around Horizontal and Vertical Position, alternating Color A and Color B (an odd count puts two of Color A side by side), each Beam Width degrees wide with a soft edge, dimming with distance from the pivot. Every time a beam points straight down, toward the room, it flares: Flare washes the whole Surface in that beam's color for as long as the beam faces down, so narrow beams give short sharp flashes and wide ones long swells. Rotation Speed is turns per second, negative for the other way, and integrates, so a fader can ride it through zero; at zero the beacon holds still and costs nothing. Costs one full-Surface pass per frame with one cone per beam. Normal blend mode over a dark Scene is a warning light; Additive tints whatever is below. Pair it with Strobe in white on the same pad for a siren drop.",
   parameters: {

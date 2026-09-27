@@ -7,7 +7,8 @@ import {
 } from "@difracta/core";
 import { createCompositor, defineVisual } from "@difracta/render";
 
-import { SAMPLE_IMAGE, SAMPLE_VIDEO, builtInCatalog } from "../src/index.ts";
+import { builtInCatalog } from "../src/index.ts";
+import { THUMBNAIL_VIDEO_ENTRY, thumbnailSetups } from "./thumbnail-setups.ts";
 
 /**
  * The browser half of `npm run thumbnails`: renders one definition the
@@ -16,22 +17,27 @@ import { SAMPLE_IMAGE, SAMPLE_VIDEO, builtInCatalog } from "../src/index.ts";
  * a Filter gets the same with a gray checkerboard under it, so every
  * Filter is shown over the same picture. The checkerboard carries a ring,
  * since a displaced checkerboard would look like the checkerboard itself.
- * A Visual with a Media Parameter gets the sample image or video as a
- * Media item, served from the data URL the script passes, and its frames
- * are paced by the browser's own, since the file loads and a video plays
- * on the browser's clock. A Visual that draws text is paced the same way,
- * since its Bundled Font loads, from a data URL too. The result is the
- * canvas as PNG.
+ * A Visual with a Media Parameter gets a picture or a clip of the Bundled
+ * Media as a Media item, served from the data URL the script passes, and
+ * its frames are paced by the browser's own, since the file loads and a
+ * video plays on the browser's clock. A Visual that draws text is paced
+ * the same way, since its Bundled Font loads, from a data URL too. A
+ * definition with a setup (`thumbnail-setups.ts`) gets its Parameter
+ * values, its length and its say on the Cue. The result is the canvas as
+ * PNG.
  */
 export type ThumbnailKind = "visual" | "filter";
 
-/** The sample files as data URLs, by the Media item id they get. */
-export type SampleMedia = Readonly<
-  Record<"sample_image" | "sample_video", string>
+/** The picture and the clip as data URLs, by the Media item id they get. */
+export type ThumbnailMedia = Readonly<
+  Record<"thumbnail_image" | "thumbnail_video", string>
 >;
 
 /** The Bundled Fonts' files as data URLs, by file name. */
 export type FontFiles = Readonly<Record<string, string>>;
+
+/** How long a definition runs before its picture, unless its setup or the command says. */
+const DEFAULT_SECONDS = 3;
 
 /** How long a Media or text Visual may keep waiting for its picture past its run. */
 const MEDIA_WAIT_MS = 5_000;
@@ -70,6 +76,7 @@ const checkerboard = defineVisual({
 const catalog = new Catalog({
   visuals: [...builtInCatalog.visuals(), checkerboard],
   filters: builtInCatalog.filters(),
+  media: builtInCatalog.media(),
   fonts: builtInCatalog.fonts(),
 });
 const registry = createBuiltInRegistry(catalog);
@@ -84,12 +91,13 @@ function installation(kind: ThumbnailKind, id: string): Document {
   let document = emptyDocument("Thumbnail");
   document = run(document, "output.create", { id: "out", name: "Thumbnail" });
   document = run(document, "media.create", {
-    id: "sample_image",
-    path: SAMPLE_IMAGE,
+    id: "thumbnail_image",
+    path: "thumbnail.png",
   });
   document = run(document, "media.create", {
-    id: "sample_video",
-    path: SAMPLE_VIDEO,
+    id: "thumbnail_video",
+    kind: "bundled",
+    bundled: THUMBNAIL_VIDEO_ENTRY,
   });
   document = run(document, "surface.create", {
     id: "sur",
@@ -123,8 +131,17 @@ function installation(kind: ThumbnailKind, id: string): Document {
         document = run(document, "address.set", {
           address: `layer/${layerId}/param/${name}`,
           value:
-            parameter.accepts === "image" ? "sample_image" : "sample_video",
+            parameter.accepts === "image"
+              ? "thumbnail_image"
+              : "thumbnail_video",
         });
+    for (const [name, value] of Object.entries(
+      thumbnailSetups[visualId]?.parameters ?? {},
+    ))
+      document = run(document, "address.set", {
+        address: `layer/${layerId}/param/${name}`,
+        value,
+      });
   };
   if (kind === "visual") visual("thumbnail", id);
   else {
@@ -161,23 +178,28 @@ const nextFrame = (): Promise<number> =>
 export async function renderThumbnail(
   kind: ThumbnailKind,
   id: string,
-  seconds: number,
+  seconds: number | null,
   width: number,
   height: number,
-  media: SampleMedia,
+  media: ThumbnailMedia,
   fonts: FontFiles,
 ): Promise<string> {
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   const compositor = createCompositor(canvas, catalog, {
-    mediaUrl: (mediaId) => media[mediaId as keyof SampleMedia],
+    mediaUrl: (mediaId) => media[mediaId as keyof ThumbnailMedia],
     fontUrl: (file) => fonts[file],
   });
   const scene = installation(kind, id);
-  const frames = Math.round(seconds * 60);
+  const setup = thumbnailSetups[id];
+  const frames = Math.round(
+    (seconds ?? setup?.seconds ?? DEFAULT_SECONDS) * 60,
+  );
   const cue =
-    kind === "visual" ? catalog.visual(id)?.cues?.[0]?.key : undefined;
+    kind === "visual" && setup?.cue !== false
+      ? catalog.visual(id)?.cues?.[0]?.key
+      : undefined;
   const paced = loads(kind, id);
   const started = performance.now();
   let rendered = false;
