@@ -5,17 +5,24 @@ import type { MediaHandle } from "./sdk/media.ts";
  * The GPU side of Media: one texture per handle an instance samples,
  * uploaded when the handle's version is newer than what the texture
  * holds, so an image goes up once and a video frame once per frame the
- * browser presents. Pictures are uploaded straight (not premultiplied),
- * since the shader Visual's fragment returns straight alpha and the engine
- * premultiplies after it, and rows top first, as a canvas Layer's texture
- * is, so `uv` reads the picture the way the Visual sees the Surface. A
- * handle with nothing behind it binds one transparent texel. Textures
- * follow the instances: `retain` keeps the handles still held by a running
- * instance and deletes the rest.
+ * browser presents, flushed so the copy runs before the decoder moves on.
+ * Pictures are uploaded straight (not premultiplied), since the shader
+ * Visual's fragment returns straight alpha and the engine premultiplies
+ * after it, and rows top first, as a canvas Layer's texture is, so `uv`
+ * reads the picture the way the Visual sees the Surface. A handle with
+ * nothing behind it binds one transparent texel. Textures follow the
+ * instances: `retain` keeps the handles still held by a running instance
+ * and deletes the rest.
  */
 interface Entry {
   readonly texture: WebGLTexture;
   version: number;
+}
+
+function isVideo(image: object): boolean {
+  return (
+    typeof HTMLVideoElement !== "undefined" && image instanceof HTMLVideoElement
+  );
 }
 
 export class MediaTextures {
@@ -64,6 +71,11 @@ export class MediaTextures {
         gl.UNSIGNED_BYTE,
         image,
       );
+      // A video frame's copy is sent at once. Left queued with the rest of
+      // the frame's commands, it can run after a hardware decoder has reused
+      // the buffer it reads, and shows a frame from further ahead (Chromium
+      // with VA-API).
+      if (isVideo(image)) gl.flush();
       entry.version = handle.version;
     } catch (error: unknown) {
       // A picture the page may not read (a cross-origin file without CORS)

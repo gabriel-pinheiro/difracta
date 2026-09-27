@@ -1522,21 +1522,26 @@ an element over the same URL, which the browser serves from its cache. The
 loader counts the elements it holds, for telemetry. The GPU side
 (`media-textures.ts`) keeps one texture per handle a running instance holds,
 uploads when the handle's version is newer than the texture's, straight alpha
-and rows top first like a canvas Layer's, binds it on the units after the mask's
-as `u_<name>` with `u_<name>_size`, and deletes the textures of handles no
-instance holds any more. **Why the loader preloads rather than the Visual
-fetching:** a Layer that starts showing an item mid-set must find it decoded,
-and the table is the one list of what a show may need. **Why a version on the
-handle:** the instance and the uploader read the same counter, so a Visual
-reports `changed` exactly when the texture would differ and a paused video
-uploads nothing. **Why a playback is held only while playing or paused:** every
-video element holds a decoder, a browser gives hardware decoding to a limited
-number of them (16 in Chromium) and leaves the rest to the CPU, and a show has
-many more Layers waiting for a Play Cue than playing; holding none while stopped
-makes the count follow what plays, not what is planned. **Why the warm element
-is handed over rather than kept as the poster:** a player opened on Play starts
-a frame or two late, one already on its first frame starts at once, and the
-poster needs no decoder.
+and rows top first like a canvas Layer's, flushes after a video frame, binds it
+on the units after the mask's as `u_<name>` with `u_<name>_size`, and deletes
+the textures of handles no instance holds any more. **Why the loader preloads
+rather than the Visual fetching:** a Layer that starts showing an item mid-set
+must find it decoded, and the table is the one list of what a show may need.
+**Why a version on the handle:** the instance and the uploader read the same
+counter, so a Visual reports `changed` exactly when the texture would differ and
+a paused video uploads nothing. **Why a playback is held only while playing or
+paused:** every video element holds a decoder, a browser gives hardware decoding
+to a limited number of them (16 in Chromium) and leaves the rest to the CPU, and
+a show has many more Layers waiting for a Play Cue than playing; holding none
+while stopped makes the count follow what plays, not what is planned. **Why the
+warm element is handed over rather than kept as the poster:** a player opened on
+Play starts a frame or two late, one already on its first frame starts at once,
+and the poster needs no decoder.
+
+**Why a video upload is flushed:** the copy is a command queued with the rest of
+the frame's, and Chromium's hardware decoder on Linux (VA-API) can reuse the
+buffer it reads before the queue is sent, so the texture gets a frame from
+further ahead for an instant; sent at once, the copy runs first.
 
 **Why WebGL2 only:** the projector machines and smart TVs this runs on all have
 it, WebGPU still does not reach every such browser, and one engine is half the
