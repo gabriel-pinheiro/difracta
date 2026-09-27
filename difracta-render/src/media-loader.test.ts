@@ -104,12 +104,37 @@ const bundle = new Catalog({
   })),
 });
 
+/** Timers the test fires by hand. */
+function fakeTimers() {
+  const pending = new Map<number, () => void>();
+  let next = 1;
+  return {
+    pending,
+    set(callback: () => void): unknown {
+      pending.set(next, callback);
+      return next++;
+    },
+    clear(timer: unknown): void {
+      pending.delete(timer as number);
+    },
+    /** Every timer still pending runs out. */
+    expire(): void {
+      const callbacks = [...pending.values()];
+      pending.clear();
+      for (const callback of callbacks) callback();
+    },
+  };
+}
+
+const NONE: ReadonlySet<string> = new Set();
+
 function loader(
   mediaUrl = (id: string): string | undefined => `/media/${id}`,
   poster?: MediaElements["poster"],
 ) {
   const images: FakeImage[] = [];
   const videos: FakeVideo[] = [];
+  const timers = fakeTimers();
   const elements: MediaElements = {
     poster,
     image: () => {
@@ -128,8 +153,9 @@ function loader(
     catalog: bundle,
     elements,
     pageOrigin: "http://tv.local:4801",
+    timers,
   });
-  return { instance, images, videos };
+  return { instance, images, videos, timers };
 }
 
 const item = (id: string, path: string) => ({
@@ -150,6 +176,8 @@ describe("MediaLoader", () => {
     };
     instance.sync(table);
     instance.sync(table); // the same revision costs nothing
+    expect(videos).toHaveLength(0); // a preload waits its turn
+    instance.preload(() => NONE);
     expect(images).toHaveLength(1);
     expect(videos).toHaveLength(1);
     expect(images[0]?.src).toBe("/media/logo");
@@ -203,6 +231,7 @@ describe("MediaLoader", () => {
       flash: bundled("flash", "flash"),
       old: bundled("old", "retired"),
     });
+    instance.preload(() => NONE);
     expect(videos).toHaveLength(1);
     expect(videos[0]?.src).toBe("/media/flash");
     expect(instance.get("old")).toBeUndefined();
@@ -237,6 +266,7 @@ describe("MediaLoader", () => {
       clip: item("clip", "clip.mp4"),
       pic: item("pic", "pic.jpg"),
     });
+    instance.preload(() => NONE);
     expect(instance.video("pic")).toBeUndefined();
     const playback = instance.video("clip");
     expect(playback).toBeDefined();
@@ -284,6 +314,7 @@ describe("MediaLoader", () => {
       return Promise.resolve(poster as unknown as ImageBitmap);
     });
     instance.sync({ clip: item("clip", "clip.webm") });
+    instance.preload(() => NONE);
     const shared = instance.get("clip");
     const warm = videos[0];
     if (shared === undefined || warm === undefined) throw new Error();
@@ -301,7 +332,11 @@ describe("MediaLoader", () => {
     expect(shared.image).toBe(posters[0]);
     const playback = instance.video("clip");
     if (playback === undefined) throw new Error();
-    // The warm element plays, already on its first frame; a third one preloads.
+    // The warm element plays, already on its first frame; the one that
+    // replaces it waits its turn, holding nothing.
+    expect(videos).toHaveLength(2);
+    expect(instance.videos()).toEqual({ players: 1, playing: 0 });
+    instance.preload(() => NONE);
     expect(videos).toHaveLength(3);
     expect(playback.handle.image).toBe(warm);
     expect(playback.handle.version).toBe(1);
@@ -324,6 +359,86 @@ describe("MediaLoader", () => {
     expect(posters[0]?.closed).toBe(true);
     expect(shared).toMatchObject({ image: null, version: 0 });
     expect(instance.videos()).toEqual({ players: 0, playing: 0 });
+  });
+
+  function clips(count: number) {
+    return Object.fromEntries(
+      Array.from({ length: count }, (_, index) => {
+        const id = `clip${String(index)}`;
+        return [id, item(id, `${id}.webm`)];
+      }),
+    );
+  }
+  const sources = (videos: readonly FakeVideo[]) =>
+    videos.map((video) => video.src.replace("/media/", ""));
+
+  it("preloads videos four at a time, the next one when a turn ends", () => {
+    const { instance, videos, timers } = loader();
+    instance.sync(clips(7));
+    expect(instance.videos().players).toBe(0);
+    instance.preload(() => NONE);
+    expect(sources(videos)).toEqual(["clip0", "clip1", "clip2", "clip3"]);
+    expect(instance.videos().players).toBe(4);
+    instance.preload(() => NONE); // no turn free: nothing starts
+    expect(videos).toHaveLength(4);
+    videos[1]?.loadAs(128, 72); // a first frame ends the turn
+    expect(sources(videos).at(-1)).toBe("clip4");
+    videos[0]?.fire("error"); // so does a file that fails
+    expect(sources(videos).at(-1)).toBe("clip5");
+    expect(videos).toHaveLength(6);
+    timers.expire(); // and one that stalls
+    expect(sources(videos).at(-1)).toBe("clip6");
+    expect(videos).toHaveLength(7);
+    expect(instance.videos().players).toBe(7);
+    videos[2]?.loadAs(128, 72); // a turn ended by the timer ends once
+    videos[6]?.loadAs(128, 72);
+    expect(videos).toHaveLength(7);
+    expect(timers.pending.size).toBe(0);
+  });
+
+  it("preloads the wanted items first, asking for them only while some wait", () => {
+    const { instance, videos } = loader();
+    instance.sync(clips(7));
+    let asked = 0;
+    const wanted = () => {
+      asked += 1;
+      return new Set(["clip5", "clip2", "nope"]);
+    };
+    instance.preload(wanted);
+    expect(sources(videos)).toEqual(["clip2", "clip5", "clip0", "clip1"]);
+    videos[0]?.loadAs(128, 72);
+    videos[1]?.loadAs(128, 72);
+    videos[2]?.loadAs(128, 72);
+    expect(sources(videos).slice(4)).toEqual(["clip3", "clip4", "clip6"]);
+    instance.preload(wanted);
+    expect(asked).toBe(1);
+  });
+
+  it("never loads an item removed while it waits, and frees the turn of one removed while loading", () => {
+    const { instance, videos } = loader();
+    const table = clips(6);
+    instance.sync(table);
+    instance.preload(() => NONE);
+    const { clip4: _waiting, clip0: _loading, ...rest } = table;
+    instance.sync(rest);
+    expect(videos[0]?.src).toBe(""); // released while loading
+    expect(sources(videos).at(-1)).toBe("clip5"); // its turn went on
+    for (const video of videos) if (video.src !== "") video.loadAs(128, 72);
+    instance.preload(() => NONE);
+    expect(sources(videos)).not.toContain("clip4");
+    expect(instance.videos().players).toBe(4);
+  });
+
+  it("gives a Layer a player of its own while the preload waits its turn", () => {
+    const { instance, videos } = loader();
+    instance.sync(clips(5));
+    instance.preload(() => NONE);
+    const playback = instance.video("clip4");
+    expect(sources(videos).at(-1)).toBe("clip4");
+    expect(playback?.handle.image).toBeNull();
+    expect(instance.videos().players).toBe(5);
+    playback?.dispose();
+    expect(instance.videos().players).toBe(4);
   });
 
   it("asks for CORS only for a file on another origin", () => {

@@ -584,7 +584,8 @@ Live performance measurements an Output Session reports once a second and the
 Runtime relays to Studio as live state: resolution, pixel ratio, Frame Interval,
 Render Work and workload counts: the canvas Layers, shader Layers and Filters
 run per frame, and the video players playing, the ones held and the Layers that
-take a video.
+take a video. More players playing than hardware decoders work at the same
+moment is shown as a warning.
 
 ### Frame Interval
 

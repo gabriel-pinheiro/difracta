@@ -1519,24 +1519,38 @@ from that frame with `createImageBitmap`, which is what the shared handle shows.
 A playback takes the warm element, so its first frame is there at once, and a
 fresh one preloads in its place; a playback asked for while none is warm opens
 an element over the same URL, which the browser serves from its cache. The
-loader counts the elements it holds, for telemetry. The GPU side
-(`media-textures.ts`) keeps one texture per handle a running instance holds,
-uploads when the handle's version is newer than the texture's, straight alpha
-and rows top first like a canvas Layer's, flushes after a video frame, binds it
-on the units after the mask's as `u_<name>` with `u_<name>_size`, and deletes
-the textures of handles no instance holds any more. **Why the loader preloads
-rather than the Visual fetching:** a Layer that starts showing an item mid-set
-must find it decoded, and the table is the one list of what a show may need.
-**Why a version on the handle:** the instance and the uploader read the same
-counter, so a Visual reports `changed` exactly when the texture would differ and
-a paused video uploads nothing. **Why a playback is held only while playing or
-paused:** every video element holds a decoder, a browser gives hardware decoding
-to a limited number of them (16 in Chromium) and leaves the rest to the CPU, and
-a show has many more Layers waiting for a Play Cue than playing; holding none
-while stopped makes the count follow what plays, not what is planned. **Why the
-warm element is handed over rather than kept as the poster:** a player opened on
-Play starts a frame or two late, one already on its first frame starts at once,
-and the poster needs no decoder.
+preloads take turns (`media-preload-queue.ts`):
+`settings.media.video.preloadBatch` load their first frame at the same moment,
+the first ones and the ones replacing a taken element alike, and a turn ends
+with the first frame, an error, or `preloadStallMs` without either, so a file
+that never loads holds nobody back. One waiting its turn holds no element. Each
+frame the compositor starts the ones waiting, the Media items the planned Layers
+name in a Parameter first. The loader counts the elements it holds, for
+telemetry. The GPU side (`media-textures.ts`) keeps one texture per handle a
+running instance holds, uploads when the handle's version is newer than the
+texture's, straight alpha and rows top first like a canvas Layer's, flushes
+after a video frame, binds it on the units after the mask's as `u_<name>` with
+`u_<name>_size`, and deletes the textures of handles no instance holds any more.
+**Why the loader preloads rather than the Visual fetching:** a Layer that starts
+showing an item mid-set must find it decoded, and the table is the one list of
+what a show may need. **Why a version on the handle:** the instance and the
+uploader read the same counter, so a Visual reports `changed` exactly when the
+texture would differ and a paused video uploads nothing. **Why a playback is
+held only while playing or paused:** every video element holds a decoder, and a
+show has many more Layers waiting for a Play Cue than playing; holding none
+while stopped makes the count follow what plays, not what is planned. **Why
+preloads take turns:** a decoder at work, a player playing or loading its first
+frame, takes one of the hardware decoders, of which Chromium on Linux with
+VA-API runs 16 at the same moment (`settings.media.video.hardwareDecoders`;
+other platforms were not measured), and a player that starts past them decodes
+on the CPU. Loaded all at once, an Installation with more video Media items than
+that would hand CPU-decoding players to the Layers that play them; in turns,
+only what plays counts. An Output playing more players than the limit says so in
+its telemetry's readers, Studio's Output card and `difracta outputs`, as a
+warning inferred from the count, since a page cannot ask which decoder a player
+got. **Why the warm element is handed over rather than kept as the poster:** a
+player opened on Play starts a frame or two late, one already on its first frame
+starts at once, and the poster needs no decoder.
 
 **Why a video upload is flushed:** the copy is a command queued with the rest of
 the frame's, and Chromium's hardware decoder on Linux (VA-API) can reuse the

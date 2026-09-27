@@ -1,5 +1,10 @@
-import { orderedEntries, type Document } from "@difracta/core";
-import type { LiveState, OscLive, OutputSessionLive } from "@difracta/protocol";
+import { orderedEntries, settings, type Document } from "@difracta/core";
+import {
+  videosPastHardware,
+  type LiveState,
+  type OscLive,
+  type OutputSessionLive,
+} from "@difracta/protocol";
 
 /**
  * What is happening around the Outputs right now, read from the live state
@@ -27,6 +32,8 @@ export interface SessionStatus {
     readonly playing: number;
     readonly players: number;
     readonly layers: number;
+    /** How many of the playing ones are past the hardware decoders, and may decode on the CPU. */
+    readonly pastHardware: number;
   } | null;
   readonly issues: readonly IssueStatus[];
 }
@@ -72,7 +79,13 @@ function sessionStatus(
       telemetry === null || telemetry === undefined
         ? null
         : `${String(telemetry.width)}×${String(telemetry.height)}`,
-    videos: telemetry?.workload.videos ?? null,
+    videos:
+      telemetry?.workload.videos === undefined
+        ? null
+        : {
+            ...telemetry.workload.videos,
+            pastHardware: videosPastHardware(telemetry.workload.videos),
+          },
     // A report without the list means every Layer ran.
     issues: (telemetry?.issues ?? []).map((issue) => ({
       layerId: issue.layerId,
@@ -93,6 +106,10 @@ export function formatLiveStatus(status: LiveStatus): string[] {
       lines.push(
         `  ${session.sessionId}  ${session.connected ? "connected" : "stale"}  ${session.fps === null ? "—" : String(session.fps)} fps  ${session.renderMs === null ? "—" : `${String(session.renderMs)} ms`}  ${session.resolution ?? "—"}${session.videos === null ? "" : `  videos ${String(session.videos.playing)} playing / ${String(session.videos.players)} players / ${String(session.videos.layers)} Layers`}`,
       );
+      if (session.videos !== null && session.videos.pastHardware > 0)
+        lines.push(
+          `    warning: more than ${String(settings.media.video.hardwareDecoders)} video players playing; the ${String(session.videos.pastHardware)} past that may decode on the CPU`,
+        );
       for (const issue of session.issues)
         lines.push(
           `    issue: ${issue.layer ?? issue.layerId} (${issue.definition}): ${issue.message}`,

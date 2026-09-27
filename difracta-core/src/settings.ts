@@ -76,6 +76,24 @@ export const settings = {
      * file is refused; `--media-anywhere` turns it on for one runtime.
      */
     allowOutsideShowFolder: false,
+    video: {
+      /**
+       * How many video preloads an Output loads to their first frame at the
+       * same moment; the rest wait their turn, so opening an Output with
+       * many video Media items does not start a decoder for each at once.
+       */
+      preloadBatch: 4,
+      /** A preload with no first frame and no error after this long gives its turn up. */
+      preloadStallMs: 5_000,
+      /**
+       * How many hardware video decoders work at the same moment, a player
+       * playing or loading its first frame each taking one; players past
+       * it decode on the CPU. Measured on Chromium on Linux with VA-API;
+       * other platforms were not measured. An Output playing more players
+       * than this shows a warning.
+       */
+      hardwareDecoders: 16,
+    },
     /**
      * The release of the difracta-media repository whose clips are the
      * Bundled Media: `npm run media:fetch` downloads

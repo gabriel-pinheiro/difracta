@@ -1,3 +1,4 @@
+import { settings } from "@difracta/core";
 import { z } from "zod";
 
 import { DisplayHostLiveSchema } from "./display-hosts.ts";
@@ -31,6 +32,16 @@ const VideoCount = z
   })
   .strict();
 export type VideoCount = z.infer<typeof VideoCount>;
+
+/**
+ * How many of the players playing are past the hardware decoders
+ * (`settings.media.video.hardwareDecoders`), and so may decode on the CPU;
+ * zero within the limit. Inferred from the count: a page cannot ask which
+ * decoder a player got.
+ */
+export function videosPastHardware(count: Pick<VideoCount, "playing">): number {
+  return Math.max(0, count.playing - settings.media.video.hardwareDecoders);
+}
 
 /** How many issues one telemetry report carries at most; the Output keeps the first ones. */
 export const MAX_TELEMETRY_ISSUES = 8;

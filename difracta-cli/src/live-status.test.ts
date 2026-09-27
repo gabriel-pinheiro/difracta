@@ -87,7 +87,7 @@ describe("liveStatus", () => {
               fps: 60,
               renderMs: 3.3,
               resolution: "1920×1080",
-              videos: { playing: 1, players: 4, layers: 6 },
+              videos: { playing: 1, players: 4, layers: 6, pastHardware: 0 },
               issues: [
                 {
                   layerId: "lay",
@@ -136,6 +136,39 @@ describe("liveStatus", () => {
     const status = liveStatus(stage(), quiet);
     expect(status.outputs[0]?.sessions[0]?.issues).toEqual([]);
     expect(formatLiveStatus(status).at(-1)).toBe("OSC is off.");
+  });
+
+  it("warns when more video players play than hardware decoders work at once", () => {
+    const busy: LiveState = {
+      ...live,
+      outputs: {
+        out_tv: {
+          sessions: {
+            s1: {
+              sessionId: "s1",
+              outputId: "out_tv",
+              connectedAt: 10,
+              reportedAt: 30,
+              stale: false,
+              telemetry: {
+                ...telemetry,
+                issues: [],
+                workload: {
+                  ...telemetry.workload,
+                  videos: { playing: 19, players: 30, layers: 40 },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+    const status = liveStatus(stage(), busy);
+    expect(status.outputs[0]?.sessions[0]?.videos?.pastHardware).toBe(3);
+    expect(formatLiveStatus(status).slice(1, 3)).toEqual([
+      "  s1  connected  60 fps  3.3 ms  1920×1080  videos 19 playing / 30 players / 40 Layers",
+      "    warning: more than 16 video players playing; the 3 past that may decode on the CPU",
+    ]);
   });
 
   it("formats one line per Output, Session and issue", () => {

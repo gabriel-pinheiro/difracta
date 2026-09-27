@@ -1,6 +1,10 @@
 import type { DocumentView } from "@difracta/client";
-import type { Output } from "@difracta/core";
-import type { VideoCount, WorkloadCount } from "@difracta/protocol";
+import { settings, type Output } from "@difracta/core";
+import {
+  videosPastHardware,
+  type VideoCount,
+  type WorkloadCount,
+} from "@difracta/protocol";
 import { Link, MonitorUp } from "lucide-react";
 import { useState } from "react";
 
@@ -70,6 +74,8 @@ export function OutputCard({
   const primary = primarySession(sessions);
   const live = liveSessions(sessions).length;
   const now = useNow(sessions.some((session) => session.stale));
+  const videos = primary?.telemetry?.workload.videos;
+  const pastHardware = videos === undefined ? 0 : videosPastHardware(videos);
 
   function copyUrl(): void {
     copyWithToast(url, "Output page URL copied");
@@ -134,13 +140,16 @@ export function OutputCard({
           >
             <Metric
               label="Videos"
-              value={formatVideos(primary?.telemetry?.workload.videos)}
+              value={formatVideos(videos)}
+              warning={pastHardware > 0}
               bare
             />
           </TooltipTrigger>
           <TooltipContent>
             Videos: players playing / players held / Layers. Each player held
             uses a video decoder.
+            {pastHardware > 0 &&
+              ` More than ${String(settings.media.video.hardwareDecoders)} are playing: the ${String(pastHardware)} past that may decode on the CPU.`}
           </TooltipContent>
         </Tooltip>
       </div>
@@ -226,10 +235,13 @@ function Metric({
   label,
   value,
   bare = false,
+  warning = false,
 }: {
   readonly label: string;
   readonly value: string;
   readonly bare?: boolean;
+  /** Draws the value in the warning tone. */
+  readonly warning?: boolean;
 }) {
   return (
     <div
@@ -238,7 +250,14 @@ function Metric({
       <div className="truncate text-[0.625rem] tracking-wide text-muted-foreground uppercase">
         {label}
       </div>
-      <div className="mt-0.5 truncate font-mono text-xs">{value}</div>
+      <div
+        className={cn(
+          "mt-0.5 truncate font-mono text-xs",
+          warning && "text-amber-400",
+        )}
+      >
+        {value}
+      </div>
     </div>
   );
 }

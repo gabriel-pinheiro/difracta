@@ -190,6 +190,7 @@ class WebGLCompositor implements Compositor {
       outputId,
       this.#catalog,
     );
+    this.#loader.preload(() => plannedMedia(plan.layers, this.#catalog));
     const step = resources.players.step(plan.layers, dt, width, height);
     resources.media.retain(step.textures);
     const chain = resources.filters.step(plan.filters, dt, width, height);
@@ -425,6 +426,23 @@ class WebGLCompositor implements Compositor {
     if (layer.blendMode === "additive")
       gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   }
+}
+
+/** The Media items the planned Layers name in a Parameter that takes one. */
+function plannedMedia(
+  layers: readonly LayerDraw[],
+  catalog: Catalog,
+): ReadonlySet<string> {
+  const ids = new Set<string>();
+  for (const { layer, visual } of layers) {
+    const parameters = catalog.visual(visual)?.parameters ?? {};
+    for (const [name, parameter] of Object.entries(parameters)) {
+      const value = layer.parameters[name];
+      if (parameter.kind === "media" && typeof value === "string" && value)
+        ids.add(value);
+    }
+  }
+  return ids;
 }
 
 /** The Target's rectangle as the shaders take it: x, y, width, height. */

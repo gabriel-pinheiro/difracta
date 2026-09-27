@@ -1,12 +1,18 @@
 import {
   emptyCatalog,
   mediaItemTypeIn,
+  settings,
   type Catalog,
   type Media,
   type MediaType,
   type Table,
 } from "@difracta/core";
 
+import {
+  createPreloadQueue,
+  type PreloadQueue,
+  type PreloadTimers,
+} from "./media-preload-queue.ts";
 import {
   createVideoPreload,
   type CutPoster,
@@ -30,7 +36,10 @@ import type { MediaContext, MediaHandle, MediaVideo } from "./sdk/media.ts";
  * shared handle shows the first frame, and a Layer that plays it asks
  * `video(id)` for a playback of its own, which takes the warm element when
  * it is ready and otherwise opens one over the same URL, which the browser
- * serves from its cache. `videos()` counts the elements held, each of
+ * serves from its cache. The preloads take turns
+ * (`media-preload-queue.ts`), `settings.media.video.preloadBatch` loading
+ * at the same moment, and `preload` starts the ones waiting, the items a
+ * planned Layer names first. `videos()` counts the elements held, each of
  * which holds a decoder.
  */
 export interface MediaElements {
@@ -54,6 +63,8 @@ export interface MediaLoaderOptions {
   readonly elements?: MediaElements;
   /** The page's origin, to decide when a file needs CORS; the browser's by default. */
   readonly pageOrigin?: string;
+  /** What times a stalled preload out; the browser's timers by default. */
+  readonly timers?: PreloadTimers;
 }
 
 /** The `media` table, of which only what each item shows matters here; a Group shows nothing. */
@@ -112,6 +123,7 @@ export class MediaLoader implements MediaContext {
   readonly #loads = new Map<string, number>();
   /** The elements of the playbacks Layers hold, until each is disposed. */
   readonly #playbacks = new Set<HTMLVideoElement>();
+  readonly #queue: PreloadQueue;
   #table: MediaTable | undefined;
 
   constructor(options: MediaLoaderOptions) {
@@ -121,6 +133,11 @@ export class MediaLoader implements MediaContext {
     this.#pageOrigin =
       options.pageOrigin ??
       (typeof location === "undefined" ? "null" : location.origin);
+    this.#queue = createPreloadQueue({
+      batch: settings.media.video.preloadBatch,
+      stallMs: settings.media.video.preloadStallMs,
+      timers: options.timers,
+    });
   }
 
   /** Brings the elements in step with the table; a table seen before costs nothing. */
@@ -139,6 +156,15 @@ export class MediaLoader implements MediaContext {
         if (entry !== undefined) this.#entries.set(id, entry);
       }
     }
+  }
+
+  /**
+   * Starts the video preloads waiting for a turn, as many as there are
+   * turns free, the items `wanted` names first; `wanted` is only asked
+   * while some wait.
+   */
+  preload(wanted: () => ReadonlySet<string>): void {
+    if (this.#queue.waiting > 0) this.#queue.advance(wanted());
   }
 
   get(id: string): MediaHandle | undefined {
@@ -163,7 +189,7 @@ export class MediaLoader implements MediaContext {
   videos(): VideoCount {
     let players = this.#playbacks.size;
     for (const entry of this.#entries.values())
-      if (entry.preload !== undefined) players += 1;
+      if (entry.preload?.held === true) players += 1;
     let playing = 0;
     for (const element of this.#playbacks)
       if (!element.paused && !element.ended) playing += 1;
@@ -248,6 +274,7 @@ export class MediaLoader implements MediaContext {
       id,
       () => this.#videoElement(url, crossOrigin),
       this.#elements.poster,
+      this.#queue,
     );
     return {
       source,

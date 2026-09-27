@@ -26,7 +26,7 @@ export function prepareVideoElement(
 /** Whether the element has a frame to upload. */
 const HAVE_CURRENT_DATA = 2;
 
-interface FrameCounting {
+export interface FrameCounting {
   readonly version: () => number;
   readonly stop: () => void;
 }
