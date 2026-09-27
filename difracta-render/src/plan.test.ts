@@ -52,22 +52,22 @@ function installation(): Document {
   document = run(document, "surface.create", {
     id: "sur_wall",
     name: "Wall",
-    output: "out_a",
+    outputs: ["out_a"],
   });
   document = run(document, "surface.create", {
     id: "sur_floor",
     name: "Floor",
-    output: "out_a",
+    outputs: ["out_a"],
   });
   document = run(document, "surface.create", {
     id: "sur_tv",
     name: "TV",
-    output: "out_b",
+    outputs: ["out_b"],
   });
   document = run(document, "surface.create", {
     id: "sur_loose",
     name: "Loose",
-    output: null,
+    outputs: [],
   });
   return run(document, "mask.create", {
     id: "mask_door",
@@ -352,6 +352,51 @@ describe("planFrame", () => {
     expect([...plannedSurfaces(planFrame(selected, "out_a", catalog))]).toEqual(
       ["sur_wall", "sur_floor"],
     );
+  });
+
+  it("plans a Surface on every Output it is enabled on, through that Output's mapping", () => {
+    let document = run(staged(), "surface.assign", {
+      surfaceId: "sur_wall",
+      outputs: ["out_b"],
+    });
+    document = run(document, "surface.corner.set", {
+      surfaceId: "sur_wall",
+      corner: "topLeft",
+      point: { x: 0.5, y: 0.5 },
+      output: "out_b",
+    });
+    const wallOn = (outputId: string) =>
+      planFrame(document, outputId, catalog).layers.find(
+        (draw) => draw.surface.id === "sur_wall",
+      )?.corners.topLeft;
+    expect(wallOn("out_a")).toEqual({ x: 0, y: 0 });
+    expect(wallOn("out_b")).toEqual({ x: 0.5, y: 0.5 });
+
+    // Calibration Mode is on one Output; the other keeps playing the Scene.
+    const calibrating = run(document, "calibration.set", {
+      ...calibration,
+      outputId: "out_b",
+    });
+    expect(planFrame(calibrating, "out_a", catalog).draws).toEqual([]);
+    expect(
+      planFrame(calibrating, "out_a", catalog).layers.length,
+    ).toBeGreaterThan(0);
+    expect(
+      planFrame(calibrating, "out_b", catalog).draws.map((draw) => [
+        draw.surface.id,
+        draw.corners.topLeft,
+      ]),
+    ).toEqual([["sur_wall", { x: 0.5, y: 0.5 }]]);
+
+    const off = run(calibrating, "surface.assign", {
+      surfaceId: "sur_wall",
+      outputs: ["out_b"],
+      enabled: false,
+    });
+    expect(planFrame(off, "out_b", catalog).draws).toEqual([]);
+    expect(
+      planFrame(off, "out_b", catalog).layers.map((draw) => draw.surface.id),
+    ).not.toContain("sur_wall");
   });
 
   it("draws nothing under Blackout", () => {

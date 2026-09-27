@@ -1,12 +1,17 @@
-import type { Output, Surface, Table } from "@difracta/core";
+import {
+  isEnabledOn,
+  type Output,
+  type Surface,
+  type Table,
+} from "@difracta/core";
 
-/** Whether no Surface renders through the Output: its row's "No Surface". */
+/** Whether no Surface is on the Output: its row's "No Surface". */
 export function outputWithoutSurface(
   outputId: string,
   surfaces: Table<Surface>,
 ): boolean {
-  return !Object.values(surfaces).some(
-    (surface) => surface.output === outputId,
+  return !Object.values(surfaces).some((surface) =>
+    isEnabledOn(surface, outputId),
   );
 }
 

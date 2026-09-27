@@ -1,5 +1,12 @@
 import type { ConnectionPhase, DocumentView } from "@difracta/client";
-import type { Mask, Output, Path, Surface, Table } from "@difracta/core";
+import {
+  isEnabledOn,
+  type Mask,
+  type Output,
+  type Path,
+  type Surface,
+  type Table,
+} from "@difracta/core";
 import type { DocumentSummary, LiveState } from "@difracta/protocol";
 
 import { useDocumentCommands } from "@/documents/document-commands";
@@ -123,7 +130,8 @@ function CalibrationStatus({ view }: { readonly view: DocumentView }) {
   if (calibration === null) return null;
   // Same checks as the Output makes: a stale entry shows nothing.
   const surface = surfaces?.[calibration.surfaceId];
-  if (surface?.output == null) return null;
+  if (surface === undefined || !isEnabledOn(surface, calibration.outputId))
+    return null;
   const mask =
     calibration.maskId === null ? undefined : masks?.[calibration.maskId];
   if (calibration.maskId !== null && mask?.surfaceId !== surface.id)
@@ -132,7 +140,8 @@ function CalibrationStatus({ view }: { readonly view: DocumentView }) {
     calibration.pathId === null ? undefined : paths?.[calibration.pathId];
   if (calibration.pathId !== null && path?.surfaceId !== surface.id)
     return null;
-  const output = outputs?.[surface.output]?.name ?? surface.output;
+  const output = outputs?.[calibration.outputId]?.name;
+  if (output === undefined) return null;
   return (
     <span className="flex items-center gap-1.5 rounded-sm bg-amber-500/20 px-1.5 text-amber-300">
       Calibrating {mask?.name ?? path?.name ?? surface.name} on {output}

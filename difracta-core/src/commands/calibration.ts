@@ -7,27 +7,30 @@ import {
   type Calibration,
   type RegionCorner,
 } from "../document/document.ts";
+import { pickOutput } from "../document/mappings.ts";
 
 /**
  * Enters or changes Calibration Mode with the whole state at once: the
- * Surface, Mask, Path or Region being aligned, the highlighted corner or
- * point, the view.
+ * Surface, Mask, Path or Region being aligned, the one Output showing it,
+ * the highlighted corner or point, the view.
  * Performance kind: replicated to the Output at once, never in undo history.
  */
 export const calibrationSet = defineCommand({
   name: "calibration.set",
   kind: "performance",
   description:
-    "Show a Surface, or a Mask, Path or Region of it, as a calibration pattern on its Output.",
-  payload: CalibrationSchema,
+    "Show a Surface, or a Mask, Path or Region of it, as a calibration pattern on one of its Outputs.",
+  payload: CalibrationSchema.extend({
+    /** Needed once the Surface is on several Outputs. */
+    outputId: z.string().min(1).optional(),
+  }),
   apply({ document, payload }) {
     const surface = document.surfaces[payload.surfaceId];
     if (surface === undefined)
       return rejected(`Surface “${payload.surfaceId}” does not exist.`);
-    if (surface.output === null)
-      return rejected(
-        `Surface “${surface.name}” has no Output to calibrate on.`,
-      );
+    const picked = pickOutput(document, surface, payload.outputId);
+    if (!picked.ok) return rejected(picked.error);
+    const next: Calibration = { ...payload, outputId: picked.outputId };
     if (payload.maskId !== null) {
       const mask = document.masks[payload.maskId];
       if (mask?.surfaceId !== surface.id)
@@ -65,10 +68,9 @@ export const calibrationSet = defineCommand({
         return rejected(`A Region has no ${payload.corner} corner.`);
     }
     const current = document.operational.calibration;
-    if (current !== null && sameCalibration(current, payload))
-      return accepted([]);
+    if (current !== null && sameCalibration(current, next)) return accepted([]);
     return accepted([
-      { op: "set", path: ["operational", "calibration"], value: payload },
+      { op: "set", path: ["operational", "calibration"], value: next },
     ]);
   },
 });
@@ -89,6 +91,7 @@ export const calibrationExit = defineCommand({
 function sameCalibration(a: Calibration, b: Calibration): boolean {
   return (
     a.surfaceId === b.surfaceId &&
+    a.outputId === b.outputId &&
     a.maskId === b.maskId &&
     a.pathId === b.pathId &&
     a.regionId === b.regionId &&

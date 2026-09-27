@@ -1,5 +1,6 @@
 import type { DocumentView } from "@difracta/client";
 import {
+  isEnabledOn,
   orderedEntries,
   type Output,
   type Surface,
@@ -14,6 +15,7 @@ import { InspectorHeading } from "@/inspector/fields/inspector-heading";
 import { NameField } from "@/inspector/fields/name-field";
 import { SwitchField } from "@/inspector/fields/switch-field";
 import { useCommand, useDocumentPath } from "@/lib/client";
+import { pickMappingOutput } from "@/lib/mapping-output";
 import { useSelection } from "@/selection/selection";
 
 import { OpenOutputDialog } from "./open-output-dialog";
@@ -37,8 +39,8 @@ export function OutputInspector({
     if (output === undefined) select({ kind: "installation" });
   }, [output, select]);
   if (output === undefined) return null;
-  const mapped = orderedEntries(surfaces).filter(
-    (surface) => surface.output === id,
+  const mapped = orderedEntries(surfaces).filter((surface) =>
+    isEnabledOn(surface, id),
   );
 
   return (
@@ -84,7 +86,7 @@ export function OutputInspector({
           <span className="text-xs text-muted-foreground">Surfaces</span>
           {mapped.length === 0 ? (
             <p className="text-[0.6875rem]/relaxed text-muted-foreground">
-              No Surface renders through this Output.
+              No Surface is on this Output.
             </p>
           ) : (
             <ul className="grid grid-cols-[minmax(0,1fr)] gap-px">
@@ -93,7 +95,11 @@ export function OutputInspector({
                   <button
                     type="button"
                     className="flex h-6 w-full items-center gap-1.5 rounded-sm px-1.5 text-left text-xs hover:bg-accent hover:text-accent-foreground"
-                    onClick={() => select({ kind: "surface", id: surface.id })}
+                    title="Open the Surface at its mapping for this Output"
+                    onClick={() => {
+                      pickMappingOutput(surface.id, id);
+                      select({ kind: "surface", id: surface.id });
+                    }}
                   >
                     <Box className="size-3.5 shrink-0 text-muted-foreground" />
                     <span className="truncate">{surface.name}</span>

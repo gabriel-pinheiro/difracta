@@ -12,7 +12,7 @@ function run(document: Document, name: string, payload: unknown) {
   return result;
 }
 
-/** Outputs A and B; Wall renders through B but keeps a mapping for A, Floor through A. */
+/** Outputs A and B; Wall is on B and keeps a disabled mapping for A, Floor is on A, Score on both. */
 function twoOutputs(): Document {
   let document = emptyDocument("Living");
   for (const name of ["A", "B"])
@@ -23,25 +23,36 @@ function twoOutputs(): Document {
   document = run(document, "surface.create", {
     id: "sur_a",
     name: "Wall",
-    output: "out_A",
+    outputs: ["out_A"],
   }).document;
   document = run(document, "surface.assign", {
     surfaceId: "sur_a",
-    output: "out_B",
+    outputs: ["out_B"],
   }).document;
-  return run(document, "surface.create", {
+  document = run(document, "surface.assign", {
+    surfaceId: "sur_a",
+    outputs: ["out_A"],
+    enabled: false,
+  }).document;
+  document = run(document, "surface.create", {
     id: "sur_b",
     name: "Floor",
-    output: "out_A",
+    outputs: ["out_A"],
+  }).document;
+  return run(document, "surface.create", {
+    id: "sur_c",
+    name: "Score",
+    outputs: ["out_A", "out_B"],
   }).document;
 }
 
 describe("output.remove", () => {
-  it("warns for each Surface it unassigns and each mapping it drops", () => {
+  it("warns for each Surface left without an Output and each mapping it drops", () => {
     const removed = run(twoOutputs(), "output.remove", { outputId: "out_A" });
     expect(removed.warnings).toEqual([
       "Surface “Wall” lost its Surface Mapping for “A”.",
       "Surface “Floor” lost its Output; nothing projects it until one is picked.",
+      "Surface “Score” lost its Surface Mapping for “A”.",
     ]);
   });
 
@@ -49,6 +60,7 @@ describe("output.remove", () => {
     const removed = run(twoOutputs(), "output.remove", { outputId: "out_B" });
     expect(removed.warnings).toEqual([
       "Surface “Wall” lost its Output; nothing projects it until one is picked.",
+      "Surface “Score” lost its Surface Mapping for “B”.",
     ]);
     const lone = run(
       run(emptyDocument("Living"), "output.create", {

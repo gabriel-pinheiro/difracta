@@ -24,7 +24,7 @@ import { useCommand, useDocumentPath } from "@/lib/client";
 import { cn } from "@/lib/utils";
 import { useSelection } from "@/selection/selection";
 
-import { quadPoints } from "@/entities/surface/quad-editor";
+import { useSurfaceAspect } from "@/entities/surface/surface-aspect";
 
 const modes = [
   { value: "include", label: "Include: only its area is lit" },
@@ -44,6 +44,7 @@ export function MaskInspector({
   const surfaces = useDocumentPath<Table<Surface>>(view, ["surfaces"]) ?? {};
   const masks = useDocumentPath<Table<Mask>>(view, ["masks"]) ?? {};
   const { calibration } = useCalibration(view);
+  const aspect = useSurfaceAspect(view, surfaces[mask?.surfaceId ?? ""]);
   // Open on the point the Output already highlights, if it does.
   const [selected, setSelected] = useState(
     () => calibrationFor(calibration, mask?.surfaceId ?? "", id)?.point ?? 0,
@@ -100,7 +101,7 @@ export function MaskInspector({
             points={mask.points}
             names={mask.points.map((_, index) => String(index + 1))}
             outlines={siblings}
-            aspect={surfaceAspect(surface)}
+            aspect={aspect}
             selected={point}
             onSelect={setSelected}
             onSet={(index, next) =>
@@ -161,29 +162,8 @@ export function MaskInspector({
           maskId={mask.id}
           corner={null}
           point={point}
-          disabled={surface?.output == null}
         />
       </div>
     </>
   );
-}
-
-/**
- * Surface Space has no aspect of its own; the enabled mapping's bounding box
- * gives the preview a shape close to what the projector shows, within limits:
- * a Surface that is a thin band in the frame (a ceiling seen at an angle)
- * still needs an editor tall enough to place points in.
- */
-export function surfaceAspect(surface: Surface | undefined): number {
-  const mapping =
-    surface?.output === null || surface === undefined
-      ? undefined
-      : surface.mappings[surface.output];
-  if (mapping === undefined) return 1;
-  const xs = quadPoints(mapping.corners).map((point) => point.x);
-  const ys = quadPoints(mapping.corners).map((point) => point.y);
-  const width = Math.max(...xs) - Math.min(...xs);
-  const height = Math.max(...ys) - Math.min(...ys);
-  if (width <= 0 || height <= 0) return 1;
-  return Math.min(2, Math.max(0.5, (width / height) * (16 / 9)));
 }

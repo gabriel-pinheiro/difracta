@@ -36,9 +36,9 @@ import { SortableItem, SortableList } from "@/navigator/sortable";
 import { useRemoveEntity } from "@/selection/remove-selection";
 import { isSelected, useSelection } from "@/selection/selection";
 
-import { surfaceOutput, surfaceWarningCount } from "./surface-warning";
+import { surfaceOutputsLabel, surfaceWarningCount } from "./surface-warning";
 
-/** Navigator section listing the Surfaces; each row names the Output it renders through. */
+/** Navigator section listing the Surfaces; each row names the Output it is on, or counts them. */
 export function SurfacesSection({ view }: { readonly view: DocumentView }) {
   const command = useCommand(view);
   const removeEntity = useRemoveEntity();
@@ -102,7 +102,7 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
           }
         >
           {ordered.map((surface) => {
-            const output = surfaceOutput(surface, outputs);
+            const output = surfaceOutputsLabel(surface, outputs);
             const expanded = isExpanded("surface", surface.id);
             return (
               <SortableItem key={surface.id} id={surface.id}>
@@ -142,11 +142,11 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
                       {output === undefined ? (
                         <NavigatorWarning
                           label="No Output"
-                          explanation="This Surface has no Output, so nothing projects it. Pick one in the inspector."
+                          explanation="This Surface is on no Output, so nothing projects it. Turn one on in the inspector."
                         />
                       ) : (
                         <span className="truncate text-[0.625rem] text-muted-foreground">
-                          {output.name}
+                          {output}
                         </span>
                       )}
                     </NavigatorRow>

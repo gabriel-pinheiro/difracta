@@ -47,7 +47,7 @@ const registry = createBuiltInRegistry(catalog);
 function stage(): Document {
   let document = emptyDocument("Living");
   const steps: readonly (readonly [string, unknown])[] = [
-    ["surface.create", { id: "sur", name: "Wall", output: null }],
+    ["surface.create", { id: "sur", name: "Wall", outputs: [] }],
     ["scene.create", { id: "sc", name: "Live" }],
     ["scene.create", { id: "sc2", name: "Rehearsal" }],
     [
@@ -163,7 +163,7 @@ describe("sceneTree", () => {
   it("names a Path the Visual follows that is unbound or off the Target", () => {
     let document = stage();
     const steps: readonly (readonly [string, unknown])[] = [
-      ["surface.create", { id: "floor", name: "Floor", output: null }],
+      ["surface.create", { id: "floor", name: "Floor", outputs: [] }],
       ["path.create", { id: "edge", surfaceId: "floor", name: "Edge" }],
       [
         "layer.create",

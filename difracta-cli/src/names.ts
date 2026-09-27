@@ -55,6 +55,11 @@ const KEY_TABLES: Readonly<Record<string, TableName>> = {
   linkId: "links",
 };
 
+/** Payload keys that hold a list of entity ids without an `Ids` suffix. */
+const LIST_TABLES: Readonly<Record<string, TableName>> = {
+  outputs: "outputs",
+};
+
 /** `parentId` and `after` belong to the table the command's prefix names. */
 const PREFIX_TABLES: Readonly<Record<string, TableName>> = {
   layer: "layers",
@@ -214,7 +219,7 @@ export function resolvePathNames(document: Document, path: string): string {
 
 /**
  * A command payload with every entity reference turned into an id: the
- * `…Id` keys and `output`; `target` as a Surface or a Region
+ * `…Id` keys, `output` and `outputs`; `target` as a Surface or a Region
  * (`resolveTargetName`); `parentId` and `after` for the table the
  * command name says (or the payload's own `table`, as `entity.move` has);
  * `address`/`addresses`; lists such as `layerIds`; and objects inside arrays
@@ -279,7 +284,7 @@ function resolveField(
     );
   const listTable = key.endsWith("Ids")
     ? KEY_TABLES[`${key.slice(0, -3)}Id`]
-    : undefined;
+    : LIST_TABLES[key];
   if (listTable !== undefined && Array.isArray(value))
     return (value as unknown[]).map((item) =>
       typeof item === "string" ? resolveId(document, listTable, item) : item,

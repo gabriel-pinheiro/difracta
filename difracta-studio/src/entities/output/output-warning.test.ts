@@ -9,12 +9,12 @@ const outputs = {
 } as unknown as Table<Output>;
 
 const surfaces = {
-  front: { id: "front", output: "wall" },
-  back: { id: "back", output: null },
+  front: { id: "front", mappings: { wall: { enabled: true } } },
+  back: { id: "back", mappings: { side: { enabled: false } } },
 } as unknown as Table<Surface>;
 
 describe("Output warnings", () => {
-  it("flags an Output no Surface renders through", () => {
+  it("flags an Output no Surface is on", () => {
     expect(outputWithoutSurface("wall", surfaces)).toBe(false);
     expect(outputWithoutSurface("side", surfaces)).toBe(true);
   });

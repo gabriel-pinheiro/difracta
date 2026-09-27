@@ -85,7 +85,7 @@ export class Stage {
     this.#document = run(this.#document, "surface.create", {
       id,
       name: id,
-      output: OUTPUT,
+      outputs: [OUTPUT],
     });
     if (corners !== undefined)
       for (const [corner, point] of Object.entries(corners))

@@ -113,7 +113,7 @@ function staged(): Document {
   document = run(document, "surface.create", {
     id: "sur_wall",
     name: "Wall",
-    output: "out_a",
+    outputs: ["out_a"],
   });
   document = run(document, "scene.create", { id: "s1", name: "One" });
   document = run(document, "layer.create", {

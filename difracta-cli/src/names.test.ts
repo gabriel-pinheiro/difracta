@@ -183,6 +183,12 @@ describe("resolvePayloadNames", () => {
     expect(
       resolvePayloadNames(document, "surface.assign", {
         surfaceId: "Wall",
+        outputs: ["TV"],
+      }),
+    ).toEqual({ surfaceId: "sur_wall", outputs: ["out_tv"] });
+    expect(
+      resolvePayloadNames(document, "surface.corner.nudge", {
+        surfaceId: "Wall",
         output: "TV",
       }),
     ).toEqual({ surfaceId: "sur_wall", output: "out_tv" });

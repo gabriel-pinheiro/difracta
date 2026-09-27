@@ -41,6 +41,7 @@ describe("formatSchema", () => {
     expect(fields("surface.corner.set")).toEqual([
       "surfaceId*  string",
       'corner*  "topLeft" | "topRight" | "bottomRight" | "bottomLeft"',
+      "output  string",
       "point*  object",
       "  x*  number",
       "  y*  number",

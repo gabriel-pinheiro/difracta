@@ -72,6 +72,11 @@ export type Output = Entity<typeof OutputSchema, OutputId>;
 /** How one Surface lands in one Output's Projection Frame. */
 export const SurfaceMappingSchema = z
   .object({
+    /**
+     * Whether the Surface renders on this Output. A disabled mapping keeps
+     * its corners, so enabling it again restores that projector's calibration.
+     */
+    enabled: z.boolean(),
     /** Where Surface Space's corners fall, in normalized Projection Frame coordinates. */
     corners: QuadSchema,
   })
@@ -87,12 +92,10 @@ export const SurfaceSizeSchema = z
   .strict();
 export type SurfaceSize = z.infer<typeof SurfaceSizeSchema>;
 
-export const SurfaceSchema = z
+const SurfaceShape = z
   .object({
     id: z.string().min(1),
     name: EntityName,
-    /** The Output this Surface renders through, or null while unassigned. */
-    output: z.string().min(1).nullable(),
     /**
      * Multiplies the resolution of the canvases Layers targeting this
      * Surface render into; below 1 trades sharpness for throughput.
@@ -109,14 +112,40 @@ export const SurfaceSchema = z
      */
     size: SurfaceSizeSchema.nullable().default(null),
     /**
-     * One mapping per Output the Surface was ever assigned to, keyed by Output
-     * id. Only the entry for `output` is used; the others stay dormant so
-     * assigning the Surface back to a projector restores its calibration.
+     * One mapping per Output the Surface was ever enabled on, keyed by Output
+     * id. The Surface renders on every Output whose mapping is enabled; an
+     * Output without an entry is off.
      */
     mappings: z.record(z.string(), SurfaceMappingSchema),
     order: z.string().min(1).default(DEFAULT_ORDER_KEY),
   })
   .strict();
+
+/**
+ * Files written while a Surface rendered through one Output carry `output`,
+ * the id of that Output or null, and mappings without `enabled`. They read as
+ * that Output's mapping enabled and the others disabled.
+ */
+export const SurfaceSchema = z.preprocess(withEnabledMappings, SurfaceShape);
+
+function withEnabledMappings(value: unknown): unknown {
+  if (typeof value !== "object" || value === null || !("output" in value))
+    return value;
+  const { output, ...surface } = value as Record<string, unknown>;
+  const mappings = surface.mappings;
+  if (typeof mappings !== "object" || mappings === null) return surface;
+  return {
+    ...surface,
+    mappings: Object.fromEntries(
+      Object.entries(mappings).map(([outputId, mapping]: [string, unknown]) => [
+        outputId,
+        typeof mapping === "object" && mapping !== null
+          ? { ...mapping, enabled: outputId === output }
+          : mapping,
+      ]),
+    ),
+  };
+}
 export type Surface = Entity<typeof SurfaceSchema, SurfaceId>;
 
 export const MASK_POINTS = { min: 3, max: 16 } as const;
@@ -276,6 +305,8 @@ export type CalibrationView = z.infer<typeof CalibrationViewSchema>;
 export const CalibrationSchema = z
   .object({
     surfaceId: z.string().min(1),
+    /** The one Output showing the pattern, among those the Surface is on. */
+    outputId: z.string().min(1),
     /** Mask being aligned, with its Masks applied; null aligns the quad. */
     maskId: z.string().min(1).nullable(),
     /** Path being aligned, with the Masks applied; exclusive with `maskId`. */

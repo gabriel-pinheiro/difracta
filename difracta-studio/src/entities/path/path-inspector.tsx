@@ -23,7 +23,7 @@ import { useCommand, useDocumentPath } from "@/lib/client";
 import { cn } from "@/lib/utils";
 import { useSelection } from "@/selection/selection";
 
-import { surfaceAspect } from "@/entities/mask/mask-inspector";
+import { useSurfaceAspect } from "@/entities/surface/surface-aspect";
 
 const shapes = [
   { value: "closed", label: "Closed: the last point joins the first" },
@@ -50,6 +50,7 @@ export function PathInspector({
   const masks = useDocumentPath<Table<Mask>>(view, ["masks"]) ?? {};
   const paths = useDocumentPath<Table<Path>>(view, ["paths"]) ?? {};
   const { calibration } = useCalibration(view);
+  const aspect = useSurfaceAspect(view, surfaces[path?.surfaceId ?? ""]);
   const [selected, setSelected] = useState(
     () =>
       calibrationFor(calibration, path?.surfaceId ?? "", null, id)?.point ?? 0,
@@ -98,7 +99,7 @@ export function PathInspector({
             points={path.points}
             names={path.points.map((_, index) => String(index + 1))}
             outlines={outlines}
-            aspect={surfaceAspect(surface)}
+            aspect={aspect}
             selected={point}
             onSelect={setSelected}
             onSet={(index, next) =>
@@ -165,7 +166,6 @@ export function PathInspector({
           pathId={path.id}
           corner={null}
           point={point}
-          disabled={surface?.output == null}
         />
       </div>
     </>

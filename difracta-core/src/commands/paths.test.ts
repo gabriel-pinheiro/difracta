@@ -46,8 +46,8 @@ function installation(): Document {
   let document = emptyDocument("Living");
   for (const [name, payload] of [
     ["output.create", { id: "out", name: "Projector" }],
-    ["surface.create", { id: "sur_a", name: "Wall", output: "out" }],
-    ["surface.create", { id: "sur_b", name: "Floor", output: "out" }],
+    ["surface.create", { id: "sur_a", name: "Wall", outputs: ["out"] }],
+    ["surface.create", { id: "sur_b", name: "Floor", outputs: ["out"] }],
     ["mask.create", { id: "mask_1", surfaceId: "sur_a", name: "Door" }],
     ["path.create", { id: "path_1", surfaceId: "sur_a", name: "Frame" }],
     ["mask.create", { id: "mask_2", surfaceId: "sur_a", name: "Window" }],

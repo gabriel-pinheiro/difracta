@@ -11,7 +11,7 @@ import {
 } from "@difracta/core";
 import { useEffect, useState } from "react";
 
-import { surfaceAspect } from "@/entities/mask/mask-inspector";
+import { useSurfaceAspect } from "@/entities/surface/surface-aspect";
 import { CalibrationControls } from "@/inspector/fields/calibration-controls";
 import { InspectorHeading } from "@/inspector/fields/inspector-heading";
 import { NameField } from "@/inspector/fields/name-field";
@@ -66,6 +66,7 @@ export function RegionInspector({
   const regions = useDocumentPath<Table<Region>>(view, ["regions"]) ?? {};
   const layers = useDocumentPath<Table<Layer>>(view, ["layers"]) ?? {};
   const { calibration } = useCalibration(view);
+  const aspect = useSurfaceAspect(view, surfaces[region?.surfaceId ?? ""]);
   // Open on the corner the Output already highlights, if it does.
   const [selected, setSelected] = useState(() => {
     const corner = calibrationFor(
@@ -129,7 +130,7 @@ export function RegionInspector({
             names={REGION_CORNERS.map((corner) => cornerShortLabels[corner])}
             shapeOf={(points) => rectangleOf(points, region.bounds)}
             outlines={siblings}
-            aspect={surfaceAspect(surface)}
+            aspect={aspect}
             selected={selected}
             onSelect={setSelected}
             onSet={(index, point) =>
@@ -179,7 +180,6 @@ export function RegionInspector({
           regionId={region.id}
           corner={cornerAt(selected)}
           point={null}
-          disabled={surface?.output == null}
         />
       </div>
     </>

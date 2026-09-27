@@ -1,11 +1,18 @@
-import type { Output, Surface, Table } from "@difracta/core";
+import {
+  enabledOutputs,
+  type Output,
+  type Surface,
+  type Table,
+} from "@difracta/core";
 
-/** The Output the Surface renders through, undefined when it has none or it is gone. */
-export function surfaceOutput(
+/** What a Surface's row says of its Outputs: the name of the only one, or how many. */
+export function surfaceOutputsLabel(
   surface: Surface,
   outputs: Table<Output>,
-): Output | undefined {
-  return surface.output === null ? undefined : outputs[surface.output];
+): string | undefined {
+  const [first, ...others] = enabledOutputs(surface, outputs);
+  if (first === undefined) return undefined;
+  return others.length === 0 ? first.name : `${others.length + 1} Outputs`;
 }
 
 /** How many Surface rows warn "No Output", for the collapsed Surfaces section. */
@@ -14,6 +21,6 @@ export function surfaceWarningCount(
   outputs: Table<Output>,
 ): number {
   return Object.values(surfaces).filter(
-    (surface) => surfaceOutput(surface, outputs) === undefined,
+    (surface) => enabledOutputs(surface, outputs).length === 0,
   ).length;
 }

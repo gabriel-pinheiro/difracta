@@ -15,23 +15,24 @@ import {
   type CornerName,
   type Point,
 } from "../document/geometry.ts";
+import { pickOutput } from "../document/mappings.ts";
 
 /**
- * Corner edits act on the Surface's enabled mapping. Both commands share one
- * coalesce key, so a drag or a held arrow key becomes one undo step.
+ * Corner edits act on the Surface's mapping for one Output: the one named,
+ * or the only one the Surface is on. Both commands share one coalesce key
+ * per Output, so a drag or a held arrow key becomes one undo step.
  */
 function moveCorner(
   document: Document,
-  surfaceId: string,
-  corner: CornerName,
+  { surfaceId, corner, output }: CornerTarget,
   next: (current: Point) => Point,
 ): CommandOutcome {
   const surface = document.surfaces[surfaceId];
   if (surface === undefined)
     return rejected(`Surface “${surfaceId}” does not exist.`);
-  if (surface.output === null)
-    return rejected(`Surface “${surface.name}” has no Output to calibrate.`);
-  const mapping = surface.mappings[surface.output];
+  const picked = pickOutput(document, surface, output);
+  if (!picked.ok) return rejected(picked.error);
+  const mapping = surface.mappings[picked.outputId];
   if (mapping === undefined)
     return rejected(`Surface “${surface.name}” has no mapping for its Output.`);
   const current = mapping.corners[corner];
@@ -44,7 +45,7 @@ function moveCorner(
         "surfaces",
         surface.id,
         "mappings",
-        surface.output,
+        picked.outputId,
         "corners",
         corner,
       ],
@@ -53,35 +54,32 @@ function moveCorner(
   ]);
 }
 
-const coalesceKey = ({
-  surfaceId,
-  corner,
-}: {
-  surfaceId: string;
-  corner: CornerName;
-}) => `surface.corner:${surfaceId}:${corner}`;
+interface CornerTarget {
+  readonly surfaceId: string;
+  readonly corner: CornerName;
+  readonly output?: string | undefined;
+}
+
+const target = {
+  surfaceId: z.string().min(1),
+  corner: CornerNameSchema,
+  /** The Output whose mapping moves; needed once the Surface is on several. */
+  output: z.string().min(1).optional(),
+};
+
+const coalesceKey = ({ surfaceId, corner, output }: CornerTarget) =>
+  `surface.corner:${surfaceId}:${output ?? ""}:${corner}`;
 
 export const surfaceCornerSet = defineCommand({
   name: "surface.corner.set",
   kind: "authoring",
   description:
     "Place one corner of a Surface's mapping, in normalized Projection Frame coordinates.",
-  payload: z
-    .object({
-      surfaceId: z.string().min(1),
-      corner: CornerNameSchema,
-      point: PointSchema,
-    })
-    .strict(),
+  payload: z.object({ ...target, point: PointSchema }).strict(),
   label: () => "Move Surface corner",
   coalesceKey,
   apply: ({ document, payload }) =>
-    moveCorner(
-      document,
-      payload.surfaceId,
-      payload.corner,
-      () => payload.point,
-    ),
+    moveCorner(document, payload, () => payload.point),
 });
 
 /**
@@ -94,17 +92,9 @@ export const surfaceCornerNudge = defineCommand({
   kind: "authoring",
   description:
     "Shift one corner of a Surface's mapping by a delta in normalized Projection Frame coordinates.",
-  payload: z
-    .object({
-      surfaceId: z.string().min(1),
-      corner: CornerNameSchema,
-      by: PointSchema,
-    })
-    .strict(),
+  payload: z.object({ ...target, by: PointSchema }).strict(),
   label: () => "Move Surface corner",
   coalesceKey,
   apply: ({ document, payload }) =>
-    moveCorner(document, payload.surfaceId, payload.corner, (current) =>
-      addPoints(current, payload.by),
-    ),
+    moveCorner(document, payload, (current) => addPoints(current, payload.by)),
 });

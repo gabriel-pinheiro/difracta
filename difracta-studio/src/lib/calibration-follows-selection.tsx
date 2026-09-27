@@ -1,16 +1,24 @@
 import type { DocumentView } from "@difracta/client";
-import type { Mask, Path, Region, Surface, Table } from "@difracta/core";
+import {
+  type Mask,
+  type Path,
+  type Region,
+  type Surface,
+  type Table,
+} from "@difracta/core";
 import { useEffect, useRef } from "react";
 
 import { useSelection, type Selection } from "@/selection/selection";
 
 import { useCalibration } from "./calibration";
 import { useDocumentPath } from "./client";
+import { followedOutput } from "./mapping-output";
 
 /**
  * While Calibration Mode is on, selecting another Surface, Mask, Path or
- * Region moves the pattern to it; the view is kept and the inspector then reports its own
- * corner or point. Selecting anything else leaves the mode as it is, so a
+ * Region moves the pattern to it, on the same Output when it can
+ * (`followedOutput`); the view is kept and the inspector then reports its
+ * own corner or point. Selecting anything else leaves the mode as it is, so a
  * glance at an Output's stats does not drop the pattern on stage. Reacts to
  * selection changes only: another Studio moving the calibration must not be
  * pulled back here.
@@ -44,60 +52,53 @@ export function CalibrationFollowsSelection({
       current.regions,
     );
     if (target === undefined) return;
+    const { surface, ...shape } = target;
+    const outputId = followedOutput(surface, current.calibration.outputId);
+    if (outputId === undefined) return;
     if (
-      target.surfaceId === current.calibration.surfaceId &&
+      surface.id === current.calibration.surfaceId &&
       target.maskId === current.calibration.maskId &&
       target.pathId === current.calibration.pathId &&
       target.regionId === current.calibration.regionId
     )
       return;
-    set({ ...current.calibration, ...target, corner: null, point: null });
+    set({
+      ...current.calibration,
+      ...shape,
+      surfaceId: surface.id,
+      outputId,
+      corner: null,
+      point: null,
+    });
   }, [selection, set]);
   return null;
 }
 
+interface Shape {
+  readonly maskId: string | null;
+  readonly pathId: string | null;
+  readonly regionId: string | null;
+}
+
+/** The Surface a selection is, or is part of, and what of it would be aligned. */
 function calibrationTarget(
   selection: Selection | undefined,
   surfaces: Table<Surface>,
   masks: Table<Mask>,
   paths: Table<Path>,
   regions: Table<Region>,
-):
-  | {
-      readonly surfaceId: string;
-      readonly maskId: string | null;
-      readonly pathId: string | null;
-      readonly regionId: string | null;
-    }
-  | undefined {
-  const none = { maskId: null, pathId: null, regionId: null };
-  if (selection?.kind === "surface") {
-    const surface = surfaces[selection.id];
-    return surface?.output == null
-      ? undefined
-      : { surfaceId: surface.id, ...none };
-  }
-  if (selection?.kind === "mask") {
-    const mask = masks[selection.id];
-    const surface = mask === undefined ? undefined : surfaces[mask.surfaceId];
-    return mask === undefined || surface?.output == null
-      ? undefined
-      : { surfaceId: surface.id, ...none, maskId: mask.id };
-  }
-  if (selection?.kind === "path") {
-    const path = paths[selection.id];
-    const surface = path === undefined ? undefined : surfaces[path.surfaceId];
-    return path === undefined || surface?.output == null
-      ? undefined
-      : { surfaceId: surface.id, ...none, pathId: path.id };
-  }
-  if (selection?.kind === "region") {
-    const region = regions[selection.id];
-    const surface =
-      region === undefined ? undefined : surfaces[region.surfaceId];
-    return region === undefined || surface?.output == null
-      ? undefined
-      : { surfaceId: surface.id, ...none, regionId: region.id };
-  }
+): ({ readonly surface: Surface } & Shape) | undefined {
+  const none: Shape = { maskId: null, pathId: null, regionId: null };
+  const on = (surfaceId: string | undefined, shape: Partial<Shape>) => {
+    const surface = surfaceId === undefined ? undefined : surfaces[surfaceId];
+    return surface === undefined ? undefined : { surface, ...none, ...shape };
+  };
+  if (selection?.kind === "surface") return on(selection.id, {});
+  if (selection?.kind === "mask")
+    return on(masks[selection.id]?.surfaceId, { maskId: selection.id });
+  if (selection?.kind === "path")
+    return on(paths[selection.id]?.surfaceId, { pathId: selection.id });
+  if (selection?.kind === "region")
+    return on(regions[selection.id]?.surfaceId, { regionId: selection.id });
   return undefined;
 }

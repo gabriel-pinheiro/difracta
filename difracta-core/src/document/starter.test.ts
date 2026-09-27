@@ -41,7 +41,7 @@ describe("starterDocument", () => {
 
     expect(output?.name).toBe("Output 1");
     expect(surface?.name).toBe("Full Frame");
-    expect(surface?.output).toBe(output?.id);
+    expect(surface?.mappings[output?.id ?? ""]?.enabled).toBe(true);
     expect(scene?.name).toBe("Scene 1");
     expect(document.installation.activeScene).toBe(scene?.id);
     expect(layer).toMatchObject({

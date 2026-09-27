@@ -11,16 +11,16 @@ export const surfaceCreate = defineCommand({
   name: "surface.create",
   kind: "authoring",
   description:
-    "Create a Surface, a real-world projection target, optionally assigned to an Output.",
+    "Create a Surface, a real-world projection target, on the first Output or on the ones named.",
   payload: z
     .object({
       id: z.string().min(1).optional(),
       name: z.string().trim().min(1).max(120),
       /**
-       * Output to assign; null for none. Omitted picks the first Output in
-       * order, or none when the Installation has no Outputs.
+       * Outputs to put it on; empty for none. Omitted picks the first Output
+       * in order, or none when the Installation has no Outputs.
        */
-      output: z.string().min(1).nullable().optional(),
+      outputs: z.array(z.string().min(1)).optional(),
     })
     .strict(),
   label: ({ name }) => `Create Surface “${name}”`,
@@ -31,12 +31,11 @@ export const surfaceCreate = defineCommand({
         : id("surface", payload.id);
     if (surfaceId in document.surfaces)
       return rejected(`Surface “${surfaceId}” already exists.`);
-    const output =
-      payload.output === undefined
-        ? (orderedEntries(document.outputs)[0]?.id ?? null)
-        : payload.output;
-    if (output !== null && !(output in document.outputs))
-      return rejected(`Output “${output}” does not exist.`);
+    const first = orderedEntries(document.outputs)[0];
+    const outputs = payload.outputs ?? (first === undefined ? [] : [first.id]);
+    for (const output of outputs)
+      if (!(output in document.outputs))
+        return rejected(`Output “${output}” does not exist.`);
     const name = uniqueName(
       tableEntries(document.surfaces).map((surface) => surface.name),
       payload.name,
@@ -44,15 +43,14 @@ export const surfaceCreate = defineCommand({
     const surface: Surface = {
       id: surfaceId,
       name,
-      output,
       renderScale: 1,
       size: null,
-      mappings:
-        output === null
-          ? {}
-          : {
-              [output]: { corners: FULL_FRAME },
-            },
+      mappings: Object.fromEntries(
+        outputs.map((output) => [
+          output,
+          { enabled: true, corners: FULL_FRAME },
+        ]),
+      ),
       order: appendOrderKey(document.surfaces),
     };
     return accepted([

@@ -9,6 +9,7 @@ import { useEffect } from "react";
 
 import { Button } from "@/components/ui/button";
 import { calibrationFor, useCalibration } from "@/lib/calibration";
+import { useMappingOutput } from "@/lib/mapping-output";
 
 import { SelectField } from "./select-field";
 
@@ -20,9 +21,10 @@ const viewLabels: Record<CalibrationView, string> = {
 
 /**
  * Enters and leaves Calibration Mode for one Surface, Mask, Path or
- * Region, and picks what the Output's other Surfaces show meanwhile. While
- * active, the corner or point selected in the inspector is mirrored to the
- * Output as it changes.
+ * Region on one Output, and picks what that Output's other Surfaces show
+ * meanwhile. A Surface on several Outputs gets a "Show on" select, unless
+ * the caller picks the Output itself. While active, the corner or point
+ * selected in the inspector is mirrored to the Output as it changes.
  */
 export function CalibrationControls({
   view,
@@ -32,7 +34,7 @@ export function CalibrationControls({
   regionId = null,
   corner,
   point,
-  disabled = false,
+  outputPicker = true,
 }: {
   readonly view: DocumentView;
   readonly surfaceId: string;
@@ -41,9 +43,10 @@ export function CalibrationControls({
   readonly regionId?: string | null;
   readonly corner: CornerName | null;
   readonly point: number | null;
-  readonly disabled?: boolean;
+  readonly outputPicker?: boolean;
 }) {
   const { calibration, set, exit } = useCalibration(view);
+  const { outputId, enabled, pick } = useMappingOutput(view, surfaceId);
   const active = calibrationFor(
     calibration,
     surfaceId,
@@ -61,24 +64,43 @@ export function CalibrationControls({
 
   return (
     <div className="grid gap-2">
+      {outputPicker && enabled.length > 1 && (
+        <SelectField
+          label="Show on"
+          value={outputId ?? null}
+          noneLabel="Pick an Output"
+          options={enabled.map((output) => ({
+            value: output.id,
+            label: output.name,
+          }))}
+          onValueChange={(next) => pick(next ?? undefined)}
+        />
+      )}
       <Button
         variant={active === undefined ? "outline" : "default"}
         size="sm"
         aria-pressed={active !== undefined}
-        disabled={disabled}
+        disabled={outputId === undefined}
         title="Show a pattern on the Output while aligning"
         onClick={() => {
           if (active !== undefined) exit();
-          else set({ ...selection, view: calibration?.view ?? "selected" });
+          else if (outputId !== undefined)
+            set({
+              ...selection,
+              outputId,
+              view: calibration?.view ?? "selected",
+            });
         }}
       >
         <Crosshair data-icon="inline-start" />
         {active === undefined ? "Calibrate" : "Stop calibrating"}
       </Button>
-      {disabled && (
+      {outputId === undefined && (
         // A disabled button shows no tooltip, so the reason is written out.
         <p className="text-[0.6875rem]/relaxed text-muted-foreground">
-          Calibrating needs the Surface on an Output.
+          {enabled.length === 0
+            ? "Calibrating needs the Surface on an Output."
+            : "This Surface is on several Outputs. Pick the one to calibrate on."}
         </p>
       )}
       {active !== undefined && (

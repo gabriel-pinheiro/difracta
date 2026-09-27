@@ -39,10 +39,16 @@ domain concept.
 ### Surface
 
 A calibrated projection target representing a real-world receiving surface, such
-as `Ceiling` or `Plafond`.
+as `Ceiling` or `Plafond`, or several alike that show the same content, such as
+`Score` on an LED panel and on the host's return TV.
 
-A Surface belongs to the Installation rather than an Output. Surface shapes may
-overlap when mapped into the same Projection Frame.
+A Surface belongs to the Installation rather than an Output, and may be on
+several Outputs at once, each through a Surface Mapping of its own. Its Regions,
+Masks, Paths, Surface Size and Render Scale are the same on all of them. Nothing
+keeps the Outputs in step: each renders the Surface's Layers with its own Visual
+Instances, so this is for showing one thing in several places, not for blending
+projectors into one image. Surface shapes may overlap when mapped into the same
+Projection Frame.
 
 ### Surface Space
 
@@ -100,11 +106,11 @@ receive projection, such as the real trapezoidal shape of a wall or an outlet on
 it.
 
 A Mask belongs to a Surface, not to a Surface Mapping: it records a physical
-fact about the receiving surface and therefore travels with the Surface when its
-enabled Output changes. It is `include`, meaning only its area is lit, or
-`exclude`, meaning its area is never lit, and it has 3–16 points forming a
-closed polygon plus its own feather amount. Masks of one Surface are ordered and
-named uniquely within that Surface.
+fact about the receiving surface and therefore applies on every Output the
+Surface is on. It is `include`, meaning only its area is lit, or `exclude`,
+meaning its area is never lit, and it has 3–16 points forming a closed polygon
+plus its own feather amount. Masks of one Surface are ordered and named uniquely
+within that Surface.
 
 A Surface with no Include Masks is fully lit; one with any Include Mask starts
 fully closed. Masks then apply in array order, each opening or closing only its
@@ -125,10 +131,12 @@ The calibration of one Surface for one Output: the ordered four-corner
 quadrilateral, in normalized Projection Frame coordinates, where Surface Space
 lands. Corners may extend past the frame's visible bounds.
 
-A Surface holds one mapping per Output it was assigned to, and renders through
-at most one of them, its enabled Output. The others stay dormant so assigning
-the Surface back to an Output restores that projector's calibration. Changing
-the enabled Output changes the Installation, not its Scenes.
+A Surface holds one mapping per Output it was ever on, each enabled or not, and
+renders on every Output whose mapping is enabled: its enabled Outputs. A
+disabled mapping keeps its corners, so putting the Surface back on an Output
+restores that projector's calibration. A Surface with no enabled mapping is
+projected by nothing. Changing the enabled Outputs changes the Installation, not
+its Scenes.
 
 ### Calibration
 
@@ -141,11 +149,13 @@ physical alignment.
 ### Calibration Mode
 
 A temporary Output presentation used while editing Surface Mappings, Regions,
-Masks, or Paths. It replaces Scene playback on one selected Output with Surface
-patterns and bounds, or the Surface's pattern already masked with the Mask, Path
-or Region being aligned drawn over it with its points marked. While a Surface's
-quadrilateral or one of its Regions is aligned, all its Regions are drawn as
-named outlines, so the operator sees them follow the corners.
+Masks, or Paths. It is on one Output at a time, one of those the Surface is on,
+while the Surface's other Outputs keep playing the Scene. It replaces Scene
+playback on that Output with Surface patterns and bounds, or the Surface's
+pattern already masked with the Mask, Path or Region being aligned drawn over it
+with its points marked. While a Surface's quadrilateral or one of its Regions is
+aligned, all its Regions are drawn as named outlines, so the operator sees them
+follow the corners.
 
 Blackout takes precedence: while it is on, the calibrated Output shows black and
 the pattern returns when Blackout is released.

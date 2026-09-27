@@ -1,6 +1,7 @@
 import {
   childLayers,
   CORNERS,
+  enabledCorners,
   orderedEntries,
   REGION_CORNERS,
   resolveCalibration,
@@ -142,8 +143,7 @@ export function planFrame(
     };
   const draws: SurfaceDraw[] = [];
   for (const surface of orderedEntries(document.surfaces)) {
-    if (surface.output !== outputId) continue;
-    const corners = surface.mappings[outputId]?.corners;
+    const corners = enabledCorners(surface, outputId);
     if (corners === undefined) continue;
     if (surface.id === calibrating.surface.id) {
       const { mask, path, region } = calibrating;
@@ -277,8 +277,7 @@ function layerDraw(
   const resolved = resolveTarget(document, layer.target);
   if (resolved === undefined) return undefined;
   const { surface, region, rect } = resolved;
-  if (surface.output !== outputId) return undefined;
-  const surfaceCorners = surface.mappings[outputId]?.corners;
+  const surfaceCorners = enabledCorners(surface, outputId);
   if (surfaceCorners === undefined) return undefined;
   const paths = resolveLayerPaths(document, catalog, layer);
   if (paths === undefined) return undefined;

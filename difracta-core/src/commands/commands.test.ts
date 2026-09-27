@@ -113,7 +113,7 @@ describe("built-in commands", () => {
     expect(unchanged.patches).toEqual([]);
   });
 
-  it("creates Surfaces, assigning the first Output with a default mapping", () => {
+  it("creates Surfaces on the first Output with a default mapping", () => {
     const unassigned = run(emptyDocument("Living"), "surface.create", {
       id: "sur_a",
       name: "Wall",
@@ -121,7 +121,6 @@ describe("built-in commands", () => {
     expect(unassigned.document.surfaces.sur_a).toEqual({
       id: "sur_a",
       name: "Wall",
-      output: null,
       renderScale: 1,
       size: null,
       mappings: {},
@@ -137,23 +136,26 @@ describe("built-in commands", () => {
       id: "sur_a",
       name: "Wall",
     }).document.surfaces.sur_a;
-    expect(assigned?.output).toBe("out_a");
-    expect(assigned?.mappings.out_a?.corners.topLeft).toEqual({ x: 0, y: 0 });
-    expect(assigned?.mappings.out_a?.corners.bottomRight).toEqual({
-      x: 1,
-      y: 1,
+    expect(assigned?.mappings.out_a).toEqual({
+      enabled: true,
+      corners: {
+        topLeft: { x: 0, y: 0 },
+        topRight: { x: 1, y: 0 },
+        bottomRight: { x: 1, y: 1 },
+        bottomLeft: { x: 0, y: 1 },
+      },
     });
 
     const explicit = run(oneOutput, "surface.create", {
       id: "sur_b",
       name: "Wall",
-      output: null,
+      outputs: [],
     }).document.surfaces.sur_b;
-    expect(explicit?.output).toBeNull();
+    expect(explicit?.mappings).toEqual({});
     expect(
       executeCommand(registry, oneOutput, "surface.create", {
         name: "Wall",
-        output: "out_missing",
+        outputs: ["out_missing"],
       }),
     ).toMatchObject({ ok: false });
 
@@ -170,13 +172,21 @@ describe("built-in commands", () => {
       id: "sur_c",
       name: "Floor",
     }).document.surfaces.sur_c;
-    expect(first?.output).toBe("out_b");
     expect(Object.keys(first?.mappings ?? {})).toEqual(["out_b"]);
+    const both = run(twoOutputs, "surface.create", {
+      id: "sur_d",
+      name: "Score",
+      outputs: ["out_a", "out_b"],
+    }).document.surfaces.sur_d;
+    expect(both?.mappings).toMatchObject({
+      out_a: { enabled: true },
+      out_b: { enabled: true },
+    });
   });
 
-  it("assigns Surfaces, keeping dormant mappings per Output", () => {
+  it("puts a Surface on several Outputs, each mapping keeping its corners", () => {
     let document = emptyDocument("Living");
-    for (const name of ["A", "B"]) {
+    for (const name of ["A", "B", "C"]) {
       document = run(document, "output.create", {
         id: `out_${name}`,
         name,
@@ -185,41 +195,102 @@ describe("built-in commands", () => {
     document = run(document, "surface.create", {
       id: "sur_a",
       name: "Wall",
-      output: "out_A",
+      outputs: ["out_A"],
     }).document;
     document = run(document, "surface.corner.set", {
       surfaceId: "sur_a",
       corner: "topLeft",
       point: { x: 0.2, y: 0.3 },
     }).document;
+    const mappings = (candidate: Document) =>
+      candidate.surfaces.sur_a?.mappings ?? {};
 
-    const toB = run(document, "surface.assign", {
+    const more = run(document, "surface.assign", {
       surfaceId: "sur_a",
+      outputs: ["out_A", "out_B", "out_C"],
+    });
+    expect(more.label).toBe("Assign Surface to Outputs");
+    expect(more.patches).toHaveLength(2);
+    expect(mappings(more.document)).toMatchObject({
+      out_A: { enabled: true, corners: { topLeft: { x: 0.2, y: 0.3 } } },
+      out_B: { enabled: true, corners: { topLeft: { x: 0, y: 0 } } },
+      out_C: { enabled: true },
+    });
+    expect(applyPatches(more.document, more.inverse)).toEqual(document);
+
+    // With several, a corner edit names its Output, and moves only that one.
+    expect(
+      executeCommand(registry, more.document, "surface.corner.nudge", {
+        surfaceId: "sur_a",
+        corner: "topLeft",
+        by: { x: 0.1, y: 0 },
+      }),
+    ).toMatchObject({
+      ok: false,
+      error:
+        "Surface “Wall” is on “A” (out_A), “B” (out_B), “C” (out_C); name one as the output.",
+    });
+    const onB = run(more.document, "surface.corner.nudge", {
+      surfaceId: "sur_a",
+      corner: "topLeft",
+      by: { x: 0.1, y: 0 },
       output: "out_B",
     });
-    expect(toB.label).toBe("Assign Surface to Output");
-    expect(toB.document.surfaces.sur_a?.output).toBe("out_B");
-    expect(Object.keys(toB.document.surfaces.sur_a?.mappings ?? {})).toEqual([
-      "out_A",
-      "out_B",
+    expect(onB.coalesceKey).toBe("surface.corner:sur_a:out_B:topLeft");
+    expect(mappings(onB.document)).toMatchObject({
+      out_A: { corners: { topLeft: { x: 0.2, y: 0.3 } } },
+      out_B: { corners: { topLeft: { x: 0.1, y: 0 } } },
+    });
+
+    const offA = run(onB.document, "surface.assign", {
+      surfaceId: "sur_a",
+      outputs: ["out_A"],
+      enabled: false,
+    });
+    expect(offA.label).toBe("Unassign Surface from Output");
+    expect(offA.patches).toEqual([
+      {
+        op: "set",
+        path: ["surfaces", "sur_a", "mappings", "out_A", "enabled"],
+        value: false,
+      },
     ]);
-    expect(applyPatches(toB.document, toB.inverse)).toEqual(document);
-
-    const backToA = run(toB.document, "surface.assign", {
-      surfaceId: "sur_a",
-      output: "out_A",
+    expect(mappings(offA.document).out_A?.corners.topLeft).toEqual({
+      x: 0.2,
+      y: 0.3,
     });
-    expect(backToA.patches).toHaveLength(1);
     expect(
-      backToA.document.surfaces.sur_a?.mappings.out_A?.corners.topLeft,
-    ).toEqual({ x: 0.2, y: 0.3 });
-
-    const none = run(backToA.document, "surface.assign", {
-      surfaceId: "sur_a",
-      output: null,
+      executeCommand(registry, offA.document, "surface.corner.nudge", {
+        surfaceId: "sur_a",
+        corner: "topLeft",
+        by: { x: 0.1, y: 0 },
+        output: "out_A",
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: "Surface “Wall” is not on Output “A”.",
     });
-    expect(none.label).toBe("Unassign Surface");
-    expect(none.document.surfaces.sur_a?.output).toBeNull();
+
+    const backOnA = run(offA.document, "surface.assign", {
+      surfaceId: "sur_a",
+      outputs: ["out_A"],
+    });
+    expect(mappings(backOnA.document).out_A).toMatchObject({
+      enabled: true,
+      corners: { topLeft: { x: 0.2, y: 0.3 } },
+    });
+    expect(
+      run(backOnA.document, "surface.assign", {
+        surfaceId: "sur_a",
+        outputs: ["out_A"],
+      }).patches,
+    ).toEqual([]);
+
+    const none = run(backOnA.document, "surface.assign", {
+      surfaceId: "sur_a",
+      outputs: ["out_A", "out_B", "out_C"],
+      enabled: false,
+    });
     expect(
       executeCommand(registry, none.document, "surface.corner.nudge", {
         surfaceId: "sur_a",
@@ -227,6 +298,20 @@ describe("built-in commands", () => {
         by: { x: 0.1, y: 0 },
       }),
     ).toMatchObject({ ok: false });
+    expect(
+      executeCommand(registry, none.document, "surface.assign", {
+        surfaceId: "sur_a",
+        outputs: ["out_missing"],
+      }),
+    ).toMatchObject({ ok: false });
+
+    // Taking a Surface off an Output it was never on leaves no mapping behind.
+    const never = run(document, "surface.assign", {
+      surfaceId: "sur_a",
+      outputs: ["out_C"],
+      enabled: false,
+    });
+    expect(never.patches).toEqual([]);
   });
 
   it("moves corners absolutely and relatively under one coalesce key", () => {
@@ -247,7 +332,7 @@ describe("built-in commands", () => {
       point: { x: 0, y: 1.05 },
     });
     expect(corner(set.document)).toEqual({ x: 0, y: 1.05 });
-    expect(set.coalesceKey).toBe("surface.corner:sur_a:bottomLeft");
+    expect(set.coalesceKey).toBe("surface.corner:sur_a::bottomLeft");
     expect(applyPatches(set.document, set.inverse)).toEqual(document);
 
     const nudged = run(set.document, "surface.corner.nudge", {
@@ -267,7 +352,7 @@ describe("built-in commands", () => {
     expect(unchanged.patches).toEqual([]);
   });
 
-  it("removing an Output unassigns its Surfaces and drops their mappings", () => {
+  it("removing an Output drops its mapping from every Surface", () => {
     let document = emptyDocument("Living");
     for (const name of ["A", "B"]) {
       document = run(document, "output.create", {
@@ -278,29 +363,24 @@ describe("built-in commands", () => {
     document = run(document, "surface.create", {
       id: "sur_a",
       name: "Wall",
-      output: "out_A",
+      outputs: ["out_A"],
     }).document;
     document = run(document, "surface.assign", {
       surfaceId: "sur_a",
-      output: "out_B",
+      outputs: ["out_B"],
     }).document;
     document = run(document, "surface.create", {
       id: "sur_b",
       name: "Floor",
-      output: "out_A",
+      outputs: ["out_A"],
     }).document;
 
     const removed = run(document, "output.remove", { outputId: "out_A" });
     expect(removed.document.outputs.out_A).toBeUndefined();
-    expect(removed.document.surfaces.sur_a).toMatchObject({
-      output: "out_B",
-      mappings: { out_B: expect.anything() as unknown },
-    });
-    expect(removed.document.surfaces.sur_a?.mappings.out_A).toBeUndefined();
-    expect(removed.document.surfaces.sur_b).toMatchObject({
-      output: null,
-      mappings: {},
-    });
+    expect(
+      Object.keys(removed.document.surfaces.sur_a?.mappings ?? {}),
+    ).toEqual(["out_B"]);
+    expect(removed.document.surfaces.sur_b?.mappings).toEqual({});
     expect(applyPatches(removed.document, removed.inverse)).toEqual(document);
 
     const gone = run(removed.document, "surface.remove", {
@@ -590,7 +670,8 @@ describe("built-in commands", () => {
     }).document;
     const unassigned = run(entered, "surface.assign", {
       surfaceId: "sur_a",
-      output: null,
+      outputs: ["out_a"],
+      enabled: false,
     }).document;
     expect(resolveCalibration(unassigned)).toBeUndefined();
     const removed = run(entered, "surface.remove", { surfaceId: "sur_a" });

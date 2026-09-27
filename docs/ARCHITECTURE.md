@@ -63,7 +63,7 @@ A Document is one Installation as entity tables keyed by id plus a small
 Document
 ├── installation { id, name, activeScene }
 ├── outputs { [id]: Output }
-├── surfaces { [id]: Surface }        output, mappings per Output
+├── surfaces { [id]: Surface }        mappings per Output, each enabled or not
 ├── regions { [id]: Region }          surfaceId, bounds (topLeft, bottomRight)
 ├── masks { [id]: Mask }              surfaceId, mode, points, feather
 ├── paths { [id]: Path }              surfaceId, points, closed
@@ -99,22 +99,41 @@ order key rather than array positions.
 
 ### Surfaces and mappings
 
-A Surface names a real-world projection target. Its `output` is the Output it
-renders through, or null while unassigned, and `mappings` holds one Surface
-Mapping per Output it was ever assigned to, keyed by Output id. A mapping is the
+A Surface names a real-world projection target. `mappings` holds one Surface
+Mapping per Output it was ever on, keyed by Output id: `enabled`, and the
 quadrilateral where Surface Space's corners land, in normalized Projection Frame
 coordinates (`document/geometry.ts`); corners may lie outside the unit square
-when a Surface overshoots the projector's edge. Only the mapping for `output` is
-used. `surface.assign` reuses a mapping the Surface already has for the chosen
-Output and otherwise creates one covering the whole frame; `surface.create`
-picks the first Output in order unless the payload names one or null. Removing
-an Output removes its mapping from every Surface and unassigns the ones using
-it.
+when a Surface overshoots the projector's edge. The Surface renders on every
+Output whose mapping is enabled, each through its own corners, and an Output
+without an entry is off (`document/mappings.ts` has the readers).
+`surface.assign` takes a list of Outputs and `enabled`: it flips the flag of a
+mapping the Surface already has, keeping its corners, creates one covering the
+whole frame for an Output it was never on, and leaves nothing behind when asked
+to take the Surface off one of those. `surface.create` puts the Surface on the
+first Output in order unless the payload lists others or none. Removing an
+Output removes its mapping from every Surface. A file written while a Surface
+had one `output` reads as that mapping enabled and the others disabled
+(`SurfaceSchema`), and is written back in the present shape.
 
 Corners are edited by `surface.corner.set` (absolute) and `surface.corner.nudge`
-(relative). Both coalesce under one key per corner, so a drag or a held arrow
-key is one undo step, and both round to a millionth of the frame so files stay
-free of float noise.
+(relative), on the mapping of the `output` they name. It may be left out while
+the Surface is on exactly one Output; on several the command is refused, naming
+them (`pickOutput`), and `calibration.set` resolves its Output the same way.
+Both coalesce under one key per Output and corner, so a drag or a held arrow key
+is one undo step, and both round to a millionth of the frame so files stay free
+of float noise.
+
+**Why a Surface on several Outputs, with no sync between them:** a score shown
+on the stage's LED panel and on the host's return TV, or a background shared by
+a projector per table, is one thing to compose and to change, and a Surface per
+Output would be so many copies of every Layer. Each Output already runs its own
+Visual Instances and hears every Cue, so showing a Surface twice costs the
+document nothing but a second mapping; the copies may differ in what is random
+or counted per instance, which is fine for content that repeats and is why this
+is not a way to blend projectors. **Why `enabled` on the mapping rather than a
+list of Outputs beside it:** one place says both where the Surface lands and
+whether it does, a switch is one patch on one property, and a disabled mapping
+is the dormant calibration that was already kept.
 
 Two more fields say what the Surface's Layers render into. `renderScale` (0.25×
 to 2×, an Address so it is a slider and reachable from the CLI) multiplies the
@@ -201,7 +220,7 @@ own selection, move and validation paths.
 
 **Why mappings live on the Surface:** a mapping is calibration, and calibration
 is what an operator loses when a projector is swapped and swapped back. Keeping
-the dormant mappings on the Surface makes reassigning it to an earlier Output
+the disabled mappings on the Surface makes putting it back on an earlier Output
 restore its corners for free, without a table or navigator row per Surface and
 Output pair. **Why a relative nudge command:** a held key sends commands faster
 than replies return; an absolute position computed from the view would repeat or
@@ -533,15 +552,22 @@ of choices, the CLI, Macros and validation, works as it is.
 ### Calibration Mode
 
 `operational.calibration` names one Surface, or one Mask, Path or Region of it,
-plus the highlighted corner or point, the view for the Output's other Surfaces
-(hidden, outlines, patterns) and the live session that entered it.
-`calibration.set` replaces the whole entry and `calibration.exit` clears it;
-both are performance commands, so they replicate at once and never enter undo
-history. The runtime clears the entry when its owner's session closes. Authoring
-commands do not touch it, so removing or unassigning the calibrated Surface
-leaves a stale entry behind briefly; readers go through `resolveCalibration`,
-which treats a dangling entry as no calibration, and the next `set` or `exit`
+the one Output showing it (`outputId`, among those the Surface is on), plus the
+highlighted corner or point, the view for the Output's other Surfaces (hidden,
+outlines, patterns) and the live session that entered it. `calibration.set`
+replaces the whole entry and `calibration.exit` clears it; both are performance
+commands, so they replicate at once and never enter undo history. The runtime
+clears the entry when its owner's session closes. Authoring commands do not
+touch it, so removing the calibrated Surface or taking it off that Output leaves
+a stale entry behind briefly; readers go through `resolveCalibration`, which
+treats a dangling entry as no calibration, and the next `set` or `exit`
 overwrites it.
+
+**Why one Output at a time, for a Mask, Path or Region too:** the mode takes the
+Scene off the Output it is on, so a pattern on every Output of a Surface would
+darken twenty tables to align a Mask at one, and the operator stands in front of
+one projector. The edit itself is in Surface Space and reaches the others as
+they play.
 
 **Why:** the Output only needs the whole state, and one small object written
 atomically is easier to reason about than corner, view and Mask arriving as
@@ -1426,9 +1452,9 @@ a Blackout lands within one display frame.
 draw this frame. Outside Calibration Mode that is the active Scene's Visual
 Layers, bottom first, each one that is enabled with every Group above it
 enabled, has a Visual with every Path it declares bound on its Target, and
-targets a Surface on this Output with a mapping, or a Region of one; Filters are
-passed over until they render, and a Group only gates. A Layer on a Region draws
-with the Region's projected quad, its rectangle's corners pushed through the
+targets a Surface enabled on this Output, or a Region of one; Filters are passed
+over until they render, and a Group only gates. A Layer on a Region draws with
+the Region's projected quad, its rectangle's corners pushed through the
 Surface's homography, so its own homography is the composed map and the Layer's
 canvas is sized to the Region's pixels; the Surface's Mask texture is sampled
 through the rectangle (`u_mask_rect`), and Paths reach the Visual in Region
@@ -1664,9 +1690,9 @@ rate or count change jumps, and anything emergent (particles, trails, games) has
 nowhere to live. Integrating from `dt` makes stability under live Parameter
 changes the default rather than a per-Visual effort. **Why a seeded random
 source anyway:** it costs a dozen lines and makes a Layer look the same on every
-run and a Visual replayable in a test; nothing user-facing depends on it, and no
-Surface is ever rendered by two Outputs that would need to agree. **Why the
-flags come from `update` and not `render`:** `render` is what they skip.
+run and a Visual replayable in a test; nothing user-facing depends on it, and
+two Outputs showing one Surface are not expected to agree. **Why the flags come
+from `update` and not `render`:** `render` is what they skip.
 
 A Filter is a definition plus a GLSL `fragment` defining `filter_image(uv)` over
 the frame accumulated below it, and optionally `create`, which makes one
@@ -1927,17 +1953,23 @@ its own; applying to the runtime shows every candidate where it will be seen.
 stay usable, so a Layer's other settings can change while candidates are
 compared.
 
-The Surface, Mask and Path inspectors carry a Calibrate toggle and, while
-active, the view for the other Surfaces; the corner or point selected in the
-inspector is mirrored to the Output as it changes, and focusing a corner or
-point button selects it, so Tab and the arrow keys agree. While the mode is on,
-selecting another Surface, Mask, Path or Region moves the pattern to it;
-selecting anything else leaves it on. A Visual Layer whose Visual follows Paths
-shows one row per Path below its Target, a select over the Target's Paths with a
-"+" that creates one named after the Layer, binds it and selects it. The status
-strip shows what is being calibrated with an exit link, so a forgotten
-Calibration Mode stays visible. Escape clears the selection outside text fields
-and dialogs.
+The Surface, Mask, Path and Region inspectors carry a Calibrate toggle and,
+while active, the view for the other Surfaces. Calibrating is on the Surface's
+mapping Output (`lib/mapping-output.ts`): the Output showing its pattern now,
+else the one this Studio picked for the Surface, else the only one it is on. On
+several Outputs with none picked there is none and Calibrate is disabled, with a
+"Show on" select over the Surface's Outputs above it; the pick is Studio's own,
+kept per Surface and never saved. The corner or point selected in the inspector
+is mirrored to the Output as it changes, and focusing a corner or point button
+selects it, so Tab and the arrow keys agree. While the mode is on, selecting
+another Surface, Mask, Path or Region moves the pattern to it, on the same
+Output when that Surface is on it, on its only Output otherwise, and not at all
+when it is on several others (`followedOutput`); selecting anything else leaves
+it on. A Visual Layer whose Visual follows Paths shows one row per Path below
+its Target, a select over the Target's Paths with a "+" that creates one named
+after the Layer, binds it and selects it. The status strip shows what is being
+calibrated with an exit link, so a forgotten Calibration Mode stays visible.
+Escape clears the selection outside text fields and dialogs.
 
 Blackout sits in the menu bar because it is the one control a performer must
 reach without looking; it writes `installation/blackout` through the input
@@ -1985,8 +2017,22 @@ back out. **Why the status is not computed in Studio:** only the runtime has the
 disk the path resolves on; Studio shows what `live/media` reports and explains
 it.
 
-The Surface inspector places the Surface in its Output's frame with a small SVG:
-the quad with draggable corner handles, other Surfaces on the same Output as
+The Surface inspector lists every Output, in Output order, as an accordion
+(`entities/surface/surface-outputs.tsx`): each row has the Output's name and a
+switch that puts the Surface on it (`surface.assign`), "Turn all on" does so for
+the rest in one command, and at most one row, of an enabled Output, is open. The
+open row is the Surface's mapping Output, so a Surface on one Output opens on
+it, one on several opens on none until a row is clicked, and opening another row
+while the Surface is calibrated takes the pattern to that Output. An Output's
+inspector lists the Surfaces on it, and clicking one selects the Surface with
+that Output's row open. The Mask, Path and Region editors take their shape from
+the Surface's stated Size, else from the mapping of its mapping Output, else
+from the first Output it is on. **Why no row opens by itself on several
+Outputs:** a corner dragged on the wrong projector's mapping looks like a drag
+that did nothing, so the corners only exist once a projector was chosen.
+
+The open row places the Surface in that Output's frame with a small SVG: the
+quad with draggable corner handles, other Surfaces on the same Output as
 outlines, and the frame's aspect taken from the Output's session telemetry when
 one is reporting. Corner buttons take arrow keys for nudging and two fields show
 the selected corner as percentages of the frame. Dragging shows the handle at
