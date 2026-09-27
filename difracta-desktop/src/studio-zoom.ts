@@ -12,8 +12,8 @@ import { zoomed, type ZoomChange } from "./zoom-levels.ts";
  * that host, which would zoom a runtime's Output pages with its Studio. A
  * Studio window's zoom is its own instead (`zoomMode: "isolated"`, which
  * lasts across its navigations), and an Output or a Display window cannot
- * zoom at all (`"disabled"`): a projector's page never zooms. The launch page
- * stays at 100% too.
+ * zoom at all (`neverZoom` in `studio-window.ts`): a projector's page never
+ * zooms. The launch page stays at 100% too.
  */
 export class StudioZoom {
   readonly #state: DesktopStateStore;

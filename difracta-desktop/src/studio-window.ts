@@ -23,6 +23,20 @@ export const pageSecurity = {
 export const BACKGROUND = "#0a0a0a";
 
 /**
+ * Keeps a page at 100% whatever zoom Chromium remembers for its host, which
+ * it shares between every page of that host, and whatever a person does to
+ * zoom it. The mode is set on the contents, now and after every navigation,
+ * since `disabled` does not last across one; as a `zoomMode` preference it
+ * would lock the page at the host's zoom instead of undoing it.
+ */
+export function neverZoom(contents: WebContents): void {
+  contents.setZoomMode("disabled");
+  contents.on("did-navigate", () => {
+    contents.setZoomMode("disabled");
+  });
+}
+
+/**
  * Keeps a window on the runtime's pages. Following a link elsewhere would
  * turn the app window into a browser without an address bar; links meant for
  * a new window are sorted by `linkTarget`.
@@ -50,9 +64,9 @@ function confine(contents: WebContents, origin: string): void {
  * No menu either (`removeMenu`; on macOS the one menu belongs to the app, and
  * its items leave this window alone, see `native-menu.ts`). With the bar go
  * its shortcuts, so no key reloads or opens developer tools on a projector.
- * Nothing zooms it either (`zoomMode: "disabled"`): not Ctrl and the wheel,
- * and not Studio's zoom, which Chromium would otherwise share with every page
- * of the same host. F11 is the one key kept, handled here because the menu that had
+ * Nothing zooms it either (`neverZoom`): not Ctrl and the wheel, and not the
+ * zoom Chromium remembers for the host, which it would otherwise share with
+ * every page of it. F11 is the one key kept, handled here because the menu that had
  * it is gone: a window that cannot go full screen is no use on a projector.
  */
 function openPageWindow(url: string, origin: string): void {
@@ -63,10 +77,10 @@ function openPageWindow(url: string, origin: string): void {
     webPreferences: {
       ...pageSecurity,
       backgroundThrottling: false,
-      zoomMode: "disabled",
     },
   });
   window.removeMenu();
+  neverZoom(window.webContents);
   window.webContents.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown" || input.key !== "F11") return;
     event.preventDefault();

@@ -62,14 +62,32 @@ describe("Studio's zoom in Difracta Desktop", () => {
       (item) => item?.[0] === "Actual Size (Now 120%)" && item[1],
     );
 
-    // A page of the same runtime in a window of its own, as an Output opens:
-    // Chromium's zoom per host must not reach it.
+    // Chromium remembers a zoom per host and shares it between the host's
+    // pages: a page of the runtime zoomed the ordinary way leaves one behind.
     await app?.evaluate(async ({ BrowserWindow }, port) => {
-      await new BrowserWindow({ show: false }).loadURL(
-        `http://127.0.0.1:${port}/output/`,
-      );
+      const plain = new BrowserWindow({ show: false });
+      await plain.loadURL(`http://127.0.0.1:${port}/output/`);
+      plain.webContents.setZoomLevel(5);
     }, env.DIFRACTA_PORT);
-    expect(await zoomLevels()).toEqual({ studio: 1, others: [0] });
+    await eventually(zoomLevels, ({ others }) => others.includes(5));
+
+    // An Output page opened from Studio stays at 100% all the same, and so
+    // does Studio, whose zoom is its own.
+    const [output] = await Promise.all([
+      app?.waitForEvent("window"),
+      page.evaluate(() => {
+        window.open(`${location.origin}/output/?output=none`);
+      }),
+    ]);
+    await output?.waitForURL(/\/output\/\?output=none$/);
+    // Studio is at 120%, so the screen's own ratio is its ratio over 1.2.
+    expect(await output?.evaluate(() => devicePixelRatio)).toBeCloseTo(
+      await page.evaluate(() => devicePixelRatio / 1.2),
+      4,
+    );
+    const levels = await zoomLevels();
+    expect(levels.studio).toBe(1);
+    expect([...levels.others].sort()).toEqual([0, 5]);
 
     // A reload keeps it.
     await clickMenu("help:reload-studio");

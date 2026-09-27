@@ -1181,10 +1181,16 @@ change reaches every open one at once (`studio-zoom.ts`). Chromium keeps zoom
 per host and shares it between that host's pages, which would zoom a runtime's
 Output pages with its Studio and give a runtime elsewhere a level of its own, so
 a Studio window's zoom is its own (`zoomMode: "isolated"`) and an Output or
-Display window cannot zoom at all (`"disabled"`): a projector's page never
-zooms. The launch page stays at 100%. Actual Size says the zoom there is now
-("Actual Size (Now 120%)") and is greyed out at 100%; the zoom is one of the
-changes that rebuild the menu.
+Display window cannot zoom at all (`neverZoom`): a projector's page never zooms.
+**Why `neverZoom` sets the mode on the contents, not as a preference:**
+`disabled` as a `zoomMode` preference leaves the page at the zoom Chromium
+remembers for its host and then refuses every change, so an Output opened at
+whatever level a page of that host was once zoomed to, its canvas a pixel off
+the Display's size; set with `setZoomMode`, it reverts the page to 100%, and it
+is set again after each navigation because it does not last across one. The
+launch page stays at 100%. Actual Size says the zoom there is now ("Actual Size
+(Now 120%)") and is greyed out at 100%; the zoom is one of the changes that
+rebuild the menu.
 
 The page's items show their shortcuts and do not act on them. Studio's key
 handler (`keyboard/shortcut-keys.tsx`) is the only handler of Ctrl+S, Ctrl+O,

@@ -2,7 +2,7 @@ import { BrowserWindow } from "electron";
 
 import type { DisplayDescription } from "./display-mapping.ts";
 import { isFromOrigin } from "./local-origin.ts";
-import { pageSecurity } from "./studio-window.ts";
+import { neverZoom, pageSecurity } from "./studio-window.ts";
 
 /** The Output page of `output`, as any browser would open it. */
 export function outputPageUrl(origin: string, output: string): string {
@@ -37,14 +37,14 @@ export function openDisplayWindow(options: {
     alwaysOnTop: true,
     skipTaskbar: true,
     backgroundColor: "#000000",
-    // A projector's page never zooms, whatever Studio's zoom is.
     webPreferences: {
       ...pageSecurity,
       backgroundThrottling: false,
-      zoomMode: "disabled",
     },
   });
   window.removeMenu();
+  // A projector's page never zooms, whatever zoom its host has.
+  neverZoom(window.webContents);
   // Above full-screen windows and the desktop's own panels too.
   window.setAlwaysOnTop(true, "screen-saver");
 
