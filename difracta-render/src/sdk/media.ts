@@ -9,10 +9,16 @@
  * decoded video frame, so an instance reports `changed` exactly when the
  * texture the engine would upload differs.
  */
-export type MediaImage = HTMLImageElement | ImageBitmap | HTMLVideoElement;
+export type MediaImage =
+  | HTMLImageElement
+  | ImageBitmap
+  | HTMLVideoElement
+  /** Text the engine rasterized (`sdk/text.ts`). */
+  | HTMLCanvasElement
+  | OffscreenCanvas;
 
 export interface MediaHandle {
-  /** The Media item's id. */
+  /** The Media item's id; a text picture's names what it shows. */
   readonly id: string;
   /** What to upload, or null while loading, missing or before the first frame. */
   readonly image: MediaImage | null;

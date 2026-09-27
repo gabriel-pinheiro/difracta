@@ -1,5 +1,6 @@
 import { emptyCatalog, type Catalog } from "../catalog/catalog.ts";
 import { numberProblem } from "../catalog/parameters.ts";
+import { CONTROLLER_LABELS } from "../document/controllers.ts";
 import type {
   Controller,
   Document,
@@ -54,7 +55,8 @@ export function linksOfLayer(
 /**
  * What a Controller's value becomes at a target: a number link maps 0..1
  * onto its anchors, clamped to the target's range and snapped to its step
- * from the minimum; a boolean target is on from 0.5; a color copies.
+ * from the minimum; a boolean target is on from 0.5; a color copies, and so
+ * does text, its line breaks becoming spaces at a single-line target.
  */
 export function mappedValue(
   controller: Controller,
@@ -63,6 +65,12 @@ export function mappedValue(
 ): AddressValue | undefined {
   if (controller.kind === "color")
     return resolved.type === "color" ? controller.value : undefined;
+  if (controller.kind === "text") {
+    if (resolved.type !== "text") return undefined;
+    return resolved.multiline === true
+      ? controller.value
+      : controller.value.replace(/\s*[\r\n]+\s*/g, " ");
+  }
   if (controller.kind === "group") return undefined;
   const position = controller.value;
   if (resolved.type === "boolean") return position >= 0.5;
@@ -165,7 +173,7 @@ export function linkProblem(
   if (resolved.type === "media")
     return `“${resolved.label}” picks a Media item; it cannot be linked to a Controller.`;
   if (!linkable(resolved, controller.kind))
-    return `“${resolved.label}” cannot be driven by a ${controller.kind === "number" ? "Number" : "Color"} Controller.`;
+    return `“${resolved.label}” cannot be driven by a ${CONTROLLER_LABELS[controller.kind]}.`;
   return undefined;
 }
 
@@ -187,7 +195,7 @@ export function anchorsProblem(
   anchors: NonNullable<Link["anchors"]>,
 ): string | undefined {
   if (resolved.type !== "number")
-    return `${resolved.label} is a ${resolved.type}; only a number target has anchors.`;
+    return `${resolved.label} is ${resolved.type === "text" ? "text" : `a ${resolved.type}`}; only a number target has anchors.`;
   const range = resolved.range ?? { min: 0, max: 1 };
   const grid =
     range.step === undefined ? "" : ` in steps of ${String(range.step)}`;

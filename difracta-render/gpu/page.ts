@@ -12,7 +12,8 @@ import { testCatalog } from "./test-catalog.ts";
  * report comes along. With Media (data URLs by item id) the frames are
  * paced by the browser's, since the files load on its clock, they go on
  * until a Layer has drawn, and the last one is forced by a new revision so
- * the picture is in the buffer when it is read.
+ * the picture is in the buffer when it is read. With fonts (data URLs by
+ * file name) the Bundled Fonts load and the frames are paced the same way.
  */
 export interface RenderedFrames {
   readonly pixels: string;
@@ -32,15 +33,17 @@ export async function render(
   height: number,
   frames: number,
   media?: Readonly<Record<string, string>>,
+  fonts?: Readonly<Record<string, string>>,
 ): Promise<RenderedFrames> {
   const canvas = window.document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   const compositor = createCompositor(canvas, testCatalog, {
     mediaUrl: (id) => media?.[id],
+    fontUrl: (file) => fonts?.[file],
   });
   const reports: FrameReport[] = [];
-  const paced = media !== undefined;
+  const paced = media !== undefined || fonts !== undefined;
   const started = performance.now();
   let drawn = false;
   for (let frame = 0; frame < frames || (paced && !drawn); frame += 1) {

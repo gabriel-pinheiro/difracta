@@ -88,9 +88,23 @@ Working from a shell
              controller/<id|name>/value       macro/<id|name>/run
              scene/<id|name>/play             surface/<id|name>/render-scale
              installation/blackout            ("addresses" lists them all)
+             A Controller is of kind number (0 to 1), color or text.
 
   Values     true/false, numbers, choice values as text, colours as
              [r,g,b,a] with each component from 0 to 1.
+
+  Text       A text Parameter and a Text Controller hold text, at most
+             ${String(settings.text.maxLength)} characters. set and edit take it as typed, so 42 and
+             true stay text: edit layer/Sign/param/text 'Boa noite'. A JSON
+             string carries line breaks:
+             set controller/Words/value '"Line one\\nLine two"'
+             A Parameter that catalog <id> shows as "a single line" refuses
+             them; "" empties it. In run payloads text is a JSON string.
+             run controller.create '{"kind":"text","name":"Words"}' adds a
+             Text Controller, and link Words layer/Sign/param/text has the
+             Layer show its text (line breaks become spaces on a single
+             line). Over OSC it is a string. A Font Parameter is a choice
+             among the Bundled Fonts, which catalog lists with their ids.
 
   Layer      run layer.create '{"kind":"visual","sceneId":"Live","name":"Wash"}'
   recipe     run layer.visual '{"layerId":"Wash","visual":"solid-color",

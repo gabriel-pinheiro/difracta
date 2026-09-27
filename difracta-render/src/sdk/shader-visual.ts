@@ -1,6 +1,7 @@
 import type { ParameterSchema, VisualDefinition } from "@difracta/core";
 
 import type { Textures } from "./media.ts";
+import type { TextContext } from "./text.ts";
 import type { Uniforms } from "./uniforms.ts";
 import type { PathRequirements, VisualContext, VisualFrame } from "./visual.ts";
 
@@ -16,7 +17,8 @@ import type { PathRequirements, VisualContext, VisualFrame } from "./visual.ts";
  * `hash`, `hash2`) follow the Filter SDK; each declared Path arrives as
  * `u_path_<key>_points`, `_count` and `_closed` (see `sdk/path.ts`), and a
  * Media handle returned under `textures` as `u_<name>` with `u_<name>_size`
- * (see `sdk/media.ts`); the fragment declares both.
+ * (see `sdk/media.ts`); the fragment declares both. Text is rasterized by
+ * the engine and sampled the same way (see `sdk/text.ts`).
  */
 export interface ShaderUpdate {
   /** False when the picture would be the same as last frame's. */
@@ -36,6 +38,14 @@ export interface ShaderUpdate {
    * from one frame to the next until returned again.
    */
   readonly resolution?: number;
+}
+
+/** What `create` gets: a canvas Visual's context, and the engine's text. */
+export interface ShaderVisualContext<
+  S extends ParameterSchema,
+  P extends PathRequirements = PathRequirements,
+> extends VisualContext<S, P> {
+  readonly text: TextContext;
 }
 
 export interface ShaderVisualInstance<
@@ -62,7 +72,7 @@ export interface ShaderVisual<
   /** GLSL ES 3.00 defining `vec4 render_visual(vec2 uv)`; may declare its own `u_` uniforms. */
   readonly fragment: string;
   /** Absent for a Visual whose picture depends only on its Parameters and Paths. */
-  create?(context: VisualContext<S, P>): ShaderVisualInstance<S, P>;
+  create?(context: ShaderVisualContext<S, P>): ShaderVisualInstance<S, P>;
 }
 
 /**

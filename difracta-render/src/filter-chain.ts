@@ -219,6 +219,7 @@ export class FilterChain {
         gl.uniform1i(location, value === true ? 1 : 0);
         return;
       case "media":
+      case "text":
         return;
       case "choice":
         gl.uniform1i(

@@ -1,6 +1,6 @@
 /**
  * The HTTP origin of the runtime this page talks to, where its Media files
- * are fetched from: the origin of the `?runtime=` live socket URL when one
+ * and the Bundled Fonts are fetched from: the origin of the `?runtime=` live socket URL when one
  * is given, `ws` read as `http` and `wss` as `https`, otherwise the page's
  * own, which serves or proxies the runtime's routes.
  */

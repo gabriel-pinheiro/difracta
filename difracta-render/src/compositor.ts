@@ -10,8 +10,10 @@ import {
 import { frameIssues, type RenderIssue } from "./issues.ts";
 import { LayerPlayers, type LayerFrame } from "./layer-players.ts";
 import { MaskTextures } from "./masks.ts";
+import { FontLoader } from "./font-loader.ts";
 import { MediaLoader } from "./media-loader.ts";
 import { MediaTextures } from "./media-textures.ts";
+import { TextRasters } from "./text-rasters.ts";
 import { planFrame, plannedSurfaces, type LayerDraw } from "./plan.ts";
 import { MAX_FRAME_SECONDS } from "./sdk/visual.ts";
 import { ShaderVisualPrograms } from "./shader-visuals.ts";
@@ -44,6 +46,12 @@ export interface CompositorOptions {
    * Without it no Media loads and every Media handle stays empty.
    */
   readonly mediaUrl?: (id: string) => string | undefined;
+  /**
+   * Where a Bundled Font's file is fetched from, by file name:
+   * `/fonts/<file>` on the runtime for an Output page. Without it no font
+   * loads and every text Layer stays blank.
+   */
+  readonly fontUrl?: (file: string) => string | undefined;
 }
 
 export interface FrameReport {
@@ -119,6 +127,7 @@ class WebGLCompositor implements Compositor {
   readonly #canvas: HTMLCanvasElement;
   readonly #catalog: Catalog;
   readonly #loader: MediaLoader;
+  readonly #text: TextRasters;
   #resources: Resources | undefined;
   #lost = false;
   #lastNow: number | undefined;
@@ -151,6 +160,12 @@ class WebGLCompositor implements Compositor {
       mediaUrl: options.mediaUrl ?? (() => undefined),
       catalog,
     });
+    this.#text = new TextRasters(
+      new FontLoader({
+        catalog,
+        fontUrl: options.fontUrl ?? (() => undefined),
+      }),
+    );
     canvas.addEventListener("webglcontextlost", this.#onLost);
     canvas.addEventListener("webglcontextrestored", this.#onRestored);
     this.#resources = this.#setup();
@@ -193,6 +208,7 @@ class WebGLCompositor implements Compositor {
     this.#loader.preload(() => plannedMedia(plan.layers, this.#catalog));
     const step = resources.players.step(plan.layers, dt, width, height);
     resources.media.retain(step.textures);
+    this.#text.retain(step.textures);
     const chain = resources.filters.step(plan.filters, dt, width, height);
     // A pass over Layers that all drew nothing this frame would transform
     // a blank frame at full-frame cost, so only passes with input run.
@@ -363,7 +379,7 @@ class WebGLCompositor implements Compositor {
       program,
       calibration: new CalibrationDrawing(program),
       masks: new MaskTextures(gl),
-      players: new LayerPlayers(gl, this.#catalog, this.#loader),
+      players: new LayerPlayers(gl, this.#catalog, this.#loader, this.#text),
       filters: new FilterPlayers(this.#catalog),
       chain: new FilterChain(gl, program.quad),
       shaderPrograms: new ShaderVisualPrograms(

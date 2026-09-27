@@ -4,6 +4,13 @@ export {
   type CompositorOptions,
   type FrameReport,
 } from "./compositor.ts";
+export {
+  FontLoader,
+  fontFamily,
+  fontStack,
+  type FontLoaderOptions,
+  type FontStatus,
+} from "./font-loader.ts";
 export { homography, project } from "./homography.ts";
 export type { RenderIssue } from "./issues.ts";
 export { maskTextureSize } from "./masks.ts";

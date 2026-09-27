@@ -1,4 +1,10 @@
-import { flattenTree, qualifiedName } from "@difracta/core";
+import {
+  flattenTree,
+  qualifiedName,
+  type Color,
+  type ControllerKind,
+  type Document,
+} from "@difracta/core";
 import type { Command } from "commander";
 
 import type { Cli } from "../cli.ts";
@@ -15,6 +21,58 @@ import {
   sceneTree,
   treeNodes,
 } from "../scene-tree.ts";
+
+/** The OSC type tag of each kind of Controller's leaf. */
+const OSC_TYPES = {
+  number: "f",
+  color: "r",
+  text: "s",
+} as const satisfies Record<Exclude<ControllerKind, "group">, string>;
+
+export interface OscLeafRow {
+  readonly path: string;
+  /** The OSC type tag: f, r or s for a Controller, I for a Macro. */
+  readonly type: string;
+  readonly description: string;
+  /** A Controller's value; a Macro has none. */
+  readonly value?: number | Color | string;
+}
+
+/** The leaves of the OSC tree as the runtime serves them: Controllers, then Macros, in navigator order. */
+export function oscLeaves(
+  document: Pick<Document, "controllers" | "macros">,
+): readonly OscLeafRow[] {
+  return [
+    ...flattenTree(document.controllers).flatMap((controller) =>
+      controller.kind === "group"
+        ? []
+        : [
+            {
+              path: `/controller/${controller.id}`,
+              type: OSC_TYPES[controller.kind],
+              description: qualifiedName(document.controllers, controller),
+              value: controller.value,
+            },
+          ],
+    ),
+    ...flattenTree(document.macros).flatMap((macro) =>
+      macro.kind === "group"
+        ? []
+        : [
+            {
+              path: `/macro/${macro.id}`,
+              type: "I",
+              description: qualifiedName(document.macros, macro),
+            },
+          ],
+    ),
+  ];
+}
+
+/** One leaf as a line: path, type, Group · Name and, for a Controller, its value as JSON. */
+export function formatOscLeaf(leaf: OscLeafRow): string {
+  return `${leaf.path.padEnd(36)} ${leaf.type}  ${leaf.description}${"value" in leaf ? `  ${JSON.stringify(leaf.value)}` : ""}`;
+}
 
 export function registerTree(program: Command, cli: Cli): void {
   program
@@ -70,49 +128,19 @@ export function registerTree(program: Command, cli: Cli): void {
   program
     .command("osc")
     .description(
-      "List the OSC tree a hub such as Chataigne binds to: one leaf per Controller (float 0–1 or RGBA colour) and per Macro (impulse), each described as Group · Name.",
+      "List the OSC tree a hub such as Chataigne binds to: one leaf per Controller (float 0–1, RGBA colour or string) and per Macro (impulse), each described as Group · Name.",
     )
     .action(() =>
       cli.withDocument(async (client, summary) => {
         const { document, view } = await cli.replica(client, summary.id);
         const live = liveStatus(document, view.liveState.get());
-        const leaves = [
-          ...flattenTree(document.controllers).flatMap((controller) =>
-            controller.kind === "group"
-              ? []
-              : [
-                  {
-                    path: `/controller/${controller.id}`,
-                    type: controller.kind === "number" ? "f" : "r",
-                    description: qualifiedName(
-                      document.controllers,
-                      controller,
-                    ),
-                    value: controller.value,
-                  },
-                ],
-          ),
-          ...flattenTree(document.macros).flatMap((macro) =>
-            macro.kind === "group"
-              ? []
-              : [
-                  {
-                    path: `/macro/${macro.id}`,
-                    type: "I",
-                    description: qualifiedName(document.macros, macro),
-                  },
-                ],
-          ),
-        ];
+        const leaves = oscLeaves(document);
         cli.print({ osc: live.osc, leaves }, () =>
           [
             live.osc.port === null
               ? "OSC is off"
               : `OSC and OSCQuery on port ${String(live.osc.port)}`,
-            ...leaves.map(
-              (leaf) =>
-                `${leaf.path.padEnd(36)} ${leaf.type}  ${leaf.description}${"value" in leaf ? `  ${JSON.stringify(leaf.value)}` : ""}`,
-            ),
+            ...leaves.map(formatOscLeaf),
           ].join("\n"),
         );
       }),

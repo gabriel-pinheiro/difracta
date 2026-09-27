@@ -4,8 +4,10 @@ import {
   linkable,
   listAddresses,
   orderedEntries,
-  type Controller,
+  type ColorController,
   type Document,
+  type NumberController,
+  type TextController,
 } from "@difracta/core";
 import { useMemo } from "react";
 
@@ -15,6 +17,9 @@ import {
 } from "@/inspector/fields/address-picker";
 import { catalog, definitionOf } from "@/lib/catalog";
 import { useCommand, useSignal } from "@/lib/client";
+
+/** A Controller that holds a value, which is every kind but a Group. */
+type ValueController = NumberController | ColorController | TextController;
 
 /**
  * Picks the Addresses a Controller will drive: every compatible one in the
@@ -28,7 +33,7 @@ export function LinkPicker({
   onClose,
 }: {
   readonly view: DocumentView;
-  readonly controller: Controller & { readonly kind: "number" | "color" };
+  readonly controller: ValueController;
   readonly onClose: () => void;
 }) {
   const command = useCommand(view);
@@ -55,7 +60,7 @@ export function LinkPicker({
 /** Every Address the Controller could drive, in Scene then Layer order. */
 function collect(
   document: Document,
-  controller: Controller & { readonly kind: "number" | "color" },
+  controller: ValueController,
 ): PickerCandidate[] {
   const sceneOrder = new Map<string, number>(
     orderedEntries(document.scenes).map((scene, position) => [

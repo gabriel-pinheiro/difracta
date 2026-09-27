@@ -16,7 +16,8 @@ import { linkPatches } from "./link.create.ts";
 
 /**
  * A new Controller lands first at the root or in the Group it was added to,
- * or right after the sibling `after` names: Number at 0, Color opaque white. With `addresses` it is linked to them in
+ * or right after the sibling `after` names: Number at 0, Color opaque white,
+ * Text empty. With `addresses` it is linked to them in
  * the same step, which is how a Parameter row grows its own Controller, and
  * it starts at the value that leaves the first target where it is.
  */
@@ -24,7 +25,7 @@ export const controllerCreate = defineCommand({
   name: "controller.create",
   kind: "authoring",
   description:
-    "Add a Number Controller, a Color Controller or a Group; addresses link it at once.",
+    "Add a Number, Color or Text Controller, or a Group; addresses link it at once.",
   payload: z
     .object({
       id: z.string().min(1).optional(),
@@ -81,7 +82,16 @@ export const controllerCreate = defineCommand({
                   ? (current as unknown as Color)
                   : [1, 1, 1, 1],
             }
-          : { ...base, kind: "group" };
+          : payload.kind === "text"
+            ? {
+                ...base,
+                kind: "text",
+                value:
+                  first?.type === "text" && typeof current === "string"
+                    ? current
+                    : "",
+              }
+            : { ...base, kind: "group" };
     const links =
       payload.addresses === undefined
         ? []

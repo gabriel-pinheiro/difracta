@@ -21,6 +21,8 @@ export const settings = {
     mediaPath: "/media",
     /** Where a Bundled Media entry's file is served, by entry id: `GET /bundled/<id>`. */
     bundledPath: "/bundled",
+    /** Where a Bundled Font's files are served, by file name: `GET /fonts/<file>`. */
+    fontsPath: "/fonts",
     /**
      * Document mode when `--documents` is not given. `pinned` keeps the file
      * the runtime was started with; `free` lets loopback clients create, open
@@ -108,6 +110,15 @@ export const settings = {
         "a4696c96cea0cd5cd57dc9ea54281495c3a0c62a18ad16515d5aca5abd4c2f2f",
       url: "https://github.com/gabriel-pinheiro/difracta-media/releases/download/v<version>/difracta-media-<version>.tar.gz",
     },
+  },
+  text: {
+    /** The most characters a text Parameter or a Text Controller holds. */
+    maxLength: 2_000,
+    /**
+     * The longest side, in pixels, of a picture text is rasterized into;
+     * text asking for more is drawn smaller and stretched.
+     */
+    maxRasterSize: 4_096,
   },
   regions: {
     /** A new Region is the Surface minus this fraction on each side. */

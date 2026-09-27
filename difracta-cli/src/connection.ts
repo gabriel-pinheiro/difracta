@@ -3,6 +3,7 @@ import {
   Catalog,
   settings,
   type FilterDefinition,
+  type FontDefinition,
   type MediaDefinition,
   type VisualDefinition,
 } from "@difracta/core";
@@ -63,14 +64,20 @@ export function currentDocument(client: DifractaClient): DocumentSummary {
   return summary;
 }
 
-/** The runtime's Catalog, as metadata: what its Visual, Filter and Bundled Media ids mean. */
+/** The runtime's Catalog, as metadata: what its Visual, Filter, Bundled Media and Bundled Font ids mean. */
 export async function fetchCatalog(client: DifractaClient): Promise<Catalog> {
-  const { visuals, filters, media } = await client.request<{
+  const { visuals, filters, media, fonts } = await client.request<{
     visuals: VisualDefinition[];
     filters: FilterDefinition[];
     media?: MediaDefinition[];
+    fonts?: FontDefinition[];
   }>("catalog.list", {});
-  return new Catalog({ visuals, filters, media: media ?? [] });
+  return new Catalog({
+    visuals,
+    filters,
+    media: media ?? [],
+    fonts: fonts ?? [],
+  });
 }
 
 export function parseJsonArgument(text: string | undefined): unknown {
@@ -90,6 +97,22 @@ export function parseValue(text: string): unknown {
   if (text.trim() !== "" && Number.isFinite(number)) return number;
   try {
     return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+/**
+ * A value for a text Address: the argument as typed, so `42` and `true`
+ * stay text, or what a JSON string holds, so `"one\ntwo"` carries a line
+ * break.
+ */
+export function parseText(text: string): string {
+  if (text.length < 2 || !text.startsWith('"') || !text.endsWith('"'))
+    return text;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return typeof parsed === "string" ? parsed : text;
   } catch {
     return text;
   }

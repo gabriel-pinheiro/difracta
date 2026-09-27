@@ -8,6 +8,7 @@
 //   dist/runtime.mjs   difracta-runtime and all it depends on, in one file, forked by main
 //   dist/studio, dist/output, dist/thumbnails   what that runtime serves
 //   dist/bundled       the Bundled Media's clips and thumbnails, served too
+//   dist/fonts         the Bundled Fonts, served too
 //
 // Studio and the Output page are built by their own packages first
 // (`npm run build` at the root does them in order; `npm run desktop` too).
@@ -71,6 +72,7 @@ const served = [
   ["difracta-output/dist", "output", "npm run build -w @difracta/output"],
   ["difracta-visuals/thumbnails", "thumbnails", undefined],
   ["difracta-visuals/bundled", "bundled", "npm run media:fetch"],
+  ["difracta-visuals/fonts", "fonts", undefined],
 ];
 for (const [from, to, howToBuild] of served) {
   const source = path.join(repository, from);

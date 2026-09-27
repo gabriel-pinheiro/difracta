@@ -28,4 +28,6 @@ new OutputPage({
   output,
   mediaUrl: (id) =>
     `${origin}${settings.runtime.mediaPath}/${encodeURIComponent(id)}`,
+  fontUrl: (file) =>
+    `${origin}${settings.runtime.fontsPath}/${encodeURIComponent(file)}`,
 });

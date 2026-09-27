@@ -1,4 +1,10 @@
-import type { Definition, ParameterDefinition } from "@difracta/core";
+import {
+  settings,
+  type Catalog,
+  type Definition,
+  type FontDefinition,
+  type ParameterDefinition,
+} from "@difracta/core";
 import type { Command } from "commander";
 
 import type { Cli } from "../cli.ts";
@@ -9,37 +15,31 @@ export function registerCatalog(program: Command, cli: Cli): void {
   program
     .command("catalog [id]")
     .description(
-      "List the Visuals and Filters the runtime renders and its Bundled Media, or describe one: notes, Parameters, Cues; for a Bundled Media entry, notes, size, duration and flags.",
+      "List the Visuals and Filters the runtime renders, its Bundled Media and its Bundled Fonts, or describe one: notes, Parameters, Cues; for a Bundled Media entry, notes, size, duration and flags; for a Bundled Font, its files.",
     )
     .action((id: string | undefined) =>
       cli.withClient(async (client) => {
         const catalog = await fetchCatalog(client);
         if (id === undefined) {
-          const items = [...catalog.visuals(), ...catalog.filters()];
-          const media = catalog.media();
-          cli.print([...items, ...media], () =>
+          cli.print(
             [
-              ...items.map(
-                (item) =>
-                  `${item.id.padEnd(20)} ${item.kind.padEnd(8)} ${item.backend.padEnd(8)} ${item.recommended === true ? "★ " : "  "}${item.description}`,
-              ),
-              ...(media.length === 0
-                ? []
-                : [
-                    "",
-                    "Bundled Media",
-                    ...media.map((entry) => {
-                      const flags = bundledFlags(entry);
-                      return `${entry.id.padEnd(28)} ${entry.type.padEnd(6)} ${entry.recommended === true ? "★ " : "  "}${entry.name}${flags === "" ? "" : ` (${flags})`}: ${entry.description}`;
-                    }),
-                  ]),
-            ].join("\n"),
+              ...catalog.visuals(),
+              ...catalog.filters(),
+              ...catalog.media(),
+              ...catalog.fonts(),
+            ],
+            () => formatCatalog(catalog),
           );
           return;
         }
         const entry = catalog.mediaEntry(id);
         if (entry !== undefined) {
           cli.print(entry, () => describeBundled(entry));
+          return;
+        }
+        const font = catalog.font(id);
+        if (font !== undefined) {
+          cli.print(font, () => describeFont(font));
           return;
         }
         const definition = catalog.visual(id) ?? catalog.filter(id);
@@ -50,6 +50,53 @@ export function registerCatalog(program: Command, cli: Cli): void {
         cli.print(definition, () => describeDefinition(definition));
       }),
     );
+}
+
+/** The listing: Visuals and Filters, then the Bundled Media and the Bundled Fonts under their own headings. */
+export function formatCatalog(catalog: Catalog): string {
+  const media = catalog.media();
+  const fonts = catalog.fonts();
+  return [
+    ...[...catalog.visuals(), ...catalog.filters()].map(
+      (item) =>
+        `${item.id.padEnd(20)} ${item.kind.padEnd(8)} ${item.backend.padEnd(8)} ${item.recommended === true ? "★ " : "  "}${item.description}`,
+    ),
+    ...(media.length === 0
+      ? []
+      : [
+          "",
+          "Bundled Media",
+          ...media.map((entry) => {
+            const flags = bundledFlags(entry);
+            return `${entry.id.padEnd(28)} ${entry.type.padEnd(6)} ${entry.recommended === true ? "★ " : "  "}${entry.name}${flags === "" ? "" : ` (${flags})`}: ${entry.description}`;
+          }),
+        ]),
+    ...(fonts.length === 0
+      ? []
+      : [
+          "",
+          "Bundled Fonts",
+          ...fonts.map(
+            (font) => `${font.id.padEnd(20)} ${font.name}: ${font.description}`,
+          ),
+        ]),
+  ].join("\n");
+}
+
+/** A Bundled Font in full: what it is for, how a Visual names it and where the runtime serves its files. */
+export function describeFont(font: FontDefinition): string {
+  return [
+    `${font.name}  (Bundled Font)  id: ${font.id}`,
+    font.description,
+    "",
+    `A Visual's Font Parameter takes the id: edit layer/<id|name>/param/<key> ${font.id}`,
+    "",
+    "Files",
+    ...font.files.map(
+      (file) =>
+        `  ${file.padEnd(36)} GET ${settings.runtime.fontsPath}/${file}`,
+    ),
+  ].join("\n");
 }
 
 function describeDefinition(definition: Definition): string {
@@ -78,7 +125,7 @@ function describeDefinition(definition: Definition): string {
   return lines.join("\n");
 }
 
-function describeParameter(parameter: ParameterDefinition): string {
+export function describeParameter(parameter: ParameterDefinition): string {
   const tail =
     parameter.description === undefined ? "" : `  ${parameter.description}`;
   switch (parameter.kind) {
@@ -92,5 +139,7 @@ function describeParameter(parameter: ParameterDefinition): string {
       return `${parameter.label.padEnd(16)} boolean  default ${String(parameter.default)}${tail}`;
     case "media":
       return `${parameter.label.padEnd(16)} media    default "" (none)  the id of ${parameter.accepts === "image" ? "an image" : "a video"} Media item (\`difracta media list\`)${tail}`;
+    case "text":
+      return `${parameter.label.padEnd(16)} text     default ${JSON.stringify(parameter.default)}  ${parameter.multiline === true ? "line breaks allowed" : "a single line"}${tail}`;
   }
 }

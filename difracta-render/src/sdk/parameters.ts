@@ -9,6 +9,7 @@ import {
   type ParameterDefinition,
   type ParameterSchema,
   type ParameterValues,
+  type TextParameter,
 } from "@difracta/core";
 
 /** The value type a Parameter declaration produces, so a Visual reads `params.speed` as a number. */
@@ -21,7 +22,7 @@ export type ParameterValueOf<P extends ParameterDefinition> =
         ? Color
         : P extends ChoiceParameter
           ? P["options"][number]["value"]
-          : P extends MediaParameter
+          : P extends MediaParameter | TextParameter
             ? string
             : never;
 

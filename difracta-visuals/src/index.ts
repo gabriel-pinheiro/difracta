@@ -1,6 +1,7 @@
 import { Catalog } from "@difracta/core";
 
 import { bundledMedia, bundledRoot } from "./bundled/manifest.ts";
+import { bundledFonts, fontsRoot } from "./fonts/fonts.ts";
 
 import { blockGlitch } from "./filters/block-glitch.ts";
 import { chromaticAberration } from "./filters/chromatic-aberration.ts";
@@ -95,17 +96,21 @@ import { tileCascade } from "./visuals/tile-cascade.ts";
 import { hyperdrive } from "./visuals/hyperdrive.ts";
 import { laserRain } from "./visuals/laser-rain.ts";
 import { sirenBeacon } from "./visuals/siren-beacon.ts";
+import { counter } from "./visuals/counter.ts";
+import { text } from "./visuals/text.ts";
 
 /**
  * The built-in Catalog: every Visual and Filter Difracta ships, one file
- * each, and the Bundled Media from the fetched manifest. Add a definition by
- * importing it here.
+ * each, the Bundled Media from the fetched manifest and the Bundled Fonts.
+ * Add a definition by importing it here.
  */
 export const builtInCatalog = new Catalog({
   visuals: [
     solidColor,
     image,
     video,
+    text,
+    counter,
     koiPond,
     bubbles,
     blink,
@@ -198,6 +203,7 @@ export const builtInCatalog = new Catalog({
     sliceShift,
   ],
   media: bundledMedia,
+  fonts: bundledFonts,
 });
 
 /**
@@ -208,7 +214,8 @@ export const builtInCatalog = new Catalog({
  */
 export const thumbnailsRoot = new URL("../thumbnails/", import.meta.url);
 
-export { bundledRoot };
+export { bundledRoot, fontsRoot };
+export { bundledFonts, fontParameter } from "./fonts/fonts.ts";
 
 export function thumbnailFile(id: string): string {
   return `${id}.png`;

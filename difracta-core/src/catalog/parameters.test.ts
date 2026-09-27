@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
+import { settings } from "../settings.ts";
 import {
   defaultParameterValues,
   numberProblem,
+  textProblem,
+  validateParameterValue,
   validateParameterValues,
   type ParameterSchema,
 } from "./parameters.ts";
@@ -98,5 +101,45 @@ describe("parameters", () => {
     );
     expect(numberProblem(undefined, 1005)).toBeUndefined();
     expect(numberProblem(undefined, Number.NaN)).toBe("must be a number");
+  });
+
+  it("holds text to the maximum length, and to one line unless multiline", () => {
+    const longest = "a".repeat(settings.text.maxLength);
+    expect(textProblem("", false)).toBeUndefined();
+    expect(textProblem("Olá, mundo", false)).toBeUndefined();
+    expect(textProblem(longest, false)).toBeUndefined();
+    expect(textProblem(`${longest}a`, true)).toBe(
+      `must be at most ${String(settings.text.maxLength)} characters (got ${String(settings.text.maxLength + 1)})`,
+    );
+    expect(textProblem("one\ntwo", true)).toBeUndefined();
+    expect(textProblem("one\ntwo", false)).toBe("must be a single line");
+    expect(textProblem("one\r\ntwo", false)).toBe("must be a single line");
+    for (const value of [12, true, null, undefined, ["a"], [1, 1, 1, 1]])
+      expect(textProblem(value, true)).toBe("must be a string of text");
+  });
+
+  it("validates a text Parameter by its declaration", () => {
+    const text: ParameterSchema = {
+      title: { kind: "text", label: "Title", default: "Text" },
+      body: { kind: "text", label: "Body", default: "", multiline: true },
+    };
+    expect(defaultParameterValues(text)).toEqual({ title: "Text", body: "" });
+    expect(
+      validateParameterValues(text, { title: "", body: "one\ntwo" }),
+    ).toBeUndefined();
+    expect(validateParameterValues(text, { title: "one\ntwo", body: "" })).toBe(
+      "Parameter “title” must be a single line.",
+    );
+    expect(validateParameterValues(text, { title: 7, body: "" })).toBe(
+      "Parameter “title” must be a string of text.",
+    );
+    expect(
+      validateParameterValue(
+        { kind: "text", label: "Body", default: "", multiline: true },
+        "a".repeat(settings.text.maxLength + 5),
+      ),
+    ).toBe(
+      `must be at most ${String(settings.text.maxLength)} characters (got ${String(settings.text.maxLength + 5)})`,
+    );
   });
 });

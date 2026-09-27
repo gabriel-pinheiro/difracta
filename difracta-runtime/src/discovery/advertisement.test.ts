@@ -52,6 +52,7 @@ describe("reachable from the network", () => {
       studioDist: undefined,
       outputDist: undefined,
       thumbnailsDir: undefined,
+      fontsDir: undefined,
       bundledDir: undefined,
       autosaveIntervalMs: 60_000,
       oscPort: undefined,

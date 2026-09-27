@@ -1,10 +1,16 @@
 import { CommandError } from "@difracta/client";
-import { linkAt, type RunMode } from "@difracta/core";
+import {
+  linkAt,
+  resolveAddress,
+  type Catalog,
+  type Document,
+  type RunMode,
+} from "@difracta/core";
 import type { CommandResult } from "@difracta/protocol";
 import type { Command } from "commander";
 
 import type { Cli } from "../cli.ts";
-import { fetchCatalog, parseValue } from "../connection.ts";
+import { fetchCatalog, parseText, parseValue } from "../connection.ts";
 import {
   inTypedTerms,
   resolveAddressNames,
@@ -55,17 +61,37 @@ export function firedDetail(outcome: TriggerOutcome): string {
   return ` (${parts.join(", ")})`;
 }
 
+/**
+ * What `set` and `edit` send for the value as it was typed: text for a text
+ * Address, whatever it looks like; otherwise true, false, a number or JSON,
+ * a Media item's name turned into its id. Without the Catalog a Parameter's
+ * type is unknown and the value is read by its looks alone.
+ */
+export function writtenValue(
+  document: Document,
+  catalog: Catalog | undefined,
+  address: string,
+  typed: string,
+): unknown {
+  if (resolveAddress(document, address, catalog)?.type === "text")
+    return parseText(typed);
+  const parsed = parseValue(typed);
+  return catalog === undefined
+    ? parsed
+    : resolveMediaValue(document, catalog, address, parsed);
+}
+
 export function registerAddress(program: Command, cli: Cli): void {
   for (const [name, command, purpose] of [
     [
       "set",
       "address.set",
-      "Write a performance value to an Address, e.g. set installation/blackout true. Not undoable. `addresses` lists every Address with its value.",
+      "Write a performance value to an Address, e.g. set installation/blackout true. A text Address takes the value as typed, or a JSON string for line breaks. Not undoable. `addresses` lists every Address with its value.",
     ],
     [
       "edit",
       "address.edit",
-      "Change an Address while authoring, e.g. edit layer/Wash/param/speed 2. Undoable, like the inspector. `addresses` lists every Address with its value.",
+      "Change an Address while authoring, e.g. edit layer/Wash/param/speed 2. A text Address takes the value as typed, or a JSON string for line breaks. Undoable, like the inspector. `addresses` lists every Address with its value.",
     ],
   ] as const) {
     program
@@ -75,17 +101,15 @@ export function registerAddress(program: Command, cli: Cli): void {
         cli.withDocument(async (client, summary) => {
           const { document } = await cli.replica(client, summary.id);
           const resolved = resolveAddressNames(document, address);
-          const parsed = parseValue(value);
-          // Only a Parameter can take a Media item, so only then is the Catalog needed.
-          const written =
-            typeof parsed === "string" && resolved.includes("/param/")
-              ? resolveMediaValue(
-                  document,
-                  await fetchCatalog(client),
-                  resolved,
-                  parsed,
-                )
-              : parsed;
+          // Only a Parameter's type comes from the Catalog.
+          const written = writtenValue(
+            document,
+            resolved.includes("/param/")
+              ? await fetchCatalog(client)
+              : undefined,
+            resolved,
+            value,
+          );
           const result = await client
             .command<CommandResult>(summary.id, command, {
               address: resolved,
@@ -106,7 +130,7 @@ export function registerAddress(program: Command, cli: Cli): void {
   program
     .command("link <controller> <address...>")
     .description(
-      "Link a Controller to Addresses, e.g. link Energy layer/Wash/param/color; one undoable step.",
+      "Link a Controller to Addresses, e.g. link Energy layer/Wash/param/speed; one undoable step. A Number Controller drives numbers and switches, a Color Controller colors, a Text Controller text.",
     )
     .option("--from <number>", "target value at Controller 0 (number targets)")
     .option("--to <number>", "target value at Controller 1 (number targets)")

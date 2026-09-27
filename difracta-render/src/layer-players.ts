@@ -12,6 +12,7 @@ import type { MediaContext, MediaHandle, Textures } from "./sdk/media.ts";
 import { resolveParameters } from "./sdk/parameters.ts";
 import { createVisualPlayer, type VisualPlayer } from "./sdk/player.ts";
 import { createShaderPlayer, type ShaderPlayer } from "./sdk/shader-player.ts";
+import { NO_TEXT, type TextContext } from "./sdk/text.ts";
 import { isShaderVisual, type ShaderVisual } from "./sdk/shader-visual.ts";
 import type { Uniforms } from "./sdk/uniforms.ts";
 import { isCanvasVisual, type CanvasVisual } from "./sdk/visual.ts";
@@ -61,7 +62,7 @@ export interface StepReport {
   readonly videoLayers: number;
   /** The Layers whose instance failed, one issue each, on every frame they stay planned. */
   readonly issues: readonly RenderIssue[];
-  /** Every Media handle a planned shader instance holds, hidden ones included: what keeps its texture. */
+  /** Every Media and text handle a planned shader instance holds, hidden ones included: what keeps its texture. */
   readonly textures: ReadonlySet<MediaHandle>;
 }
 
@@ -112,8 +113,8 @@ function takesVideo(parameters: ParameterSchema): boolean {
  * and a Visual or canvas-size change replaces it; while the Layer is
  * hidden (opacity zero) the instance is kept but left alone, told once
  * that it is hidden and again when it shows. Cues reach the instance of
- * the Layer they were fired on. Instances reach the Output's Media through
- * the context given here. An instance that throws
+ * the Layer they were fired on. Instances reach the Output's Media, and
+ * shader instances its text, through the contexts given here. An instance that throws
  * is stopped by its player; the Layer is logged once, draws nothing and
  * is reported as an issue on every frame until its entry is replaced.
  */
@@ -121,6 +122,7 @@ export class LayerPlayers {
   readonly #gl: WebGL2RenderingContext;
   readonly #catalog: Catalog;
   readonly #media: MediaContext;
+  readonly #text: TextContext;
   readonly #maxDimension: number;
   readonly #entries = new Map<string, Entry>();
 
@@ -128,10 +130,12 @@ export class LayerPlayers {
     gl: WebGL2RenderingContext,
     catalog: Catalog,
     media: MediaContext,
+    text: TextContext = NO_TEXT,
   ) {
     this.#gl = gl;
     this.#catalog = catalog;
     this.#media = media;
+    this.#text = text;
     this.#maxDimension = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
   }
 
@@ -340,6 +344,7 @@ export class LayerPlayers {
         height: 1,
         seed: draw.layer.id,
         media: this.#media,
+        text: this.#text,
       }),
       buffer: undefined,
       textures: {},

@@ -1,5 +1,10 @@
 import { createBuiltInRegistry, settings } from "@difracta/core";
-import { builtInCatalog, bundledRoot, thumbnailsRoot } from "@difracta/visuals";
+import {
+  builtInCatalog,
+  bundledRoot,
+  fontsRoot,
+  thumbnailsRoot,
+} from "@difracta/visuals";
 import fastifyStatic from "@fastify/static";
 import fastifyWebsocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -103,6 +108,17 @@ export async function buildRuntime(
     ],
     prefix: "/catalog/",
     decorateReply: false,
+  });
+
+  // The Bundled Fonts. Any origin may read them, as it may Media: a page
+  // served from elsewhere loads a font only with that header.
+  await app.register(fastifyStatic, {
+    root: config.fontsDir ?? fileURLToPath(fontsRoot),
+    prefix: `${settings.runtime.fontsPath}/`,
+    decorateReply: false,
+    setHeaders: (response) => {
+      response.setHeader("access-control-allow-origin", "*");
+    },
   });
 
   const studioDist = await existingDir(config.studioDist);

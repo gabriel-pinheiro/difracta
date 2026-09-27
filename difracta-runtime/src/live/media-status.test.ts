@@ -192,6 +192,7 @@ describe("Media status in the live state", () => {
       studioDist: undefined,
       outputDist: undefined,
       thumbnailsDir: undefined,
+      fontsDir: undefined,
       bundledDir: undefined,
       autosaveIntervalMs: 60_000,
       oscPort: undefined,

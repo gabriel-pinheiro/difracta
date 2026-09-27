@@ -1,5 +1,6 @@
 import {
   Catalog,
+  id,
   createBuiltInRegistry,
   emptyDocument,
   executeCommand,
@@ -233,6 +234,19 @@ describe("treeNodes", () => {
       "Group “Hits”  mg",
       "  Macro “Hit”  hit  1 action",
     ]);
+  });
+
+  it("shows a Text Controller's text quoted, its line breaks escaped", () => {
+    expect(
+      describeController({
+        id: id("controller", "words"),
+        kind: "text",
+        name: "Words",
+        parentId: null,
+        order: "a0",
+        value: "Boa noite\nLisboa",
+      }),
+    ).toBe('Text “Words”  words  value "Boa noite\\nLisboa"');
   });
 
   it("names a Macro's Run Mode when it is not All", () => {

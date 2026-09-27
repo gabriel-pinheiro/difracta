@@ -40,6 +40,7 @@ describe("runtime launch", () => {
       DIFRACTA_OUTPUT_DIST: "/app/dist/output",
       DIFRACTA_THUMBNAILS_DIR: "/app/dist/thumbnails",
       DIFRACTA_BUNDLED_DIR: "/app/dist/bundled",
+      DIFRACTA_FONTS_DIR: "/app/dist/fonts",
     });
   });
 

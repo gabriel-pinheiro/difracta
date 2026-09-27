@@ -198,13 +198,14 @@ where things are now.
 
 ### Catalog
 
-What a Runtime knows it can show, in three kinds of definition, each with a
-stable id unique across all three: Visuals, Filters and Bundled Media (`media`).
-Studio picks from the Catalog in the Library, the CLI lists and describes it,
-and commands validate ids and Parameter Values against it. A definition may
-carry notes for whoever composes with it, and has a thumbnail rendered from it.
-A Layer referring to an id the Catalog no longer has is shown as unavailable and
-renders nothing; the file stays valid.
+What a Runtime knows it can show, in four kinds of definition, each with a
+stable id unique across all four: Visuals, Filters, Bundled Media (`media`) and
+Bundled Fonts (`font`). Studio picks from the Catalog in the Library, the CLI
+lists and describes it, and commands validate ids and Parameter Values against
+it. A Visual, a Filter or a Bundled Media entry may carry notes for whoever
+composes with it, and has a thumbnail rendered from it. A Layer referring to an
+id the Catalog no longer has is shown as unavailable and renders nothing; the
+file stays valid.
 
 ### Recommended
 
@@ -235,9 +236,10 @@ future behavior that is neither a Visual nor a Filter.
 ### Parameter
 
 A typed, definition-specific adjustable value such as color, speed, density, or
-bolt width. A Parameter is one of five kinds: number, color, choice, boolean or
-media. Each Visual Layer and Filter Layer stores its own Parameter Values, keyed
-by Parameter name; picking a definition sets them to the definition's defaults.
+bolt width. A Parameter is one of six kinds: number, color, choice, boolean,
+media or text. Each Visual Layer and Filter Layer stores its own Parameter
+Values, keyed by Parameter name; picking a definition sets them to the
+definition's defaults.
 
 ### Media
 
@@ -272,6 +274,37 @@ navigator order and without Groups, so a Macro can swap artwork; it is not
 linkable. Removing the Media item, or the Group holding it, clears every Media
 Parameter holding it.
 
+### Text Parameter
+
+A Parameter of kind `text` a Visual declares, holding the words it shows: at
+most 2000 characters, on one line unless the declaration allows line breaks. A
+Control commits it on Enter or when the field is left, never while typing, so a
+half-typed word does not reach an Output. It can be linked to a Text Controller.
+
+### Bundled Font
+
+One of the typefaces Difracta ships, so text looks the same on every Output
+whatever the machine has installed. They are `font` definitions in the Catalog,
+each one weight, and a text Visual chooses one through its Font Parameter. The
+Runtime serves their files at `GET /fonts/<file>` and an Output loads all of
+them when it starts. For a character its font lacks, text falls back to the
+first Bundled Font and then to the system's. Do not call a Bundled Font a
+typeface family or a font file.
+
+### Text
+
+The built-in Visual that shows a Text Parameter's words on a Target in a Bundled
+Font. Fit takes the largest size at which the wrapped text fits, Fill Width
+spans the Target with the lines as typed, Fixed draws at Size and wraps. It has
+a Fill Color and an outline and no Cues.
+
+### Counter
+
+The built-in Visual that shows a number its Cues move: Increment and Decrement
+by Step, Reset back to Start, within Minimum and Maximum. The count belongs to
+the Visual Instance, so it starts over when the Scene plays and is never saved.
+Its Animation is how a digit becomes the next: Cut, Roll, Flip or Pop.
+
 ### Image
 
 The built-in shader Visual that shows an image Media item on its Target, through
@@ -296,8 +329,9 @@ item; Keep Warm has the Layer hold its own while stopped.
 An Installation-owned, named value that Parameter Links spread over many Layers
 across Scenes. A Controller has a fixed kind and a value that is saved with the
 Installation: a Number Controller holds a value from zero through one, shown as
-a percentage; a Color Controller holds one RGBA color. Its value is the Address
-`controller/<id>/value`, so Macros, OSC and the CLI move it like anything else.
+a percentage; a Color Controller holds one RGBA color; a Text Controller holds
+text, line breaks allowed. Its value is the Address `controller/<id>/value`, so
+Macros, OSC and the CLI move it like anything else.
 
 Do not call a Color Controller a Palette. A Palette retains its deferred
 multi-color meaning.
@@ -310,17 +344,19 @@ and other Groups and has no value of its own.
 ### Parameter Link
 
 The relationship through which one Controller drives one Layer Address: a
-number, boolean or color Parameter, opacity, mix or enabled. An Address has at
-most one Parameter Link; linking it to another Controller moves it. In UI prose,
-the target is "controlled by" its Controller, and the row shows the effective
-value with no control of its own.
+number, boolean, color or text Parameter, opacity, mix or enabled. An Address
+has at most one Parameter Link; linking it to another Controller moves it. In UI
+prose, the target is "controlled by" its Controller, and the row shows the
+effective value with no control of its own.
 
-Color links copy the color. Number links map Controller values zero and one to
-two anchors in the target's units, interpolate linearly between them (reversed
-anchors invert), and clamp and snap to the target's range and step. A boolean
-target is on from one half. Choice Parameters cannot be linked. The value
-authored under a linked Address stays in the document and takes over again,
-frozen at the last effective value, when the Link goes.
+Color links copy the color, and text links the text, its line breaks becoming
+spaces at a Text Parameter of one line; a Text Controller drives only Text
+Parameters. Number links map Controller values zero and one to two anchors in
+the target's units, interpolate linearly between them (reversed anchors invert),
+and clamp and snap to the target's range and step. A boolean target is on from
+one half. Choice Parameters cannot be linked. The value authored under a linked
+Address stays in the document and takes over again, frozen at the last effective
+value, when the Link goes.
 
 ### Macro
 
@@ -565,10 +601,10 @@ resubscribes. Revision is distinct from the file format version.
 
 The name of one controllable property or trigger in an Installation, such as
 `installation/blackout` or `layer/<id>/opacity`. An Address resolves to a value
-type (boolean, number, color, choice, media or trigger), a default and, for
-numbers, a range. Layer enabled, opacity, blend mode, mix and every Parameter
-have one. Controllers, Parameter Links, Macros, OSC and the CLI all read and
-write Addresses; the Inspector edits them through undoable commands.
+type (boolean, number, color, choice, media, text or trigger), a default and,
+for numbers, a range. Layer enabled, opacity, blend mode, mix and every
+Parameter have one. Controllers, Parameter Links, Macros, OSC and the CLI all
+read and write Addresses; the Inspector edits them through undoable commands.
 
 ### Command
 

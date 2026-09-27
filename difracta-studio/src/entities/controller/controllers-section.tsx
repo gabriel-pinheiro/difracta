@@ -20,8 +20,8 @@ import { ControllerRows } from "./controller-rows";
 import { controllerIcons, controllerKindLabels } from "./controller-icons";
 
 /**
- * Navigator section listing the Controllers as a tree of Groups. Number and
- * Color Controllers are values Parameter Links spread over Layers; Groups
+ * Navigator section listing the Controllers as a tree of Groups. Number,
+ * Color and Text Controllers are values Parameter Links spread over Layers; Groups
  * only arrange them. Creating asks for a name, since a Controller is named
  * for what it drives ("Energy", "Strobe Color") rather than numbered. The
  * section starts collapsed unless it is empty, where the empty row is the

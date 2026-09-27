@@ -28,8 +28,36 @@ export {
   isShaderVisual,
   type ShaderUpdate,
   type ShaderVisual,
+  type ShaderVisualContext,
   type ShaderVisualInstance,
 } from "./shader-visual.ts";
+export {
+  NO_TEXT,
+  TEXT_ALIGNS,
+  TEXT_GLSL,
+  type TextAlign,
+  type TextBlock,
+  type TextBlockRequest,
+  type TextContext,
+  type TextHandle,
+  type TextRaster,
+  type TextRows,
+  type TextRowsRequest,
+  type TextStyle,
+} from "./text.ts";
+export {
+  TEXT_FITS,
+  balanceLines,
+  breakLines,
+  layoutText,
+  paragraphs,
+  rasterSize,
+  widestWord,
+  type TextFit,
+  type TextLayout,
+  type TextLayoutRequest,
+  type TextMeasure,
+} from "./text-layout.ts";
 export {
   createShaderPlayer,
   type ShaderFrameResult,

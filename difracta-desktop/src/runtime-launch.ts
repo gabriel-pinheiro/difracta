@@ -10,6 +10,8 @@ export interface RuntimeLocations {
   readonly thumbnailsDir: string;
   /** The Bundled Media's clips and thumbnails. */
   readonly bundledDir: string;
+  /** The Bundled Fonts. */
+  readonly fontsDir: string;
 }
 
 export function runtimeLocations(distDir: string): RuntimeLocations {
@@ -19,6 +21,7 @@ export function runtimeLocations(distDir: string): RuntimeLocations {
     outputDist: path.join(distDir, "output"),
     thumbnailsDir: path.join(distDir, "thumbnails"),
     bundledDir: path.join(distDir, "bundled"),
+    fontsDir: path.join(distDir, "fonts"),
   };
 }
 
@@ -52,7 +55,7 @@ export function runtimeArguments(options: {
 
 /**
  * The runtime's environment: Desktop's own, plus where the built Studio,
- * Output page, thumbnails and Bundled Media are. The bundled runtime cannot find them
+ * Output page, thumbnails, Bundled Media and Bundled Fonts are. The bundled runtime cannot find them
  * relative to its source files the way a checkout does. Desktop decides the
  * file, host and port on the command line, so their variables do not travel.
  */
@@ -70,5 +73,6 @@ export function runtimeEnvironment(
     DIFRACTA_OUTPUT_DIST: locations.outputDist,
     DIFRACTA_THUMBNAILS_DIR: locations.thumbnailsDir,
     DIFRACTA_BUNDLED_DIR: locations.bundledDir,
+    DIFRACTA_FONTS_DIR: locations.fontsDir,
   };
 }

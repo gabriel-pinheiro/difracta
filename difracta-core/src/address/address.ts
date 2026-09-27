@@ -2,6 +2,7 @@ import { emptyCatalog, type Catalog } from "../catalog/catalog.ts";
 import {
   ColorSchema,
   numberProblem,
+  textProblem,
   type NumberBounds,
   type ParameterDefinition,
   type ParameterValue,
@@ -36,7 +37,7 @@ import type { PatchPath } from "../document/patch.ts";
  * opacity and a Visual's Parameter look and behave the same.
  */
 export type AddressValueType =
-  "boolean" | "number" | "color" | "choice" | "media" | "trigger";
+  "boolean" | "number" | "color" | "choice" | "media" | "text" | "trigger";
 
 export type AddressValue = ParameterValue;
 
@@ -49,6 +50,8 @@ export interface NumberRange extends NumberBounds {
 export interface ChoiceOption {
   readonly value: string;
   readonly label: string;
+  /** The id of the Bundled Font a control draws this option in. */
+  readonly font?: string;
 }
 
 export interface ResolvedAddress {
@@ -66,6 +69,8 @@ export interface ResolvedAddress {
   readonly options?: readonly ChoiceOption[];
   /** The type of Media item a media Address takes. */
   readonly accepts?: MediaType;
+  /** Whether a text Address takes line breaks. */
+  readonly multiline?: boolean;
 }
 
 /** What resolving needs from a Document: the tables that own Addresses. */
@@ -166,6 +171,12 @@ function fromParameter(
         accepts: definition.accepts,
         options: mediaOptions(source, catalog, definition.accepts),
       };
+    case "text":
+      return {
+        ...base,
+        type: "text",
+        ...(definition.multiline === true ? { multiline: true } : {}),
+      };
   }
 }
 
@@ -250,6 +261,8 @@ const patterns: readonly AddressPattern[] = [
         owner: controller.name,
         path: ["controllers", id, "value"] as const,
       };
+      if (controller.kind === "text")
+        return { ...base, type: "text", multiline: true };
       return controller.kind === "number"
         ? {
             ...base,
@@ -485,14 +498,15 @@ export function controllerAddress(
 /**
  * Whether a Controller of `kind` can drive `resolved`: Layer Addresses only,
  * a Number Controller onto numbers and booleans, a Color Controller onto
- * colors. Choices have no scale to map onto, and a media Address is a
- * reference into the Installation, not a value.
+ * colors, a Text Controller onto text. Choices have no scale to map onto,
+ * and a media Address is a reference into the Installation, not a value.
  */
 export function linkable(
   resolved: ResolvedAddress,
-  kind: "number" | "color",
+  kind: "number" | "color" | "text",
 ): boolean {
   if (resolved.path[0] !== "layers") return false;
+  if (kind === "text") return resolved.type === "text";
   return kind === "number"
     ? resolved.type === "number" || resolved.type === "boolean"
     : resolved.type === "color";
@@ -531,6 +545,8 @@ export function addressValueProblem(
                   .join(", ")}`
               : "; the Installation has none"
           }`;
+    case "text":
+      return textProblem(value, resolved.multiline === true);
     case "trigger":
       return value === undefined || value === null
         ? undefined

@@ -126,4 +126,5 @@ export const testCatalog = new Catalog({
     throwsOnSecondFrame,
   ],
   filters: [...builtInCatalog.filters(), passthrough, invert, halve],
+  fonts: builtInCatalog.fonts(),
 });

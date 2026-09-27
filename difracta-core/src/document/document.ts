@@ -19,6 +19,7 @@ import {
 import { ColorSchema, ParameterValuesSchema } from "../catalog/parameters.ts";
 import { CornerNameSchema, PointSchema, QuadSchema } from "./geometry.ts";
 import { DEFAULT_ORDER_KEY } from "./order.ts";
+import { settings } from "../settings.ts";
 
 /**
  * A Document is one Installation as normalized entity tables. Every table is
@@ -379,14 +380,15 @@ const ControllerBase = {
   order: z.string().min(1).default(DEFAULT_ORDER_KEY),
 };
 
-export const CONTROLLER_KINDS = ["number", "color", "group"] as const;
+export const CONTROLLER_KINDS = ["number", "color", "text", "group"] as const;
 export type ControllerKind = (typeof CONTROLLER_KINDS)[number];
 
 /**
  * A Controller is one Installation-wide value that Parameter Links spread
  * over many Layers: a Number Controller holds 0 to 1, a Color Controller a
- * color. Its value is part of the file, so a Color Controller doubles as a
- * saved palette entry. A Group only arranges Controllers in the navigator.
+ * color, a Text Controller text, line breaks included. Its value is part of
+ * the file, so a Color Controller doubles as a saved palette entry. A Group
+ * only arranges Controllers in the navigator.
  */
 export const ControllerSchema = z.discriminatedUnion("kind", [
   z
@@ -399,11 +401,19 @@ export const ControllerSchema = z.discriminatedUnion("kind", [
   z
     .object({ ...ControllerBase, kind: z.literal("color"), value: ColorSchema })
     .strict(),
+  z
+    .object({
+      ...ControllerBase,
+      kind: z.literal("text"),
+      value: z.string().max(settings.text.maxLength),
+    })
+    .strict(),
   z.object({ ...ControllerBase, kind: z.literal("group") }).strict(),
 ]);
 export type Controller = Entity<typeof ControllerSchema, ControllerId>;
 export type NumberController = Extract<Controller, { kind: "number" }>;
 export type ColorController = Extract<Controller, { kind: "color" }>;
+export type TextController = Extract<Controller, { kind: "text" }>;
 
 /**
  * A Parameter Link makes a Controller drive one Address. A number link maps
@@ -437,7 +447,7 @@ const MacroBase = {
 export const MACRO_KINDS = ["macro", "group"] as const;
 export type MacroKind = (typeof MACRO_KINDS)[number];
 
-/** What an Address can hold: a number, a switch, a choice's value or a color. */
+/** What an Address can hold: a number, a switch, a color, or a string (a choice's value, a Media item's id, text). */
 export const AddressValueSchema = z.union([
   z.number(),
   z.boolean(),

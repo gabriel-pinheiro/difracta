@@ -200,7 +200,9 @@ export class OscServer {
             numberFrom(message.args),
             resolveAddress(session.document, address)?.range,
           )
-        : colorFrom(message.args);
+        : controller.kind === "text"
+          ? textFrom(message.args)
+          : colorFrom(message.args);
     if (value === undefined) {
       this.#reject(
         "bad-arguments",
@@ -447,6 +449,20 @@ function snapped(
   return tidy(
     range.min + Math.round((value - range.min) / range.step) * range.step,
   );
+}
+
+/**
+ * Text from one string argument, cut at the most a Text Controller holds,
+ * and one short of it when the cut would split a character in two.
+ */
+function textFrom(args: readonly OscArgument[]): string | undefined {
+  const [arg] = args;
+  if (arg?.type !== "string" || args.length !== 1) return undefined;
+  const text = arg.value.slice(0, settings.text.maxLength);
+  const last = text.charCodeAt(text.length - 1);
+  const split =
+    arg.value.length > text.length && last >= 0xd800 && last <= 0xdbff;
+  return split ? text.slice(0, -1) : text;
 }
 
 /** A color from one RGBA argument, or three or four numbers in 0..1. */

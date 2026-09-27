@@ -172,6 +172,7 @@ Flags and their environment variables (`difracta-runtime/src/config.ts`):
 |                       | `DIFRACTA_STUDIO_DIST`    | `difracta-studio/dist` |
 |                       | `DIFRACTA_OUTPUT_DIST`    | `difracta-output/dist` |
 |                       | `DIFRACTA_THUMBNAILS_DIR` | the Catalog's own      |
+|                       | `DIFRACTA_FONTS_DIR`      | the Catalog's own      |
 
 File paths in requests are absolute paths on the runtime's machine; the CLI
 resolves a relative one against the shell's directory first.

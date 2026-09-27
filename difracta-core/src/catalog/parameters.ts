@@ -67,6 +67,8 @@ export interface ChoiceParameter extends ParameterBase {
   readonly options: readonly {
     readonly value: string;
     readonly label: string;
+    /** The id of the Bundled Font a control draws this option in. */
+    readonly font?: string;
   }[];
 }
 
@@ -86,12 +88,23 @@ export interface MediaParameter extends ParameterBase {
   readonly default: "";
 }
 
+/**
+ * Text to show, at most `settings.text.maxLength` characters. Without
+ * `multiline` it holds no line break.
+ */
+export interface TextParameter extends ParameterBase {
+  readonly kind: "text";
+  readonly default: string;
+  readonly multiline?: boolean;
+}
+
 export type ParameterDefinition =
   | NumberParameter
   | ColorParameter
   | ChoiceParameter
   | BooleanParameter
-  | MediaParameter;
+  | MediaParameter
+  | TextParameter;
 
 export type ParameterKind = ParameterDefinition["kind"];
 
@@ -134,6 +147,22 @@ export function numberProblem(
     : `must be a multiple of ${step} from ${bounds.min} (got ${value})`;
 }
 
+/**
+ * Why `value` is not text a Parameter or a Text Controller may hold, or
+ * undefined when it is: a string within `settings.text.maxLength`, on one
+ * line unless `multiline`.
+ */
+export function textProblem(
+  value: unknown,
+  multiline: boolean,
+): string | undefined {
+  if (typeof value !== "string") return "must be a string of text";
+  if (value.length > settings.text.maxLength)
+    return `must be at most ${settings.text.maxLength} characters (got ${value.length})`;
+  if (!multiline && /[\r\n]/.test(value)) return "must be a single line";
+  return undefined;
+}
+
 /** Why `value` is not acceptable for `definition`, or undefined when it is. */
 export function validateParameterValue(
   definition: ParameterDefinition,
@@ -156,6 +185,8 @@ export function validateParameterValue(
       return typeof value === "string"
         ? undefined
         : `must be the id of ${definition.accepts === "image" ? "an image" : "a video"} Media item, or "" for none`;
+    case "text":
+      return textProblem(value, definition.multiline === true);
   }
 }
 

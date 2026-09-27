@@ -348,23 +348,25 @@ choice of Visual is a separate gesture with its own picker.
 ### Controllers and Parameter Links
 
 A Controller is one Installation-wide value that many Layers follow: a Number
-Controller holds 0 to 1, a Color Controller a color, and both are Addresses
-(`controller/<id>/value`) written like any other, from the inspector, a Macro,
-OSC or the CLI. Controllers live in one `controllers` table with the same
-`parentId` and `order` shape as Layers, so Groups arrange them in the navigator
-with the same drag, move and ungroup commands; a Group has no value. Their
-values are part of the file: a Color Controller is also how a static
-Installation keeps its palette.
+Controller holds 0 to 1, a Color Controller a color, a Text Controller text with
+its line breaks, and each is an Address (`controller/<id>/value`) written like
+any other, from the inspector, a Macro, OSC or the CLI. Controllers live in one
+`controllers` table with the same `parentId` and `order` shape as Layers, so
+Groups arrange them in the navigator with the same drag, move and ungroup
+commands; a Group has no value. Their values are part of the file: a Color
+Controller is also how a static Installation keeps its palette.
 
 A Parameter Link (`links` table) makes one Controller drive one Layer Address: a
-number, boolean or color Parameter, opacity, mix or enabled. A number link
+number, boolean, color or text Parameter, opacity, mix or enabled. A number link
 stores `anchors`, the target values at Controller 0 and 1, and maps linearly
 between them, clamped to the target's range and snapped to its step; reversed
 anchors invert. Anchors are checked when written: both must lie within the
 target's range and on its step grid, so the endpoints the inspector shows are
 the values the Controller reaches. A boolean target is on from 0.5; a color link
-copies the color. An Address has at most one Link; linking it elsewhere moves
-it. `link.create` takes any number of Addresses, so wiring one Controller to the
+copies the color, and a text link the text, with every line break turned into a
+space at a target of one line. A Text Controller drives text Parameters and
+nothing else. An Address has at most one Link; linking it elsewhere moves it.
+`link.create` takes any number of Addresses, so wiring one Controller to the
 same Parameter on thirty Layers is one command and one undo step.
 
 Nothing is materialized. The Layer keeps its authored value in the document, and
@@ -456,21 +458,21 @@ Macro-wide value would be a second concept for the same effect.
 ### Catalog and Parameters
 
 The Catalog is the set of Visual and Filter definitions a runtime knows
-(`core/catalog/`), and its Bundled Media (see Bundled Media above). A definition
-is code with a stable id, a name, a description, a backend (`canvas` or
-`shader`), an optional `recommended` flag, a Parameter schema, and for Visuals
-the Paths they follow and the Cues they answer to. Core owns the types and the
-validation; `difracta-visuals` owns the entries and their thumbnails, and the
-runtime passes that Catalog to the command registry. A definition's file also
-carries its implementation, written against the SDK in `difracta-render` (see
-Visuals and Filters below); the runtime and Studio only read the metadata. A
-definition may carry `notes`: paragraphs for whoever composes with it, human or
-agent, saying what the code cannot (how it reads on a Surface, which Parameters
-interact, what it costs, what to stack it with). The runtime answers
-`catalog.list` with its definitions minus their functions and shader source,
-which is how the CLI's `catalog` prints the notes and a reference generated from
-the schema, and how its `addresses` resolves Parameters without shipping the
-Visuals package.
+(`core/catalog/`), its Bundled Media (see Bundled Media above) and its Bundled
+Fonts (see Bundled Fonts below). A definition is code with a stable id, a name,
+a description, a backend (`canvas` or `shader`), an optional `recommended` flag,
+a Parameter schema, and for Visuals the Paths they follow and the Cues they
+answer to. Core owns the types and the validation; `difracta-visuals` owns the
+entries and their thumbnails, and the runtime passes that Catalog to the command
+registry. A definition's file also carries its implementation, written against
+the SDK in `difracta-render` (see Visuals and Filters below); the runtime and
+Studio only read the metadata. A definition may carry `notes`: paragraphs for
+whoever composes with it, human or agent, saying what the code cannot (how it
+reads on a Surface, which Parameters interact, what it costs, what to stack it
+with). The runtime answers `catalog.list` with its definitions minus their
+functions and shader source, which is how the CLI's `catalog` prints the notes
+and a reference generated from the schema, and how its `addresses` resolves
+Parameters without shipping the Visuals package.
 
 Thumbnails are rendered, not drawn: `npm run thumbnails` in `difracta-visuals`
 runs each definition through the compositor in a headless Chromium (Playwright),
@@ -483,14 +485,18 @@ ring shows displacements a checkerboard alone would hide. Every command's
 `apply` receives it, so `layer.visual` and `layer.filter` can refuse an unknown
 id and check values.
 
-A Parameter is declared once, in the definition, as one of five kinds: number
+A Parameter is declared once, in the definition, as one of six kinds: number
 (with min, max, step and unit), color (four components from 0 to 1), choice
-(named options), boolean or media (a Media file's id, of the accepted type, or
-`""`; see Media). Values live on the Layer in `parameters`, keyed by Parameter
-name; picking a definition writes its id and the defaults in one command, and a
-complete set of values can come along instead, which is how a pick is put back.
-A Layer whose id the Catalog no longer has keeps it: the inspector shows the id
-as unavailable and the Output draws nothing for that Layer.
+(named options, each optionally naming the Bundled Font a control draws it in),
+boolean, media (a Media file's id, of the accepted type, or `""`; see Media) or
+text (a string of at most `settings.text.maxLength` characters, on one line
+unless the declaration says `multiline`; `textProblem` is the one rule, for a
+Parameter, an Address and a Text Controller alike). Values live on the Layer in
+`parameters`, keyed by Parameter name; picking a definition writes its id and
+the defaults in one command, and a complete set of values can come along
+instead, which is how a pick is put back. A Layer whose id the Catalog no longer
+has keeps it: the inspector shows the id as unavailable and the Output draws
+nothing for that Layer.
 
 **Why the Catalog is injected rather than imported by core:** the same commands
 run wherever the registry does, including a CLI with no Visuals at hand, and a
@@ -498,6 +504,27 @@ runtime built with a different Catalog validates against exactly what it can
 render. **Why an unknown id is a warning and not an error:** a Catalog changes
 between versions and between machines; a file that opened yesterday must open
 today, with one Layer flagged, rather than refuse as a whole.
+
+### Bundled Fonts
+
+The typefaces text is drawn in are part of the Catalog (`FontDefinition`: id,
+name, description and files), defined in `difracta-visuals/src/fonts/fonts.ts`
+with their files in `difracta-visuals/fonts/` and their licences beside them.
+Each is one weight in up to two files, Latin and Latin Extended. The runtime
+serves the folder at `GET /fonts/<file>` (`settings.runtime.fontsPath`) with any
+origin allowed to read, from inside `@difracta/visuals` or from where
+`DIFRACTA_FONTS_DIR` says, which is how Desktop's build, copying it to
+`dist/fonts`, serves it from the asar archive. `catalog.list` carries the fonts,
+and `difracta catalog` lists them. A text Visual declares its Font with
+`fontParameter()`, a choice over the fonts' ids whose options each name their
+font.
+
+**Why fonts ship with Difracta:** an Output runs on whatever machine faces the
+wall, a TV's browser included, and `system-ui` is another typeface on each; a
+font installed on the laptop that made the show is not on the machine that plays
+it. **Why a choice Parameter and no `font` kind:** the fonts are fixed at build
+time, so the options are known where the Parameter is declared, and every reader
+of choices, the CLI, Macros and validation, works as it is.
 
 ### Calibration Mode
 
@@ -748,19 +775,21 @@ The tree has two branches, one leaf per Controller at `/controller/<id>` and one
 per Macro at `/macro/<id>`, keyed by id so a rename or a move into a Group never
 breaks a mapping; the name, with its Group ("Looks · Tint"), is the leaf's
 DESCRIPTION. A Number Controller is a float with RANGE 0..1 and CLIPMODE both, a
-Color Controller an RGBA color, a Macro an impulse. Groups are not nodes.
-Nothing else is exposed: a Layer's Parameters are reached through a Controller,
-so that a value a hub drives is marked as driven in every inspector, and through
-Macros for everything else.
+Color Controller an RGBA color, a Text Controller a string, a Macro an impulse.
+Groups are not nodes. Nothing else is exposed: a Layer's Parameters are reached
+through a Controller, so that a value a hub drives is marked as driven in every
+inspector, and through Macros for everything else.
 
 An incoming message becomes the command Studio would send, under the actor
 "osc": a Controller message is `address.set` on `controller/<id>/value` (one
 number or a boolean for a Number Controller, clamped to 0..1 and rounded past
 float32 noise; one RGBA argument or three or four numbers for a Color
-Controller), a Macro message is `address.trigger` on `macro/<id>/run` with any
-or no arguments. Bundles apply in order, their time tags ignored; wildcard
-addresses are rejected. Rejections are logged once per reason per window with a
-count of what was suppressed, so a misrouted fader does not flood the log.
+Controller; one string for a Text Controller, cut at the longest text it holds,
+never through a character), a Macro message is `address.trigger` on
+`macro/<id>/run` with any or no arguments. Bundles apply in order, their time
+tags ignored; wildcard addresses are rejected. Rejections are logged once per
+reason per window with a count of what was suppressed, so a misrouted fader does
+not flood the log.
 
 The WebSocket carries the OSCQuery commands LISTEN and IGNORE, after which the
 runtime streams every change to a listened Controller as a binary OSC message,
@@ -1681,6 +1710,51 @@ Autoplay and the element's end, and holds a playback while playing or paused;
 stopped, it shows the shared handle or nothing, unless Keep Warm has it hold the
 playback for the next Play.
 
+Text is drawn by shader Visuals through `text` in their context (`sdk/text.ts`),
+the engine's `TextRasters` (`text-rasters.ts`) over a `FontLoader`
+(`font-loader.ts`). The loader gives every file of every Bundled Font a
+`FontFace` of its own family when the compositor is made, so all are loaded by
+the time a Layer asks; a font is ready with its first file, and text in it is
+drawn with a font list of its files, then the first Bundled Font's, then the
+system's. The instance breaks its own lines: `text.measure(style)` answers
+widths in ems, and `layoutText` (`sdk/text-layout.ts`), which is pure and tested
+with a made-up measure, turns a text, a box and a Fit into lines and a size, Fit
+by halving toward the largest size at which the wrapped block still fits and
+then balancing its lines. `text.block` then rasterizes those lines, and
+`text.rows` a list of texts as cells of one size, each centered in its own, in
+as many columns as keep the picture nearest to square (`gridColumns`), which is
+how Counter gets its digits: eleven cells in one column would reach the longest
+side a picture may have at a fifth of the size a grid allows, and the digits
+would be stretched on any large Target. Counter asks for its Prefix and Suffix
+as a second picture, since a long one would widen every digit's cell. Both
+answer a handle shaped like a Media handle, returned under `textures` and
+uploaded, bound and deleted by `MediaTextures` like a picture. The canvas holds
+coverage on opaque black, the fill in red and the outline in green, drawn with
+`lighter` so each channel adds up alone, and `text_color` in `TEXT_GLSL` colors
+a sample from two uniforms. A request is rasterized once and shared by every
+instance making it; the compositor tells `TextRasters` each frame which handles
+instances hold, and it forgets the rest, while an instance still holding a
+forgotten handle keeps its canvas. Sizes asked for go through `rasterSize`, a
+ladder a quarter octave apart, and a picture that would pass
+`settings.text.maxRasterSize` is drawn at the largest size that fits, which its
+handle says. Everything answers undefined until the font is there, `version`
+advances when one arrives, and a font that failed throws, so its Layers stop
+with an issue naming the font. Text (`visuals/text.ts`) and Counter
+(`visuals/counter.ts`) are the two Visuals built on it; Counter's count and its
+columns, each easing along the strip of digits the way the count went, are
+`visuals/counter-count.ts`.
+
+**Why the browser rasterizes whole strings, and no glyph atlas or distance
+field:** shaping, kerning, accents and scripts written right to left come with
+`fillText`, and a text changes far less often than a frame is drawn. **Why
+coverage and not color:** a color swept by a Controller would otherwise draw and
+upload the text on every frame; as uniforms, colors cost nothing, at the price
+of emoji showing as silhouettes. **Why a ladder of sizes:** a Size ridden live
+would otherwise rasterize per frame, and the picture is only ever shrunk, by
+less than a fifth. **Why shader Visuals only:** a canvas Visual draws text on
+its own canvas already, and what it would gain is the shared font, not the
+cache.
+
 Cues reach the instance, canvas or shader, as `cue(key)` before its next
 `update`, and the instance keeps whatever it needs: a list of live envelopes, a
 counter, a beam per hit. An event is dropped by the Visual once it is no longer
@@ -1750,38 +1824,47 @@ label, the control for the Address's type and, when the value is not the
 default, a reset button; numbers are a slider with a readout that turns into an
 input when clicked (typed values clamp to the range), colors are the browser's
 color input with an editable hex and an alpha slider, choices a select, booleans
-a switch. A media Parameter is a select over the Media files of the type it
-accepts, None first, with a "+" menu beside it that adds an item and picks it on
-the Layer in one flow, as the "+" on a Path row makes a Path: File… through the
-Media section's picker, Bundled… as the section's Bundled… but on an entry of
-the accepted type, setting the Parameter to the new item before the Library
-opens on it, with only entries of that type offered; Escape there puts the
-Parameter back and removes the item. A value whose item is gone shows as None.
-The options come with the Address (`layerAddresses` takes the Media table), so
-the Link picker and the Macro picker, which resolve against the whole document,
-list the same items. Sliders and the color input stream every position through
-`address.edit`, one send in flight at a time. The Parameters header has Reset
-all, one `layer.reset` step. Section open states are remembered per section.
+a switch. A choice whose options name a Bundled Font draws each in its face
+(`fonts/bundled-fonts.ts`): the chosen one's font is loaded when the row
+appears, the others' when the list first opens, from `/fonts/<file>` on the
+page's origin, and an option whose font fails stays in Studio's own. A text
+Parameter is a field, several lines tall when the Parameter takes line breaks,
+that commits on Enter or when it is left and never while typing, since every
+commit reaches the wall; where Enter breaks the line, Ctrl+Enter commits, and
+Escape puts back what the document holds. A media Parameter is a select over the
+Media files of the type it accepts, None first, with a "+" menu beside it that
+adds an item and picks it on the Layer in one flow, as the "+" on a Path row
+makes a Path: File… through the Media section's picker, Bundled… as the
+section's Bundled… but on an entry of the accepted type, setting the Parameter
+to the new item before the Library opens on it, with only entries of that type
+offered; Escape there puts the Parameter back and removes the item. A value
+whose item is gone shows as None. The options come with the Address
+(`layerAddresses` takes the Media table), so the Link picker and the Macro
+picker, which resolve against the whole document, list the same items. Sliders
+and the color input stream every position through `address.edit`, one send in
+flight at a time. The Parameters header has Reset all, one `layer.reset` step.
+Section open states are remembered per section.
 
-The Controllers section is a tree like a Scene's: Number and Color Controllers
-with their live value at the right (a percentage, a swatch), Groups that open
-and close, drag among siblings and into Groups. It starts closed unless it is
-empty, where the hint to add one is all there is. The section's "+" offers the
-three kinds and asks for a name, since a Controller is named for what it drives.
-The Controller inspector has the name, the value as the same Address row a
-Parameter gets, and a Links section listing every target with its Layer, a
-number Link's anchors editable in place, unlink, and "Add link…". That opens the
-Link picker: every compatible Address in the Installation grouped by Scene, a
-search box matching Scene, Layer, Visual and Parameter names word by word, tick
-boxes, "Select all results" and one Link button, so one Controller reaches the
-same Parameter on thirty Layers in a few keystrokes; an Address linked elsewhere
-shows its Controller and moves on pick. On a Layer, every Address row ends in a
-link menu: "Link to" lists the Controllers of the right kind, "New Number
-Controller" or "New Color Controller" makes one named after the row ("Koi Pond
-Opacity") and links it in one step, and a linked row shows the effective value
-read-only, a chip with the Controller's name and value that opens it, and
-Unlink, so there is no control to mistake for an override. A Layer whose Enabled
-is linked shows a link glyph in place of its eye.
+The Controllers section is a tree like a Scene's: Number, Color and Text
+Controllers with their live value at the right (a percentage, a swatch, the
+first words), Groups that open and close, drag among siblings and into Groups.
+It starts closed unless it is empty, where the hint to add one is all there is.
+The section's "+" offers the four kinds and asks for a name, since a Controller
+is named for what it drives. The Controller inspector has the name, the value as
+the same Address row a Parameter gets, and a Links section listing every target
+with its Layer, a number Link's anchors editable in place, unlink, and "Add
+link…". That opens the Link picker: every compatible Address in the Installation
+grouped by Scene, a search box matching Scene, Layer, Visual and Parameter names
+word by word, tick boxes, "Select all results" and one Link button, so one
+Controller reaches the same Parameter on thirty Layers in a few keystrokes; an
+Address linked elsewhere shows its Controller and moves on pick. On a Layer,
+every Address row ends in a link menu: "Link to" lists the Controllers of the
+right kind, "New Number Controller", "New Color Controller" or "New Text
+Controller" makes one named after the row ("Koi Pond Opacity") and links it in
+one step, and a linked row shows the effective value read-only, a chip with the
+Controller's name and value that opens it, and Unlink, so there is no control to
+mistake for an override. A Layer whose Enabled is linked shows a link glyph in
+place of its eye.
 
 The Macros section has the same shape, each Macro row with its action count and
 a Run button, and starts closed unless it is empty. The Macro inspector has the

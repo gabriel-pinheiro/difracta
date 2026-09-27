@@ -50,6 +50,7 @@ beforeEach(async () => {
     studioDist: undefined,
     outputDist: undefined,
     thumbnailsDir: undefined,
+    fontsDir: undefined,
     bundledDir: undefined,
     autosaveIntervalMs: 60_000,
     oscPort: undefined,
@@ -486,6 +487,7 @@ describe("live protocol", () => {
     const catalog = await studio.request<{
       visuals: Record<string, unknown>[];
       filters: Record<string, unknown>[];
+      fonts: Record<string, unknown>[];
     }>("catalog.list", {});
     expect(catalog.visuals.map((visual) => visual.id)).toEqual([
       "barcode-runner",
@@ -500,6 +502,7 @@ describe("live protocol", () => {
       "confetti",
       "contour-drift",
       "conveyor",
+      "counter",
       "crt-glitch",
       "fireworks",
       "flame",
@@ -560,6 +563,7 @@ describe("live protocol", () => {
       "sun-surface",
       "synth-horizon",
       "tension-lines",
+      "text",
       "thunder",
       "tile-cascade",
       "tunnel",
@@ -582,6 +586,11 @@ describe("live protocol", () => {
       "tile-scramble",
       "wave-distortion",
     ]);
+    // The Bundled Fonts come in the Catalog's order, the fallback first.
+    expect(catalog.fonts.map((font) => font.id)).toEqual(
+      builtInCatalog.fonts().map((font) => font.id),
+    );
+    expect(catalog.fonts[0]).toMatchObject({ kind: "font", id: "inter" });
     expect(catalog.filters[0]).not.toHaveProperty("fragment");
     const koi = catalog.visuals.find((visual) => visual.id === "koi-pond")!;
     expect(koi.parameters).toHaveProperty("speed");

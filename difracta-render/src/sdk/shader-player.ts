@@ -5,6 +5,7 @@ import { NO_MEDIA, type MediaContext, type Textures } from "./media.ts";
 import { resolveParameters } from "./parameters.ts";
 import { pathTracker, type PathShapes } from "./path.ts";
 import { createRandom } from "./random.ts";
+import { NO_TEXT, type TextContext } from "./text.ts";
 import type { ShaderVisual, ShaderVisualInstance } from "./shader-visual.ts";
 import type { Uniforms } from "./uniforms.ts";
 import { MAX_FRAME_SECONDS } from "./visual.ts";
@@ -57,11 +58,13 @@ export function createShaderPlayer(
     height,
     seed,
     media = NO_MEDIA,
+    text = NO_TEXT,
   }: {
     readonly width: number;
     readonly height: number;
     readonly seed: number | string;
     readonly media?: MediaContext;
+    readonly text?: TextContext;
   },
 ): ShaderPlayer {
   let instance: ShaderVisualInstance<typeof visual.parameters> | undefined;
@@ -114,6 +117,7 @@ export function createShaderPlayer(
           paths,
           random: createRandom(seed),
           media,
+          text,
         });
         const current = instance;
         if (current === undefined)

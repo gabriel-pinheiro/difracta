@@ -39,6 +39,7 @@ export default defineConfig(({ command }) => ({
       "/document": { target: runtime },
       "/catalog": { target: runtime },
       "/bundled": { target: runtime },
+      "/fonts": { target: runtime },
       "/output": { target: output, ws: true },
     },
   },

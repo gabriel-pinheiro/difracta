@@ -9,6 +9,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { textPreview } from "@/inspector/fields/text-format";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useExpansion } from "@/navigator/expansion";
 import {
@@ -21,6 +22,9 @@ import { useRemoveEntity } from "@/selection/remove-selection";
 import { isSelected, useSelection } from "@/selection/selection";
 
 import { controllerIcons } from "./controller-icons";
+
+/** The most characters of a Text Controller's text a row shows. */
+const PREVIEW_LENGTH = 24;
 
 /** The Controllers under the root or one Group as rows, with their live value at the right. */
 export function ControllerRows({
@@ -157,7 +161,7 @@ export function ControllerRows({
   );
 }
 
-/** A Number Controller's percent or a Color Controller's swatch, live. */
+/** A Number Controller's percent, a Color Controller's swatch or the start of a Text Controller's text, live. */
 function ValueReadout({ controller }: { readonly controller: Controller }) {
   if (controller.kind === "number")
     return (
@@ -172,6 +176,15 @@ function ValueReadout({ controller }: { readonly controller: Controller }) {
         title={`${controller.name} color`}
         style={{ background: rgba(controller.value) }}
       />
+    );
+  if (controller.kind === "text")
+    return (
+      <span
+        className="max-w-[40%] shrink-0 truncate text-[0.6875rem] text-muted-foreground"
+        title={controller.value}
+      >
+        {textPreview(controller.value, PREVIEW_LENGTH)}
+      </span>
     );
   return null;
 }

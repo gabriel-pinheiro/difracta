@@ -13,7 +13,8 @@ import type { OscArgument } from "./osc-codec.ts";
  * leaf per Controller and per Macro, each named by its id so a rename or a
  * move into a Group never breaks a mapping; the name, with its Group, is
  * the node's DESCRIPTION. A Number Controller is a float with its range, a
- * Color Controller an RGBA color, a Macro an impulse. Groups are not nodes.
+ * Color Controller an RGBA color, a Text Controller a string, a Macro an
+ * impulse. Groups are not nodes.
  */
 export interface OscNode {
   readonly FULL_PATH: string;
@@ -65,7 +66,15 @@ function colorHex(color: Color): string {
     .toUpperCase()}`;
 }
 
-/** A Controller's value as OSC arguments: one float, or one RGBA color. */
+/**
+ * Text as an OSC string carries it. A string ends at its first NUL, so a
+ * NUL in the text is left out instead of cutting what follows it.
+ */
+function oscText(text: string): string {
+  return text.replaceAll("\0", "");
+}
+
+/** A Controller's value as OSC arguments: one float, one RGBA color or one string. */
 export function controllerArguments(
   controller: Controller,
 ): readonly OscArgument[] {
@@ -83,6 +92,8 @@ export function controllerArguments(
         ],
       },
     ];
+  if (controller.kind === "text")
+    return [{ type: "string", value: oscText(controller.value) }];
   return [];
 }
 
@@ -116,13 +127,21 @@ export function leavesOf(document: Document | undefined): readonly OscLeaf[] {
               RANGE: [{ MIN: 0, MAX: 1 }],
               CLIPMODE: ["both"],
             }
-          : {
-              FULL_PATH: path,
-              DESCRIPTION: description,
-              ACCESS: 3,
-              TYPE: "r",
-              VALUE: [colorHex(controller.value)],
-            },
+          : controller.kind === "text"
+            ? {
+                FULL_PATH: path,
+                DESCRIPTION: description,
+                ACCESS: 3,
+                TYPE: "s",
+                VALUE: [oscText(controller.value)],
+              }
+            : {
+                FULL_PATH: path,
+                DESCRIPTION: description,
+                ACCESS: 3,
+                TYPE: "r",
+                VALUE: [colorHex(controller.value)],
+              },
     });
   }
   for (const macro of flattenTree(document.macros)) {

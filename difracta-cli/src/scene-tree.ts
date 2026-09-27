@@ -226,6 +226,8 @@ export function describeController(controller: Controller): string {
       return `Number ${head}  value ${percent(controller.value)}`;
     case "color":
       return `Color ${head}  value [${controller.value.join(", ")}]`;
+    case "text":
+      return `Text ${head}  value ${JSON.stringify(controller.value)}`;
   }
 }
 

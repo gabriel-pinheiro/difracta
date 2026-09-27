@@ -160,3 +160,22 @@ export function quadViolations(
     }
   return violations;
 }
+
+/** The smallest rectangle holding every lit pixel, or undefined when none is. */
+export function litBounds(frame: Frame, threshold = 128): Rect | undefined {
+  let left = frame.width;
+  let top = frame.height;
+  let right = -1;
+  let bottom = -1;
+  for (let y = 0; y < frame.height; y += 1)
+    for (let x = 0; x < frame.width; x += 1)
+      if (isLit(pixel(frame, x, y), threshold)) {
+        left = Math.min(left, x);
+        right = Math.max(right, x);
+        top = Math.min(top, y);
+        bottom = Math.max(bottom, y);
+      }
+  return right < 0
+    ? undefined
+    : { x: left, y: top, width: right - left + 1, height: bottom - top + 1 };
+}

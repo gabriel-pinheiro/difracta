@@ -7,13 +7,6 @@ import {
 } from "@difracta/core";
 import { useState } from "react";
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { useLatestWins } from "@/lib/use-latest-wins";
@@ -25,10 +18,12 @@ import {
   hexToColor,
   parseNumber,
 } from "./address-format";
+import { ChoiceControl } from "./choice-control";
 import { EditableReadout } from "./editable-readout";
 import { FieldRow } from "./field-row";
 import { LinkedControl, LinkMenu, type RowLinks } from "./link-row";
 import { MediaControl } from "./media-control";
+import { TextControl } from "./text-control";
 
 export type { RowLinks } from "./link-row";
 
@@ -37,7 +32,8 @@ export type { RowLinks } from "./link-row";
  * (type, range, options, default), so a Layer's opacity and a Visual's
  * Parameter are the same component. Continuous controls stream every
  * position through `onEdit`, one send in flight at a time, and show the
- * dragged value until the document catches up. With `links`, the row ends
+ * dragged value until the document catches up; text is sent when its field
+ * is left. With `links`, the row ends
  * in a menu to link it to a Controller; a linked row shows its effective
  * value read-only with a chip naming the Controller, since the value is
  * changed on the Controller and nowhere else.
@@ -116,24 +112,21 @@ export function Control({
       return <MediaControl resolved={resolved} value={value} send={send} />;
     case "choice":
       return (
-        <Select
+        <ChoiceControl
+          label={resolved.label}
+          options={resolved.options ?? []}
           value={typeof value === "string" ? value : null}
-          items={resolved.options ?? []}
-          onValueChange={(next: string | null) => {
-            if (next !== null) send(next);
-          }}
-        >
-          <SelectTrigger aria-label={resolved.label} className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {(resolved.options ?? []).map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          send={send}
+        />
+      );
+    case "text":
+      return (
+        <TextControl
+          label={resolved.label}
+          value={typeof value === "string" ? value : ""}
+          multiline={resolved.multiline === true}
+          send={send}
+        />
       );
     case "color":
       return (

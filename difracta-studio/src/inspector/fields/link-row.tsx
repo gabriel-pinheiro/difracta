@@ -1,4 +1,5 @@
 import {
+  CONTROLLER_LABELS,
   type AddressValue,
   type Controller,
   type Link,
@@ -23,6 +24,7 @@ import { Switch } from "@/components/ui/switch";
 
 import { colorToHex, displayUnit, formatNumber } from "./address-format";
 import { unitGap, ValueWithUnit } from "./editable-readout";
+import { singleLine } from "./text-format";
 
 /** How a row takes part in Parameter Links: its Link, if any, and the Controllers it could take. */
 export interface RowLinks {
@@ -35,7 +37,7 @@ export interface RowLinks {
   readonly candidates: readonly Controller[];
   readonly onLink: (controllerId: string) => void;
   /** Makes a new Controller named after the row and links it. */
-  readonly onCreate: (kind: "number" | "color") => void;
+  readonly onCreate: (kind: "number" | "color" | "text") => void;
   readonly onUnlink: () => void;
   readonly onOpen: (controllerId: string) => void;
 }
@@ -81,7 +83,10 @@ export function LinkMenu({
     resolved.type === "trigger"
   )
     return <span className="size-5" />;
-  const kind = resolved.type === "color" ? "color" : "number";
+  const kind =
+    resolved.type === "color" || resolved.type === "text"
+      ? resolved.type
+      : "number";
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -108,7 +113,7 @@ export function LinkMenu({
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuItem onClick={() => links.onCreate(kind)}>
-          <Plus /> New {kind === "color" ? "Color" : "Number"} Controller
+          <Plus /> New {CONTROLLER_LABELS[kind]}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -119,6 +124,8 @@ export function LinkMenu({
  * The effective value, read-only, and a chip with the Controller's name and
  * value that opens it. A number shows as its readout alone: the chip needs
  * the room a slider would take, and the value is not draggable here anyway.
+ * Text shows on one line, cut where the row ends, and whole on hover; its
+ * chip carries the name alone, the text being the Controller's own.
  */
 export function LinkedControl({
   resolved,
@@ -163,6 +170,15 @@ export function LinkedControl({
           </span>
         </>
       )}
+      {resolved.type === "text" && (
+        <span
+          aria-label={resolved.label}
+          title={typeof effective === "string" ? effective : ""}
+          className="min-w-0 flex-1 basis-16 truncate px-1 text-[0.6875rem] text-muted-foreground"
+        >
+          {typeof effective === "string" ? singleLine(effective) : ""}
+        </span>
+      )}
       <Button
         variant="outline"
         size="xs"
@@ -172,11 +188,12 @@ export function LinkedControl({
       >
         <Link2 className="text-selection" />
         <span className="truncate">{controller.name}</span>
-        {controller.kind === "number" ? (
+        {controller.kind === "number" && (
           <span className="text-muted-foreground tabular-nums">
             {Math.round(controller.value * 100)}%
           </span>
-        ) : (
+        )}
+        {controller.kind === "color" && (
           <span
             className="size-2.5 shrink-0 rounded-[2px] border border-input"
             style={{ background: cssColor(controller.value) }}

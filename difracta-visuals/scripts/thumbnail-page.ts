@@ -19,7 +19,9 @@ import { SAMPLE_IMAGE, SAMPLE_VIDEO, builtInCatalog } from "../src/index.ts";
  * A Visual with a Media Parameter gets the sample image or video as a
  * Media item, served from the data URL the script passes, and its frames
  * are paced by the browser's own, since the file loads and a video plays
- * on the browser's clock. The result is the canvas as PNG.
+ * on the browser's clock. A Visual that draws text is paced the same way,
+ * since its Bundled Font loads, from a data URL too. The result is the
+ * canvas as PNG.
  */
 export type ThumbnailKind = "visual" | "filter";
 
@@ -28,7 +30,10 @@ export type SampleMedia = Readonly<
   Record<"sample_image" | "sample_video", string>
 >;
 
-/** How long a Media Visual may keep waiting for its picture past its run. */
+/** The Bundled Fonts' files as data URLs, by file name. */
+export type FontFiles = Readonly<Record<string, string>>;
+
+/** How long a Media or text Visual may keep waiting for its picture past its run. */
 const MEDIA_WAIT_MS = 5_000;
 
 /**
@@ -65,6 +70,7 @@ const checkerboard = defineVisual({
 const catalog = new Catalog({
   visuals: [...builtInCatalog.visuals(), checkerboard],
   filters: builtInCatalog.filters(),
+  fonts: builtInCatalog.fonts(),
 });
 const registry = createBuiltInRegistry(catalog);
 
@@ -136,11 +142,15 @@ function installation(kind: ThumbnailKind, id: string): Document {
   return run(document, "scene.play", { sceneId: "scene" });
 }
 
-function usesMedia(kind: ThumbnailKind, id: string): boolean {
+/** Whether the Visual shows something that loads: a Media item, or text in a Bundled Font. */
+function loads(kind: ThumbnailKind, id: string): boolean {
   return (
     kind === "visual" &&
     Object.values(catalog.visual(id)?.parameters ?? {}).some(
-      (parameter) => parameter.kind === "media",
+      (parameter) =>
+        parameter.kind === "media" ||
+        (parameter.kind === "choice" &&
+          parameter.options.some((option) => option.font !== undefined)),
     )
   );
 }
@@ -155,18 +165,20 @@ export async function renderThumbnail(
   width: number,
   height: number,
   media: SampleMedia,
+  fonts: FontFiles,
 ): Promise<string> {
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   const compositor = createCompositor(canvas, catalog, {
     mediaUrl: (mediaId) => media[mediaId as keyof SampleMedia],
+    fontUrl: (file) => fonts[file],
   });
   const scene = installation(kind, id);
   const frames = Math.round(seconds * 60);
   const cue =
     kind === "visual" ? catalog.visual(id)?.cues?.[0]?.key : undefined;
-  const paced = usesMedia(kind, id);
+  const paced = loads(kind, id);
   const started = performance.now();
   let rendered = false;
   for (let frame = 0; frame <= frames || !rendered; frame += 1) {

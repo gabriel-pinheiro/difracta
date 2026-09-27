@@ -10,6 +10,7 @@ export default defineConfig({
       "/live": { target: runtime, ws: true },
       "/health": { target: runtime },
       "/media": { target: runtime },
+      "/fonts": { target: runtime },
     },
   },
 });

@@ -4,6 +4,7 @@ import { childrenOf, descendantsOf, flattenTree } from "./tree.ts";
 export const CONTROLLER_LABELS: Record<ControllerKind, string> = {
   number: "Number Controller",
   color: "Color Controller",
+  text: "Text Controller",
   group: "Group",
 };
 

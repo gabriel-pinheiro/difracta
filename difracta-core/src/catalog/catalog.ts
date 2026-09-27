@@ -3,12 +3,13 @@ import type { ParameterSchema } from "./parameters.ts";
 
 /**
  * The Catalog is what a runtime knows it can show: the Visual and Filter
- * definitions Layers are made of, and the Bundled Media, the clips Difracta
- * ships, which a Media item of kind `bundled` refers to. A definition is
+ * definitions Layers are made of, the Bundled Media, the clips Difracta
+ * ships, which a Media item of kind `bundled` refers to, and the Bundled
+ * Fonts its text Visuals draw with. A definition is
  * identified by a stable id the document refers to; Studio picks from the
  * Catalog and commands validate against it. An id the Catalog no longer has
  * stays in the document and shows as unavailable, so a changed Catalog
- * never invalidates a file. Ids are unique across the three kinds, since
+ * never invalidates a file. Ids are unique across the kinds, since
  * they name thumbnails in one folder.
  */
 export const VISUAL_BACKENDS = ["canvas", "shader"] as const;
@@ -86,6 +87,20 @@ export interface MediaDefinition {
   readonly duration?: number;
 }
 
+/**
+ * One Bundled Font: a typeface Difracta ships, so text looks the same on
+ * every Output. `files` are relative to the fonts' folder, the first the
+ * face most text needs and the rest its further character ranges.
+ */
+export interface FontDefinition {
+  readonly kind: "font";
+  readonly id: string;
+  readonly name: string;
+  /** One sentence a person reads while choosing. */
+  readonly description: string;
+  readonly files: readonly string[];
+}
+
 export function usesPath(definition: Definition): boolean {
   return definition.kind === "visual" && (definition.paths?.length ?? 0) > 0;
 }
@@ -105,15 +120,18 @@ export class Catalog {
   readonly #visuals = new Map<string, VisualDefinition>();
   readonly #filters = new Map<string, FilterDefinition>();
   readonly #media = new Map<string, MediaDefinition>();
+  readonly #fonts = new Map<string, FontDefinition>();
 
   constructor({
     visuals = [],
     filters = [],
     media = [],
+    fonts = [],
   }: {
     readonly visuals?: readonly VisualDefinition[];
     readonly filters?: readonly FilterDefinition[];
     readonly media?: readonly MediaDefinition[];
+    readonly fonts?: readonly FontDefinition[];
   } = {}) {
     const seen = new Map<string, string>();
     const claim = (id: string, label: string): void => {
@@ -137,6 +155,10 @@ export class Catalog {
     for (const entry of media) {
       claim(entry.id, "Bundled Media entry");
       this.#media.set(entry.id, entry);
+    }
+    for (const font of fonts) {
+      claim(font.id, "Bundled Font");
+      this.#fonts.set(font.id, font);
     }
   }
 
@@ -175,6 +197,16 @@ export class Catalog {
   /** The Bundled Media, by name. */
   media(): readonly MediaDefinition[] {
     return [...this.#media.values()].sort(byName);
+  }
+
+  /** The Bundled Font `id` names. */
+  font(id: string): FontDefinition | undefined {
+    return this.#fonts.get(id);
+  }
+
+  /** The Bundled Fonts, in the order they were given: the one every other falls back to first. */
+  fonts(): readonly FontDefinition[] {
+    return [...this.#fonts.values()];
   }
 }
 

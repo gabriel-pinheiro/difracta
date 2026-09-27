@@ -17,6 +17,8 @@ interface OutputPageOptions {
   readonly output: string | null;
   /** Where a Media item's file is fetched from, by id, on the runtime this page talks to. */
   readonly mediaUrl: (id: string) => string;
+  /** Where a Bundled Font's file is fetched from, by file name, on the same runtime. */
+  readonly fontUrl: (file: string) => string;
 }
 
 /**
@@ -41,6 +43,7 @@ export class OutputPage {
     this.#options = options;
     this.#frame = new FrameCanvas(options.canvas, {
       mediaUrl: options.mediaUrl,
+      fontUrl: options.fontUrl,
     });
     options.client.phase.subscribe(() => this.#refresh());
     options.client.document.subscribe(() => this.#refresh());

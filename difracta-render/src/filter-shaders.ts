@@ -74,7 +74,7 @@ export function uniformName(name: string): string {
   return `u_${name}`;
 }
 
-/** The GLSL type a Parameter is handed to the fragment as; a media Parameter has no uniform of its own. */
+/** The GLSL type a Parameter is handed to the fragment as; a media or text Parameter has no uniform of its own. */
 export function uniformType(
   definition: ParameterDefinition,
 ): "float" | "vec4" | "int" | "bool" | undefined {
@@ -88,6 +88,7 @@ export function uniformType(
     case "boolean":
       return "bool";
     case "media":
+    case "text":
       return undefined;
   }
 }

@@ -17,11 +17,16 @@ import {
   SAMPLE_IMAGE,
   SAMPLE_VIDEO,
   builtInCatalog,
+  fontsRoot,
   sampleMediaRoot,
   thumbnailFile,
   thumbnailsRoot,
 } from "../src/index.ts";
-import type { SampleMedia, ThumbnailKind } from "./thumbnail-page.ts";
+import type {
+  FontFiles,
+  SampleMedia,
+  ThumbnailKind,
+} from "./thumbnail-page.ts";
 
 const ORIGIN = "https://thumbnails.invalid/";
 const WIDTH = 480;
@@ -67,15 +72,35 @@ const bundle = await build({
 const script = bundle.outputFiles[0]?.text;
 if (script === undefined) throw new Error("The page did not bundle.");
 
-/** The sample files, as data URLs the page can load without a server. */
-async function dataUrl(file: string, type: string): Promise<string> {
-  const bytes = await readFile(new URL(file, sampleMediaRoot));
+/** The sample files and the Bundled Fonts, as data URLs the page can load without a server. */
+async function dataUrl(file: URL, type: string): Promise<string> {
+  const bytes = await readFile(file);
   return `data:${type};base64,${bytes.toString("base64")}`;
 }
 const media: SampleMedia = {
-  sample_image: await dataUrl(SAMPLE_IMAGE, "image/png"),
-  sample_video: await dataUrl(SAMPLE_VIDEO, "video/webm"),
+  sample_image: await dataUrl(
+    new URL(SAMPLE_IMAGE, sampleMediaRoot),
+    "image/png",
+  ),
+  sample_video: await dataUrl(
+    new URL(SAMPLE_VIDEO, sampleMediaRoot),
+    "video/webm",
+  ),
 };
+const fonts: FontFiles = Object.fromEntries(
+  await Promise.all(
+    builtInCatalog
+      .fonts()
+      .flatMap((font) => font.files)
+      .map(
+        async (file) =>
+          [
+            file,
+            await dataUrl(new URL(file, fontsRoot), "font/woff2"),
+          ] as const,
+      ),
+  ),
+);
 
 const browser = await chromium.launch({
   args: [
@@ -110,8 +135,9 @@ try {
           options.width,
           options.height,
           options.media,
+          options.fonts,
         ),
-      { kind, id, seconds, width: WIDTH, height: HEIGHT, media },
+      { kind, id, seconds, width: WIDTH, height: HEIGHT, media, fonts },
     );
     const base64 = dataUrl.split(",")[1];
     if (base64 === undefined) throw new Error(`No image for “${id}”.`);
