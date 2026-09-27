@@ -228,11 +228,12 @@ Typecheck is incremental (`*.tsbuildinfo`) and lint and format are cached
 `npm run test:gpu` renders the compositor's pixel tests in headless Chromium,
 which `npx playwright install chromium` provides once. `npm run test:desktop`
 launches the built Desktop through Playwright and needs a display; run
-`npm run build` first. To keep its windows off your screen, or without a screen,
-run it under Xvfb:
-`env -u WAYLAND_DISPLAY XDG_SESSION_TYPE=x11 xvfb-run -a npm run test:desktop`.
-With `WAYLAND_DISPLAY` set Electron would open its windows on the real Wayland
-session; the suite drops it by itself inside `xvfb-run`, and the long form says
-the same by hand. With `DIFRACTA_DESKTOP_EXECUTABLE` naming a packaged Desktop
-(an AppImage from `npm run package:desktop`, say) the suite drives that instead
-of the build in `dist/`.
+`npm run build` first. On Linux it runs under Xvfb by itself when `xvfb-run` is
+installed, which keeps its windows off your screen and gives it the one Display
+its Display Host tests count on; inside `xvfb-run` the suite drops
+`WAYLAND_DISPLAY`, which would otherwise take Electron to the real Wayland
+session. `DIFRACTA_DESKTOP_HEADED=1 npm run test:desktop` runs it on your screen
+instead, where the Display Host tests are skipped if it has more than one
+Display. With `DIFRACTA_DESKTOP_EXECUTABLE` naming a packaged Desktop (an
+AppImage from `npm run package:desktop`, say) the suite drives that instead of
+the build in `dist/`.

@@ -11,7 +11,7 @@
     "build": "node scripts/build.mjs",
     "start": "node scripts/start.mjs",
     "typecheck": "tsc -p tsconfig.json && tsc -p e2e/tsconfig.json",
-    "test:desktop": "vitest run --config e2e/vitest.config.ts",
+    "test:desktop": "node scripts/test-desktop.mjs",
     "package": "electron-builder --config electron-builder.yml --publish never"
   },
   "devDependencies": {

@@ -264,6 +264,22 @@ function displayEnvironment(
   return { ...rest, XDG_SESSION_TYPE: "x11" };
 }
 
+/** Has main answer every message box from now on with the button that lets the app close. */
+function letGo(launched: ElectronApplication): Promise<void> {
+  return launched.evaluate(({ dialog }) => {
+    dialog.showMessageBox = (...args: unknown[]) => {
+      const { buttons = [] } = (args.length > 1 ? args[1] : args[0]) as {
+        buttons?: string[];
+      };
+      const wanted = [/^don.t save$/i, /^(quit|leave|close|discard)\b/i];
+      const found = wanted
+        .map((label) => buttons.findIndex((button) => label.test(button)))
+        .find((index) => index >= 0);
+      return Promise.resolve({ response: found ?? 0, checkboxChecked: false });
+    };
+  });
+}
+
 /** Gives every test of a file a folder, a user data folder and ports of its own, and cleans up after it. */
 export function useDesktop(): void {
   beforeEach(async () => {
@@ -284,9 +300,17 @@ export function useDesktop(): void {
     const launched = app;
     app = undefined;
     try {
-      // A test that failed half way may leave a native question up that
-      // nobody answers; the Desktop it launched is then killed, so that the
-      // runtime and the folder below are still cleaned up.
+      // Closing asks about unsaved changes or Outputs that are showing, and
+      // a test that failed half way left nobody to answer: the questions are
+      // answered here, the way that lets the app go. One already up cannot
+      // be, so the Desktop is killed if it does not close, and the runtime
+      // and the folder below are still cleaned up.
+      await Promise.race([
+        launched === undefined
+          ? undefined
+          : letGo(launched).catch(() => undefined),
+        new Promise((resolve) => setTimeout(resolve, 2_000)),
+      ]);
       const closed = await Promise.race([
         launched?.close().then(
           () => true,

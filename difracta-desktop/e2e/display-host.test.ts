@@ -50,12 +50,20 @@ async function savedPlacements(): Promise<{ output: string }[]> {
 async function theHost(port: string | number | undefined) {
   const hosts = await eventually(
     () => displayHosts(port),
-    (all) => all.length === 1 && all[0]?.displays.length === 1,
+    (all) => all.length === 1 && (all[0]?.displays.length ?? 0) > 0,
   );
   const [host] = hosts;
   if (host === undefined) throw new Error("No Display Host.");
   return host;
 }
+
+/**
+ * These tests count on one Display, numbered 1, which is what Xvfb has and
+ * what `npm run test:desktop` runs under. On a screen with several they
+ * would cover the person's monitors with Outputs, so they are skipped.
+ */
+const ONE_DISPLAY =
+  "needs a computer with one Display: run without DIFRACTA_DESKTOP_HEADED, under Xvfb";
 
 /** Esc on the Display window, sent from main as the keyboard would. */
 async function pressEscapeOnDisplayWindow(): Promise<void> {
@@ -69,7 +77,9 @@ async function pressEscapeOnDisplayWindow(): Promise<void> {
 }
 
 describe("Difracta Desktop as a Display Host", () => {
-  it("offers its Displays, shows and hides Outputs on them, and lights them again at the next start", async () => {
+  it("offers its Displays, shows and hides Outputs on them, and lights them again at the next start", async ({
+    skip,
+  }) => {
     const file = await installationFile("Show");
     const port = env.DIFRACTA_PORT;
     const page = await launch(file, SOFTWARE_WEBGL);
@@ -82,6 +92,7 @@ describe("Difracta Desktop as a Display Host", () => {
 
     // Xvfb has one Display, which the host numbers 1.
     const host = await theHost(port);
+    skip(host.displays.length !== 1, ONE_DISPLAY);
     expect(host.displays[0]).toMatchObject({ id: "1", primary: true });
     expect(host.showing).toEqual({});
 
@@ -197,7 +208,9 @@ describe("Difracta Desktop as a Display Host", () => {
     expect(await health()).toBe(true);
   });
 
-  it("shows the Outputs of a runtime elsewhere, and says so before leaving it", async () => {
+  it("shows the Outputs of a runtime elsewhere, and says so before leaving it", async ({
+    skip,
+  }) => {
     const port = await standaloneRuntime(await installationFile("Elsewhere"));
     await commandFromElsewhere(String(port), "output.create", {
       id: "wall",
@@ -210,6 +223,7 @@ describe("Difracta Desktop as a Display Host", () => {
     await page.waitForFunction(() => document.title.startsWith("Elsewhere"));
 
     const host = await theHost(port);
+    skip(host.displays.length !== 1, ONE_DISPLAY);
     await requestFromElsewhere(port, "displays.show", {
       host: host.name,
       display: "1",

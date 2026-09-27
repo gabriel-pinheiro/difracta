@@ -100,9 +100,10 @@ stale one is never the cause of a failure that a cold run does not show.
 `npm run test:gpu` renders the compositor's pixel tests (`difracta-render/gpu/`)
 in headless Chromium, which `npx playwright install chromium` provides once.
 `npm run desktop` builds and launches Difracta Desktop; `npm run test:desktop`
-drives the built app through Playwright and needs a display.
-`npm run package:desktop` packages Desktop for the current OS into
-`difracta-desktop/release/` (`electron-builder.yml`);
+drives the built app through Playwright and needs a display; on Linux it runs
+under Xvfb when `xvfb-run` is installed, and `DIFRACTA_DESKTOP_HEADED=1` keeps
+it on the screen. `npm run package:desktop` packages Desktop for the current OS
+into `difracta-desktop/release/` (`electron-builder.yml`);
 `DIFRACTA_DESKTOP_EXECUTABLE=<packaged executable>` makes the Desktop suite
 drive that package instead. The CLI is `node difracta-cli/bin/difracta.mjs` (or
 `npx difracta` inside the repo).
