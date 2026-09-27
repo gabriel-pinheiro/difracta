@@ -1,4 +1,5 @@
 import type { EntityModule } from "@/entities";
+import { surfaceChildParent } from "@/entities/surface/surface-child-parent";
 
 import { PathInspector } from "./path-inspector";
 
@@ -12,4 +13,5 @@ export const pathEntity: EntityModule = {
     payload: (id) => ({ pathId: id }),
     find: (document, id) => document.paths[id],
   },
+  parent: surfaceChildParent("paths"),
 };

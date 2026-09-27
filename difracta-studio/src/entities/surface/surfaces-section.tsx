@@ -62,7 +62,6 @@ export function SurfacesSection({ view }: { readonly view: DocumentView }) {
       const id = generateId(kind);
       const surfaceId = naming.surface.id;
       void command(`${kind}.create`, { id, surfaceId, name }).then(() => {
-        setExpanded("surface", surfaceId, true);
         select({ kind, id });
       });
       return;

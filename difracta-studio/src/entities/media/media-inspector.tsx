@@ -16,7 +16,6 @@ import { InspectorHeading } from "@/inspector/fields/inspector-heading";
 import { NameField } from "@/inspector/fields/name-field";
 import { catalog } from "@/lib/catalog";
 import { useCommand, useDocumentPath, useSignal } from "@/lib/client";
-import { useExpansion } from "@/navigator/expansion";
 import { useSelection } from "@/selection/selection";
 
 import { layerIcons } from "@/entities/layer/layer-icons";
@@ -78,7 +77,6 @@ function MediaFileInspector({
   const id = item.id;
   const command = useCommand(view);
   const { select } = useSelection();
-  const { setExpanded } = useExpansion();
   const { selected } = useDocumentCommands();
   const live = useDocumentPath<MediaLive>(view, ["live", "media", id]);
   // Uses read every Layer's Parameters: a change anywhere may add one.
@@ -178,10 +176,6 @@ function MediaFileInspector({
                       type="button"
                       className="flex h-6 w-full items-center gap-1.5 rounded-sm px-1.5 text-left text-xs hover:bg-accent hover:text-accent-foreground"
                       onClick={() => {
-                        // Selecting from here reveals the row in the navigator.
-                        setExpanded("scene", layer.sceneId, true);
-                        if (layer.parentId !== null)
-                          setExpanded("layer", layer.parentId, true);
                         select({ kind: "layer", id: layer.id });
                       }}
                     >

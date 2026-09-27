@@ -11,7 +11,6 @@ import { useState } from "react";
 
 import { NameDialog, type NameRequest } from "@/components/name-dialog";
 import { useCommand, useDocumentPath } from "@/lib/client";
-import { useExpansion } from "@/navigator/expansion";
 import type { CreateItem } from "@/navigator/navigator-row";
 import { NavigatorSection } from "@/navigator/navigator-section";
 import { useSelection } from "@/selection/selection";
@@ -30,7 +29,6 @@ import { controllerIcons, controllerKindLabels } from "./controller-icons";
 export function ControllersSection({ view }: { readonly view: DocumentView }) {
   const command = useCommand(view);
   const { select } = useSelection();
-  const { setExpanded } = useExpansion();
   const table = useDocumentPath<Table<Controller>>(view, ["controllers"]);
   const controllers = table ?? {};
   const [naming, setNaming] = useState<NameRequest | undefined>(undefined);
@@ -49,7 +47,6 @@ export function ControllersSection({ view }: { readonly view: DocumentView }) {
         const id = generateId("controller");
         void command("controller.create", { id, kind, parentId, name }).then(
           () => {
-            if (parentId !== null) setExpanded("controller", parentId, true);
             select({ kind: "controller", id });
           },
         );

@@ -2,6 +2,8 @@ import type { DocumentView } from "@difracta/client";
 import type { Document } from "@difracta/core";
 import type { ComponentType } from "react";
 
+import type { RowParent } from "@/navigator/ancestor-rows";
+
 import { controllerEntity } from "./controller/controller-entity";
 import { layerEntity } from "./layer/layer-entity";
 import { macroEntity } from "./macro/macro-entity";
@@ -33,8 +35,9 @@ export interface Removal {
 
 /**
  * What one entity kind contributes to Studio: its navigator section, its
- * inspector and how it is removed. Each kind lives in its own folder under `entities/`; adding a
- * kind is one folder plus one line in `entities` below.
+ * inspector, how it is removed and the row its rows nest under. Each kind
+ * lives in its own folder under `entities/`; adding a kind is one folder
+ * plus one line in `entities` below.
  */
 export interface EntityModule {
   /** Section label in the navigator, plural. */
@@ -46,6 +49,8 @@ export interface EntityModule {
     readonly id: string;
   }>;
   readonly removal: Removal;
+  /** The row this kind's row is nested under; absent for a kind whose rows never nest. */
+  readonly parent?: RowParent;
 }
 
 export const entities = {

@@ -22,7 +22,6 @@ import {
 } from "@/components/ui/select";
 import { FieldRow } from "@/inspector/fields/field-row";
 import { useCommand, useDocumentPath } from "@/lib/client";
-import { useExpansion } from "@/navigator/expansion";
 import { useSelection } from "@/selection/selection";
 
 /**
@@ -41,7 +40,6 @@ export function PathRows({
 }) {
   const command = useCommand(view);
   const { select } = useSelection();
-  const { setExpanded } = useExpansion();
   const paths = useDocumentPath<Table<Path>>(view, ["paths"]) ?? {};
   const surfaces = useDocumentPath<Table<Surface>>(view, ["surfaces"]) ?? {};
   const regions = useDocumentPath<Table<Region>>(view, ["regions"]) ?? {};
@@ -73,7 +71,6 @@ export function PathRows({
               }),
             )
             .then(() => {
-              setExpanded("surface", target, true);
               select({ kind: "path", id: pathId });
             });
         };

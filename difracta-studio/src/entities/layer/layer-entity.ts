@@ -1,5 +1,6 @@
 import type { EntityModule } from "@/entities";
 
+import { layerParent } from "./layer-parent";
 import { LayerInspector } from "./layer-inspector";
 
 /** Layers have no section of their own: their rows sit under their Scene. */
@@ -12,4 +13,5 @@ export const layerEntity: EntityModule = {
     payload: (id) => ({ layerId: id }),
     find: (document, id) => document.layers[id],
   },
+  parent: layerParent,
 };

@@ -6,7 +6,6 @@ import { useState } from "react";
 import { NameDialog, type NameRequest } from "@/components/name-dialog";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useBrowser } from "@/library/browser-state";
-import { useExpansion } from "@/navigator/expansion";
 import type { CreateItem } from "@/navigator/navigator-row";
 import { NavigatorSection } from "@/navigator/navigator-section";
 import { useSelection } from "@/selection/selection";
@@ -33,7 +32,6 @@ import {
 export function MediaSection({ view }: { readonly view: DocumentView }) {
   const command = useCommand(view);
   const { select } = useSelection();
-  const { setExpanded } = useExpansion();
   const media = useDocumentPath<Table<Media>>(view, ["media"]) ?? {};
   const live = useDocumentPath<MediaLiveTable>(view, ["live", "media"]) ?? {};
   const { openMedia } = useBrowser();
@@ -41,10 +39,7 @@ export function MediaSection({ view }: { readonly view: DocumentView }) {
   const [naming, setNaming] = useState<NameRequest | undefined>(undefined);
   const roots = childMedia(media, null);
 
-  const reveal = (parentId: string | null, id: string): void => {
-    if (parentId !== null) setExpanded("media", parentId, true);
-    select({ kind: "media", id });
-  };
+  const show = (id: string): void => select({ kind: "media", id });
 
   function requestGroup(parentId: string | null): void {
     const siblings = childMedia(media, parentId);
@@ -60,7 +55,7 @@ export function MediaSection({ view }: { readonly view: DocumentView }) {
           kind: "group",
           parentId,
           name,
-        }).then(() => reveal(parentId, id));
+        }).then(() => show(id));
       },
     });
   }
@@ -69,8 +64,7 @@ export function MediaSection({ view }: { readonly view: DocumentView }) {
     {
       label: "File…",
       icon: FilePlus,
-      onSelect: () =>
-        create({ parentId, onCreated: (id) => reveal(parentId, id) }),
+      onSelect: () => create({ parentId, onCreated: (id) => show(id) }),
     },
     {
       label: "Bundled…",
@@ -80,7 +74,7 @@ export function MediaSection({ view }: { readonly view: DocumentView }) {
         createBundled({
           parentId,
           onCreated: (id) => {
-            reveal(parentId, id);
+            show(id);
             openMedia(id, { created: true });
           },
         }),

@@ -11,7 +11,6 @@ import { useState } from "react";
 
 import { NameDialog, type NameRequest } from "@/components/name-dialog";
 import { useCommand, useDocumentPath } from "@/lib/client";
-import { useExpansion } from "@/navigator/expansion";
 import type { CreateItem } from "@/navigator/navigator-row";
 import { NavigatorSection } from "@/navigator/navigator-section";
 import { useSelection } from "@/selection/selection";
@@ -28,7 +27,6 @@ import { macroIcons, macroKindLabels } from "./macro-icons";
 export function MacrosSection({ view }: { readonly view: DocumentView }) {
   const command = useCommand(view);
   const { select } = useSelection();
-  const { setExpanded } = useExpansion();
   const table = useDocumentPath<Table<Macro>>(view, ["macros"]);
   const macros = table ?? {};
   const [naming, setNaming] = useState<NameRequest | undefined>(undefined);
@@ -46,7 +44,6 @@ export function MacrosSection({ view }: { readonly view: DocumentView }) {
       onSubmit: (name) => {
         const id = generateId("macro");
         void command("macro.create", { id, kind, parentId, name }).then(() => {
-          if (parentId !== null) setExpanded("macro", parentId, true);
           select({ kind: "macro", id });
         });
       },

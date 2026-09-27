@@ -1,4 +1,5 @@
 import type { EntityModule } from "@/entities";
+import { surfaceChildParent } from "@/entities/surface/surface-child-parent";
 
 import { RegionInspector } from "./region-inspector";
 
@@ -12,4 +13,5 @@ export const regionEntity: EntityModule = {
     payload: (id) => ({ regionId: id }),
     find: (document, id) => document.regions[id],
   },
+  parent: surfaceChildParent("regions"),
 };

@@ -1,4 +1,5 @@
 import type { EntityModule } from "@/entities";
+import { groupParent } from "@/navigator/ancestor-rows";
 
 import { MediaInspector } from "./media-inspector";
 import { MediaSection } from "./media-section";
@@ -13,4 +14,5 @@ export const mediaEntity: EntityModule = {
     payload: (id) => ({ mediaId: id }),
     find: (document, id) => document.media[id],
   },
+  parent: groupParent("media", (document) => document.media),
 };

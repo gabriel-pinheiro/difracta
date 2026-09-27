@@ -21,7 +21,6 @@ import { NameField } from "@/inspector/fields/name-field";
 import { SelectField } from "@/inspector/fields/select-field";
 import { calibrationFor, useCalibration } from "@/lib/calibration";
 import { useCommand, useDocumentPath } from "@/lib/client";
-import { useExpansion } from "@/navigator/expansion";
 import { useSelection } from "@/selection/selection";
 
 import {
@@ -46,7 +45,6 @@ export function SurfaceInspector({
 }) {
   const command = useCommand(view);
   const { select } = useSelection();
-  const { setExpanded } = useExpansion();
   const surface = useDocumentPath<Surface>(view, ["surfaces", id]);
   const outputs = useDocumentPath<Table<Output>>(view, ["outputs"]) ?? {};
   const regions = useDocumentPath<Table<Region>>(view, ["regions"]) ?? {};
@@ -121,8 +119,6 @@ export function SurfaceInspector({
                       type="button"
                       className="flex h-6 w-full items-center gap-1.5 rounded-sm px-1.5 text-left text-xs hover:bg-accent hover:text-accent-foreground"
                       onClick={() => {
-                        // Selecting from here reveals the row in the navigator.
-                        setExpanded("surface", id, true);
                         select({ kind, id: child.entity.id });
                       }}
                     >

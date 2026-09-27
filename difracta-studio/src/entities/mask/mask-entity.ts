@@ -1,4 +1,5 @@
 import type { EntityModule } from "@/entities";
+import { surfaceChildParent } from "@/entities/surface/surface-child-parent";
 
 import { MaskInspector } from "./mask-inspector";
 
@@ -12,4 +13,5 @@ export const maskEntity: EntityModule = {
     payload: (id) => ({ maskId: id }),
     find: (document, id) => document.masks[id],
   },
+  parent: surfaceChildParent("masks"),
 };

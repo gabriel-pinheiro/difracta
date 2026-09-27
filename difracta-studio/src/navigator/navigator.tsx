@@ -9,6 +9,7 @@ import { useDocumentPath } from "@/lib/client";
 import { deselectOnBackgroundClick, useSelection } from "@/selection/selection";
 
 import { NavigatorRow } from "./navigator-row";
+import { RevealSelection } from "./reveal-selection";
 
 /** The root row's id among entity ids, which never take this form. */
 const INSTALLATION_ROW = "installation";
@@ -49,6 +50,7 @@ export function Navigator({ view }: { readonly view: DocumentView }) {
             <Section key={kind} view={view} />
           );
         })}
+        <RevealSelection view={view} />
       </div>
     </aside>
   );

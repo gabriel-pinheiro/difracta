@@ -5,7 +5,7 @@
  * button, with the row's depth beside it.
  */
 
-function rowButton(id: string): HTMLElement | null {
+export function rowButton(id: string): HTMLElement | null {
   return document.querySelector<HTMLElement>(
     `[data-navigator-row="${CSS.escape(id)}"]`,
   );
