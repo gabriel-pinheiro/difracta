@@ -54,6 +54,43 @@ export function mediaItemTypeIn(
   return mediaItemType(item);
 }
 
+/** A video's length in beats and the time in seconds of its first one. */
+export interface MediaBeats {
+  readonly beats: number;
+  readonly firstBeat: number;
+}
+
+/**
+ * The beats of a Media item: a file's own, a bundled item's from its entry
+ * in `catalog`. Undefined for an item without them, which has no tempo to
+ * sync.
+ */
+export function mediaBeatsIn(
+  item: Media,
+  catalog: Catalog,
+): MediaBeats | undefined {
+  if (item.kind === "group") return undefined;
+  const source =
+    item.kind === "bundled" ? catalog.mediaEntry(item.bundled) : item;
+  if (source?.beats === undefined) return undefined;
+  return { beats: source.beats, firstBeat: source.firstBeat ?? 0 };
+}
+
+/** A clip's own tempo in beats per minute, from its beats and its length in seconds. */
+export const tempoOf = (beats: number, duration: number): number =>
+  (beats * 60) / duration;
+
+/**
+ * Beats as a person reads them, "16 beats, 128 BPM", the tempo to one
+ * decimal and only when the length in seconds is known.
+ */
+export function describeBeats(beats: number, duration?: number): string {
+  const count = `${String(beats)} ${beats === 1 ? "beat" : "beats"}`;
+  if (duration === undefined || !(duration > 0)) return count;
+  const tempo = Math.round(tempoOf(beats, duration) * 10) / 10;
+  return `${count}, ${String(tempo)} BPM`;
+}
+
 /** The refusal for a Bundled Media id the Catalog lacks. */
 export const bundledEntryUnknown = (entry: string): string =>
   `“${entry}” is not in the Bundled Media; \`difracta media bundled\` lists them.`;

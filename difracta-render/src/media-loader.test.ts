@@ -101,6 +101,7 @@ const bundle = new Catalog({
     file: `clips/${id}.${id === "flash" ? "webm" : "png"}`,
     width: 16,
     height: 9,
+    ...(id === "flash" ? { duration: 7.5, beats: 16 } : {}),
   })),
 });
 
@@ -238,6 +239,30 @@ describe("MediaLoader", () => {
     instance.sync({ flash: bundled("flash", "grid") });
     expect(videos[0]?.src).toBe("");
     expect(images[0]?.src).toBe("/media/flash?v=2");
+  });
+
+  it("answers an item's beats as the table has them now, a bundled item's from its entry", () => {
+    const { instance } = loader();
+    const clip = item("clip", "clip.webm");
+    instance.sync({
+      clip,
+      flash: {
+        id: brand("media", "flash"),
+        kind: "bundled",
+        name: "flash",
+        parentId: null,
+        order: "b",
+        bundled: "flash",
+      },
+    });
+    expect(instance.beats("clip")).toBeUndefined();
+    expect(instance.beats("flash")).toEqual({ beats: 16, firstBeat: 0 });
+    expect(instance.beats("nope")).toBeUndefined();
+    const before = instance.get("clip");
+    instance.sync({ clip: { ...clip, beats: 8, firstBeat: 0.25 } });
+    expect(instance.beats("clip")).toEqual({ beats: 8, firstBeat: 0.25 });
+    // Beats are not what the item shows: nothing is loaded again.
+    expect(instance.get("clip")).toBe(before);
   });
 
   it("skips Groups and items with no URL or an extension it cannot show", () => {

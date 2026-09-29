@@ -1,3 +1,5 @@
+import type { MediaBeats } from "@difracta/core";
+
 /**
  * How a Visual reaches the Installation's Media. The engine loads every
  * item of the open document ahead of use; an instance asks `media.get(id)`
@@ -7,7 +9,8 @@
  * loads anything itself: `image` is null until the file is decoded, and
  * `version` counts the pictures behind it, once for an image and once per
  * decoded video frame, so an instance reports `changed` exactly when the
- * texture the engine would upload differs.
+ * texture the engine would upload differs. `media.beats(id)` answers a
+ * video's length in beats, for an instance that follows a tempo.
  */
 export type MediaImage =
   | HTMLImageElement
@@ -49,6 +52,10 @@ export interface MediaVideo {
   rewind(): void;
   /** The `playbackRate`. */
   setRate(rate: number): void;
+  /** Where the playback is, in seconds of the clip. */
+  readonly position: number;
+  /** The clip's length in seconds; zero until the element knows it. */
+  readonly duration: number;
   setLoop(loop: boolean): void;
   /** True once a non-looping playback reached its end. */
   readonly ended: boolean;
@@ -64,6 +71,12 @@ export interface MediaContext {
   get(id: string): MediaHandle | undefined;
   /** A playback of the video item, to dispose with the instance; undefined for anything else. */
   video(id: string): MediaVideo | undefined;
+  /**
+   * The item's beats as they are now, a file's own or its Bundled Media
+   * entry's; undefined for an item without them. Asked every frame, so a
+   * change reaches a clip that is playing.
+   */
+  beats(id: string): MediaBeats | undefined;
 }
 
 /** The handles an update hands the engine, by name: `{ media: handle }` binds `u_media` and `u_media_size`. */
@@ -73,4 +86,5 @@ export type Textures = Readonly<Record<string, MediaHandle>>;
 export const NO_MEDIA: MediaContext = {
   get: () => undefined,
   video: () => undefined,
+  beats: () => undefined,
 };

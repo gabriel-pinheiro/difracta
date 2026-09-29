@@ -20,6 +20,7 @@ import { useSelection } from "@/selection/selection";
 
 import { layerIcons } from "@/entities/layer/layer-icons";
 
+import { BeatsBlock } from "./beats-block";
 import { BundledBlock } from "./bundled-block";
 import { mediaTypeLabels } from "./media-icons";
 import { requestMediaPath } from "./media-path-request";
@@ -64,8 +65,8 @@ export function MediaInspector({
  * A Media file's name, its path as text (Browse in Desktop opens the native
  * picker over the same file types), the type its extension says, what the
  * runtime reports about the file, and the Layers showing it, each a way to
- * that Layer. A bundled item shows the entry it names instead of a path,
- * with Change… opening the Library on it.
+ * that Layer; a video file also has its Beats. A bundled item shows the
+ * entry it names instead of a path, with Change… opening the Library on it.
  */
 function MediaFileInspector({
   view,
@@ -140,6 +141,19 @@ function MediaFileInspector({
               : mediaTypeLabels[type]}
           </span>
         </div>
+        {item.kind === "file" && type === "video" && (
+          <BeatsBlock
+            item={item}
+            present={live?.status === "ok"}
+            onCommit={(beats, firstBeat) =>
+              void command("media.beats", {
+                mediaId: id,
+                beats,
+                ...(firstBeat === undefined ? {} : { firstBeat }),
+              })
+            }
+          />
+        )}
         <div className="grid gap-1">
           <span className="text-xs text-muted-foreground">Status</span>
           {status === undefined ? (

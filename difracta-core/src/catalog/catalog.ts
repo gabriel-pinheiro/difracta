@@ -85,6 +85,10 @@ export interface MediaDefinition {
   readonly height: number;
   /** In seconds; videos only. */
   readonly duration?: number;
+  /** How many beats a video with a steady pulse lasts. */
+  readonly beats?: number;
+  /** The time in seconds of the first beat; zero when left out. */
+  readonly firstBeat?: number;
 }
 
 /**

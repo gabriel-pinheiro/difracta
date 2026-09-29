@@ -1,13 +1,16 @@
 import { z } from "zod";
 
 import { MEDIA_TYPES } from "../document/media.ts";
+import { settings } from "../settings.ts";
 import type { MediaDefinition } from "./catalog.ts";
 
 /**
  * The manifest of the Bundled Media, `manifest.json` at the root of a
  * difracta-media release: one entry per clip. `version` is the schema's and
  * changes only when an entry's shape does. A flag is present and `true`, or
- * left out. `file` is relative to the bundle's folder.
+ * left out. `file` is relative to the bundle's folder. A video with a
+ * steady pulse says how many `beats` it lasts, and `firstBeat`, the time in
+ * seconds of its first one, when that is not zero.
  */
 export const BundleEntrySchema = z
   .object({
@@ -26,6 +29,8 @@ export const BundleEntrySchema = z
     width: z.number().int().positive(),
     height: z.number().int().positive(),
     duration: z.number().positive().optional(),
+    beats: z.number().positive().max(settings.media.maxBeats).optional(),
+    firstBeat: z.number().positive().optional(),
   })
   .strict();
 
@@ -56,5 +61,7 @@ export function mediaDefinitionsFromManifest(
     ...(entry.loop === true ? { loop: true } : {}),
     ...(entry.hit === true ? { hit: true } : {}),
     ...(entry.duration === undefined ? {} : { duration: entry.duration }),
+    ...(entry.beats === undefined ? {} : { beats: entry.beats }),
+    ...(entry.firstBeat === undefined ? {} : { firstBeat: entry.firstBeat }),
   }));
 }

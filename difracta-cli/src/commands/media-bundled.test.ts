@@ -40,6 +40,7 @@ const beam: MediaDefinition = {
   width: 1920,
   height: 1080,
   duration: 7.1,
+  beats: 16,
 };
 const catalog = new Catalog({ media: [flash, beam] });
 
@@ -78,7 +79,7 @@ describe("Bundled Media at the CLI", () => {
 
   it("lists the bundle with its flags and describes an entry", () => {
     expect(formatBundled(catalog.media()).split("\n")).toEqual([
-      "beam-scan-loop  Beam Scan  video  loop       recommended",
+      "beam-scan-loop  Beam Scan  video  loop       recommended  16 beats, 135.2 BPM",
       "hit-flash-cut   Flash Cut  video        hit",
     ]);
     expect(formatBundled([])).toContain("media:fetch");
@@ -88,6 +89,12 @@ describe("Bundled Media at the CLI", () => {
     );
     expect(described).toContain("1920x1080, 1.2 s");
     expect(described).toContain("On the downbeat.");
+    expect(describeBundled(beam)).toContain(
+      "1920x1080, 7.1 s, 16 beats, 135.2 BPM",
+    );
+    expect(describeBundled({ ...beam, firstBeat: 0.2 })).toContain(
+      "135.2 BPM, first beat at 0.2 s",
+    );
   });
 
   it("shows a bundled item in media list with its kind, type and entry", () => {

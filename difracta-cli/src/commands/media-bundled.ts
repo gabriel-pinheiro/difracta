@@ -1,4 +1,9 @@
-import { sameName, type Catalog, type MediaDefinition } from "@difracta/core";
+import {
+  describeBeats,
+  sameName,
+  type Catalog,
+  type MediaDefinition,
+} from "@difracta/core";
 import type { Command } from "commander";
 
 import type { Cli } from "../cli.ts";
@@ -58,7 +63,7 @@ export function bundledFlags(entry: MediaDefinition): string {
     .join(", ");
 }
 
-/** One row per entry: id, name, type, then the word of each flag it has (loop, hit, recommended) in its own column. */
+/** One row per entry: id, name, type, then the word of each flag it has (loop, hit, recommended) in its own column, then its beats and tempo. */
 export function formatBundled(entries: readonly MediaDefinition[]): string {
   if (entries.length === 0)
     return "This runtime has no Bundled Media. `npm run media:fetch` puts it in place.";
@@ -72,6 +77,9 @@ export function formatBundled(entries: readonly MediaDefinition[]): string {
       mark(entry.loop, "loop"),
       mark(entry.hit, "hit"),
       mark(entry.recommended, "recommended"),
+      entry.beats === undefined
+        ? ""
+        : describeBeats(entry.beats, entry.duration),
     ]),
   );
 }
@@ -85,7 +93,15 @@ export function describeBundled(entry: MediaDefinition): string {
   const lines = [
     `${entry.name}  (Bundled Media, ${entry.type}${flags === "" ? "" : `, ${flags}`})  id: ${entry.id}`,
     entry.description,
-    `${size}${length}`,
+    `${size}${length}${
+      entry.beats === undefined
+        ? ""
+        : `, ${describeBeats(entry.beats, entry.duration)}${
+            entry.firstBeat === undefined
+              ? ""
+              : `, first beat at ${String(entry.firstBeat)} s`
+          }`
+    }`,
   ];
   if (entry.notes !== undefined) lines.push("", entry.notes);
   lines.push(
@@ -99,7 +115,7 @@ export function registerMediaBundled(media: Command, cli: Cli): void {
   media
     .command("bundled")
     .description(
-      "List the Bundled Media, the clips this runtime ships: id, name, type and the Loop (loops without a seam), Hit (a one-shot on a beat) and Recommended flags. `media add --bundled <id|name>` adds one; `catalog <id>` describes one.",
+      "List the Bundled Media, the clips this runtime ships: id, name, type and the Loop (loops without a seam), Hit (a one-shot on a beat) and Recommended flags, and for a clip with a steady pulse its length in beats and its tempo, which Video's Sync to Tempo follows. `media add --bundled <id|name>` adds one; `catalog <id>` describes one.",
     )
     .action(() =>
       cli.withClient(async (client) => {

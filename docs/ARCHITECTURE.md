@@ -248,14 +248,19 @@ contents and refusing cycles; `entity.move` reorders among siblings;
 `media.ungroup` dissolves a Group; `media.rename`; `media.path` for a file only;
 `media.bundled` for a bundled item only, swapping its entry and, while the item
 is still called after its previous entry, its name, as `layer.visual` does for a
-Layer; `media.remove`, which takes a Group's contents with it. All are
-authoring. The CLI has shortcuts for the everyday ones:
-`difracta media add <path> [--group G]`,
-`difracta media group <name> [--group G]` and `difracta media list`, the tree
-indented by Group with kind, type, status and path. The path helpers in
-`document/media.ts` are pure and run in the browser too: one relativizes an
-absolute path against the document's folder, which Desktop's picker and the CLI
-use, and one says whether a resolved path stays under that folder.
+Layer; `media.beats` for a video file only, writing its Beats and First Beat or,
+with `beats` null, removing both, a First Beat of zero stored as none;
+`media.remove`, which takes a Group's contents with it. All are authoring. A
+file repointed by `media.path` keeps its Beats while it stays a video. The CLI
+has shortcuts for the everyday ones: `difracta media add <path> [--group G]`,
+`difracta media group <name> [--group G]`,
+`difracta media beats <media> <beats|none> [--first-beat <seconds>]` and
+`difracta media list`, the tree indented by Group with kind, type, status, path
+and Beats. `mediaBeatsIn` answers an item's Beats whatever its kind, a bundled
+item's from its entry. The path helpers in `document/media.ts` are pure and run
+in the browser too: one relativizes an absolute path against the document's
+folder, which Desktop's picker and the CLI use, and one says whether a resolved
+path stays under that folder.
 
 A Visual refers to an item through a Parameter of kind `media`
 (`{ kind: "media", accepts: "image" | "video", default: "" }`), whose value is a
@@ -1741,6 +1746,32 @@ Autoplay and the element's end, and holds a playback while playing or paused;
 stopped, it shows the shared handle or nothing, unless Keep Warm has it hold the
 playback for the next Play.
 
+Video follows a tempo through the Media item's Beats (`media.beats(id)` in the
+context, read from the `media` table on every call, so an edit reaches a clip
+that is playing without a reload). With Sync to Tempo on, the rate is Tempo over
+the clip's own tempo, `beats × 60 / duration`, times Speed read as the nearest
+power of two; a Media item without Beats, or a playback whose length the element
+does not know yet, plays at Speed. The Beat Cue says a beat of the song is now:
+the instance reads the playback's position, takes the distance to the nearest
+line of a grid of song beats in clip time starting at the First Beat, and owes
+it. Each update bends the rate toward paying that over
+`settings.media.video.sync.chaseSeconds`, by `maxBend` at most and in steps of
+`bendStep`, and takes what the bend paid during `dt` off what is owed; within
+`lockedWithin` nothing is owed and the rate is the tempo's. A new Beat Cue
+replaces what was left with a fresh measure. The arithmetic is
+`visuals/video-sync.ts`, pure and tested without a video.
+
+**Why Beats and not a BPM:** a loop is a whole number of beats long, and its
+tempo, 135.2 for 16 beats in 213 frames, is a rounding that would drift. **Why
+Tempo as a Parameter and not measured between Beat Cues:** an instance made a
+moment ago, as every press of a held pad makes one, has the tempo from its first
+frame, and the jitter of a Cue's journey reaches the phase only. **Why bend and
+never seek:** a seek is a visible jump and a decode from the last keyframe; a
+rate a tenth off is neither. **Why Speed snaps:** at ×¾ no pulse stays on a
+beat, so there would be nothing to chase. **Why per instance:** the clock is the
+video element's, so the position is the instance's to read; what it cannot do,
+start in phase, belongs to a clock the Installation would hold.
+
 Text is drawn by shader Visuals through `text` in their context (`sdk/text.ts`),
 the engine's `TextRasters` (`text-rasters.ts`) over a `FontLoader`
 (`font-loader.ts`). The loader gives every file of every Bundled Font a
@@ -2096,15 +2127,17 @@ Installation file's folder and the Group as `parentId`, and selects the new
 item. Without a file for the Installation yet, the path is sent as it came, and
 the row's "unsaved" warning says to save first. A Group's inspector has only its
 name. A bundled item's inspector has the name, "Bundled" with the entry's name,
-badges, description, size and length and a Change… button that opens the Library
-on the item, then the type, the status (`unavailable` when this runtime's bundle
-lacks the entry) and "Used by", with no path. A file's inspector has the name,
-the path as text committed on blur (`media.path`) with, in Desktop, a Browse
-button running the same picker, the type its extension says, the status with its
-reason, and "Used by": the Layers whose media Parameter holds the item, found by
-reading each Layer's definition for which Parameter is a media one; clicking one
-selects the Layer and opens its Scene row. Remove works from the context menu,
-the Delete key and Edit ▸ Remove like every entity.
+badges, description, size, length and Beats and a Change… button that opens the
+Library on the item, then the type, the status (`unavailable` when this
+runtime's bundle lacks the entry) and "Used by", with no path. A file's
+inspector has the name, the path as text committed on blur (`media.path`) with,
+in Desktop, a Browse button running the same picker, the type its extension
+says, the status with its reason, for a video its Beats and First Beat
+(`media.beats`) beside the tempo they make of the length the browser reads from
+the file's metadata, and "Used by": the Layers whose media Parameter holds the
+item, found by reading each Layer's definition for which Parameter is a media
+one; clicking one selects the Layer and opens its Scene row. Remove works from
+the context menu, the Delete key and Edit ▸ Remove like every entity.
 
 **Why the "+" opens the picker before creating:** `media.create` names the item
 after its file, so there is nothing to ask until the file is known, and an item

@@ -1,6 +1,8 @@
 import {
+  describeBeats,
   emptyCatalog,
   flattenMedia,
+  mediaBeatsIn,
   mediaItemTypeIn,
   type Catalog,
   type Document,
@@ -41,6 +43,10 @@ export interface MediaListing {
    * undefined for a file Difracta cannot show or an entry the runtime lacks.
    */
   readonly type: MediaType | null | undefined;
+  /** How many beats a video lasts, its own or its entry's; null for one without. */
+  readonly beats: number | null;
+  /** The time in seconds of the first beat; null without beats. */
+  readonly firstBeat: number | null;
   /** From the live state; undefined before the runtime has looked, and for a Group. */
   readonly status: LiveState["media"][string]["status"] | undefined;
 }
@@ -66,6 +72,8 @@ export function listMedia(
     return depth;
   };
   return flattenMedia(document.media).map((item) => ({
+    beats: mediaBeatsIn(item, catalog)?.beats ?? null,
+    firstBeat: mediaBeatsIn(item, catalog)?.firstBeat ?? null,
     id: item.id,
     name: item.name,
     kind: item.kind,
@@ -78,7 +86,7 @@ export function listMedia(
   }));
 }
 
-/** One row per item, names indented by Group: name, id, kind, type, status, path or bundle entry. */
+/** One row per item, names indented by Group: name, id, kind, type, status, path or bundle entry, beats. */
 export function formatMedia(items: readonly MediaListing[]): string {
   if (items.length === 0)
     return "No Media items. `difracta media add <file>` adds one.";
@@ -90,6 +98,7 @@ export function formatMedia(items: readonly MediaListing[]): string {
       item.kind === "group" ? "" : (item.type ?? "?"),
       item.kind === "group" ? "" : (item.status ?? "…"),
       item.path ?? item.bundled ?? "",
+      item.beats === null ? "" : describeBeats(item.beats),
     ]),
   );
 }
@@ -101,6 +110,28 @@ export function mediaGroupId(document: Document, reference: string): string {
   if (item?.kind !== "group")
     throw new Error(`“${item?.name ?? reference}” is not a Media Group.`);
   return id;
+}
+
+/** The `media.beats` payload from what was typed: a number of beats or `none`, and a first beat in seconds. */
+export function beatsPayload(
+  mediaId: string,
+  beats: string,
+  firstBeat: string | undefined,
+): { mediaId: string; beats: number | null; firstBeat?: number } {
+  const number = (text: string, what: string): number => {
+    const value = Number(text.trim());
+    if (text.trim() === "" || !Number.isFinite(value))
+      throw new Error(`${what} must be a number, not “${text}”.`);
+    return value;
+  };
+  return {
+    mediaId,
+    beats:
+      beats.trim().toLowerCase() === "none" ? null : number(beats, "Beats"),
+    ...(firstBeat === undefined
+      ? {}
+      : { firstBeat: number(firstBeat, "The first beat") }),
+  };
 }
 
 const GROUP_OPTION = [
@@ -218,7 +249,7 @@ export function registerMedia(program: Command, cli: Cli): void {
   media
     .command("list")
     .description(
-      "List the Media items in navigator order, indented by Group: name, id, kind (file, bundled or group), type (image or video), status (ok, missing, outside the Installation's folder, unsaved while the Installation has no file, or unavailable for a bundled clip this runtime lacks) and the file's path or the bundled entry's id.",
+      "List the Media items in navigator order, indented by Group: name, id, kind (file, bundled or group), type (image or video), status (ok, missing, outside the Installation's folder, unsaved while the Installation has no file, or unavailable for a bundled clip this runtime lacks), the file's path or the bundled entry's id, and the beats of a video that has them.",
     )
     .action(() =>
       cli.withDocument(async (client, summary) => {
@@ -229,6 +260,34 @@ export function registerMedia(program: Command, cli: Cli): void {
           await fetchCatalog(client),
         );
         cli.print(items, () => formatMedia(items));
+      }),
+    );
+
+  media
+    .command("beats <media> <beats>")
+    .description(
+      "Say how many beats a video Media file lasts, by name or id: 16 for a four-bar loop, so a 7.5 second loop is at 128 BPM. A Video with Sync to Tempo on then plays it at the Tempo it is given and chases the beat Cue. `none` removes them. Bundled items have theirs already (`media bundled`).",
+    )
+    .option(
+      "--first-beat <seconds>",
+      "the time of the clip's first beat, when it does not start on one; kept as it is unless given",
+    )
+    .action((reference: string, beats: string, local: { firstBeat?: string }) =>
+      cli.withDocument(async (client, summary) => {
+        const { document } = await cli.replica(client, summary.id);
+        const payload = beatsPayload(
+          resolveId(document, "media", reference),
+          beats,
+          local.firstBeat,
+        );
+        const result = await client.command<CommandResult>(
+          summary.id,
+          "media.beats",
+          payload,
+        );
+        cli.print({ ...payload, ...result }, () =>
+          formatCommandResult(result, "media.beats"),
+        );
       }),
     );
 

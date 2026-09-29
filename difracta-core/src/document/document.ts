@@ -270,7 +270,9 @@ export type MediaKind = (typeof MEDIA_KINDS)[number];
  * id, and one the Catalog lacks stays, unavailable. The type (image or
  * video) is read from the file's extension or the entry
  * (`document/media.ts`) and never stored. Names are unique among siblings.
- * An item without a `kind`, as older files hold, is a file.
+ * An item without a `kind`, as older files hold, is a file. A video file
+ * may say how many `beats` it lasts and when its first one falls; a bundled
+ * item's come from its entry.
  */
 export const MediaSchema = z.discriminatedUnion("kind", [
   z
@@ -278,6 +280,10 @@ export const MediaSchema = z.discriminatedUnion("kind", [
       ...MediaBase,
       kind: z.literal("file").default("file"),
       path: z.string().min(1),
+      /** How many beats the video lasts; absent for one without a tempo. */
+      beats: z.number().positive().max(settings.media.maxBeats).optional(),
+      /** The time in seconds of the first beat; absent for zero. */
+      firstBeat: z.number().positive().optional(),
     })
     .strict(),
   z

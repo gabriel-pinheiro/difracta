@@ -1,9 +1,11 @@
 import {
   emptyCatalog,
+  mediaBeatsIn,
   mediaItemTypeIn,
   settings,
   type Catalog,
   type Media,
+  type MediaBeats,
   type MediaType,
   type Table,
 } from "@difracta/core";
@@ -40,7 +42,8 @@ import type { MediaContext, MediaHandle, MediaVideo } from "./sdk/media.ts";
  * (`media-preload-queue.ts`), `settings.media.video.preloadBatch` loading
  * at the same moment, and `preload` starts the ones waiting, the items a
  * planned Layer names first. `videos()` counts the elements held, each of
- * which holds a decoder.
+ * which holds a decoder. `beats(id)` reads the table, not what was loaded,
+ * so beats written to an item need no reload.
  */
 export interface MediaElements {
   image(): HTMLImageElement;
@@ -184,6 +187,11 @@ export class MediaLoader implements MediaContext {
     return createMediaVideo(id, element, () => {
       this.#playbacks.delete(element);
     });
+  }
+
+  beats(id: string): MediaBeats | undefined {
+    const item = this.#table?.[id];
+    return item === undefined ? undefined : mediaBeatsIn(item, this.#catalog);
   }
 
   videos(): VideoCount {

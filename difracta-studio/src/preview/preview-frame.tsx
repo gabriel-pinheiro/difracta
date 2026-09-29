@@ -1,19 +1,13 @@
-import { runtimeOrigin, type DocumentView } from "@difracta/client";
+import type { DocumentView } from "@difracta/client";
 import { settings } from "@difracta/core";
 import { useEffect, useRef, useState } from "react";
+
+import { studioRuntimeOrigin } from "@/lib/runtime-origin";
 
 import { PreviewCanvas } from "./preview-canvas";
 import { previewFrames } from "./preview-document";
 import { PreviewOverlay } from "./preview-overlay";
 import type { PreviewTarget } from "./preview-target";
-
-/** The runtime's HTTP origin, where Media and Bundled Fonts are fetched from. */
-function origin(): string {
-  return runtimeOrigin(
-    new URLSearchParams(location.search).get("runtime"),
-    location.origin,
-  );
-}
 
 /**
  * The Preview's picture: the target rendered from the view's document as it
@@ -46,7 +40,7 @@ export function PreviewFrame({
     const element = document.createElement("canvas");
     element.className = "block size-full";
     parent.append(element);
-    const runtime = origin();
+    const runtime = studioRuntimeOrigin();
     host.current = new PreviewCanvas(element, {
       mediaUrl: (id) =>
         `${runtime}${settings.runtime.mediaPath}/${encodeURIComponent(id)}`,

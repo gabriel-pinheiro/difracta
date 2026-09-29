@@ -11,14 +11,15 @@ import {
 /**
  * Points a Media file at another file. The type follows the extension, so
  * a change from image to video (or back) clears the Parameters that held
- * the item: they accept only the type it was. A Group has no path, nor
+ * the item: they accept only the type it was, and an item that stops being
+ * a video loses its beats. A Group has no path, nor
  * does a bundled item, whose entry `media.bundled` changes.
  */
 export const mediaPath = defineCommand({
   name: "media.path",
   kind: "authoring",
   description:
-    "Change a Media item's file path, relative to the Installation file's folder; Parameters holding it are cleared if the type changes.",
+    "Change a Media item's file path, relative to the Installation file's folder; Parameters holding it are cleared if the type changes, and its beats if it is no longer a video.",
   payload: z
     .object({ mediaId: z.string().min(1), path: z.string().trim().min(1) })
     .strict(),
@@ -47,8 +48,18 @@ export const mediaPath = defineCommand({
             catalog,
             (accepts, value) => value === media.id && accepts !== type,
           );
+    const beats =
+      type === "video"
+        ? []
+        : (["beats", "firstBeat"] as const)
+            .filter((field) => media[field] !== undefined)
+            .map((field) => ({
+              op: "remove" as const,
+              path: ["media", media.id, field],
+            }));
     return accepted([
       ...cleared,
+      ...beats,
       { op: "set", path: ["media", media.id, "path"], value: path },
     ]);
   },

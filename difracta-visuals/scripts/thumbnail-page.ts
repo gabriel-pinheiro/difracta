@@ -102,7 +102,7 @@ function installation(kind: ThumbnailKind, id: string): Document {
   document = run(document, "surface.create", {
     id: "sur",
     name: "Frame",
-    output: "out",
+    outputs: ["out"],
   });
   document = run(document, "scene.create", { id: "scene", name: "Thumbnail" });
   const visual = (layerId: string, visualId: string): void => {

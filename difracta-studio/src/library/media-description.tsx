@@ -1,4 +1,4 @@
-import type { MediaDefinition } from "@difracta/core";
+import { describeBeats, type MediaDefinition } from "@difracta/core";
 
 import { bundledUrl, thumbnailUrl } from "@/lib/catalog";
 
@@ -59,10 +59,12 @@ export function MediaDescription({
   );
 }
 
-/** Size, and length for a video: "1920×1080, 7.1 s". */
+/** Size, length for a video and beats for one with a pulse: "1920×1080, 7.1 s, 16 beats, 135.2 BPM". */
 export function mediaFacts(entry: MediaDefinition): string {
   const size = `${String(entry.width)}×${String(entry.height)}`;
-  return entry.duration === undefined
-    ? size
-    : `${size}, ${String(Math.round(entry.duration * 10) / 10)} s`;
+  if (entry.duration === undefined) return size;
+  const length = `${size}, ${String(Math.round(entry.duration * 10) / 10)} s`;
+  return entry.beats === undefined
+    ? length
+    : `${length}, ${describeBeats(entry.beats, entry.duration)}`;
 }

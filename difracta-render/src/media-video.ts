@@ -119,6 +119,12 @@ export function createMediaVideo(
     setRate(rate) {
       if (alive && element.playbackRate !== rate) element.playbackRate = rate;
     },
+    get position() {
+      return alive ? element.currentTime : 0;
+    },
+    get duration() {
+      return alive && Number.isFinite(element.duration) ? element.duration : 0;
+    },
     setLoop(loop) {
       if (alive && element.loop !== loop) element.loop = loop;
     },

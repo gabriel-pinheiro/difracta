@@ -265,15 +265,28 @@ the folder, or `unsaved` while the Installation has no file for the path to be
 relative to; a bundled item is `ok`, or `unavailable` when the Runtime's Catalog
 lacks its entry.
 
+### Beats
+
+How many beats a video Media item lasts, such as 16 for a four-bar loop, with
+its First Beat, the time in seconds of the first one, zero unless the clip
+starts off the beat. The clip's own tempo follows from them and its length,
+`beats × 60 / seconds`, and is never stored. A file's Beats are written on the
+item; a bundled item's are its Bundled Media entry's and cannot be changed. An
+item without Beats has no tempo to follow. Video's Sync to Tempo uses them to
+play a clip at a song's tempo and to put its pulse on the beat.
+
+Do not store or ask for a clip's BPM; it is what Beats make of its length.
+
 ### Bundled Media
 
 The images and videos Difracta ships, from a pinned release of the
 `difracta-media` repository, each with a stable id, a name, a description,
-notes, a thumbnail and optional Recommended, Loop (loops without a seam) and Hit
-(a one-shot on a beat) flags. They are `media` definitions in the Catalog, so
-the Library, the CLI and validation know them. A Media item of kind `bundled`
-refers to one by id; when the Runtime's Catalog lacks that id the item stays in
-the file, unavailable, and shows nothing.
+notes, a thumbnail, optional Recommended, Loop (loops without a seam) and Hit (a
+one-shot on a beat) flags, and Beats for a clip with a steady pulse. They are
+`media` definitions in the Catalog, so the Library, the CLI and validation know
+them. A Media item of kind `bundled` refers to one by id; when the Runtime's
+Catalog lacks that id the item stays in the file, unavailable, and shows
+nothing.
 
 ### Media Parameter
 

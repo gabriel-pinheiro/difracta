@@ -95,7 +95,23 @@ export const settings = {
        * than this shows a warning.
        */
       hardwareDecoders: 16,
+      /** How a Video synced to a tempo chases the beat Cue. */
+      sync: {
+        /** The most the rate bends to make up a distance, as a fraction of the rate. */
+        maxBend: 0.1,
+        /** A distance is made up over about this long, in seconds, when the bend allows. */
+        chaseSeconds: 0.5,
+        /** A clip this close to the beat, in seconds, is on it and owes nothing. */
+        lockedWithin: 0.008,
+        /** The bend moves in steps of this, so the rate is not set on every frame. */
+        bendStep: 0.01,
+        /** Synced, Speed is read as the nearest power of two between these. */
+        minSpeed: 0.25,
+        maxSpeed: 4,
+      },
     },
+    /** The most beats a Media item lasts. */
+    maxBeats: 4_096,
     /**
      * The release of the difracta-media repository whose clips are the
      * Bundled Media: `npm run media:fetch` downloads
@@ -105,9 +121,9 @@ export const settings = {
      * names a local copy.
      */
     bundle: {
-      version: "0.1.0",
+      version: "0.1.1",
       sha256:
-        "a4696c96cea0cd5cd57dc9ea54281495c3a0c62a18ad16515d5aca5abd4c2f2f",
+        "3e37de35fd4136e49087f08cfae911f0d6c9ada9c9fd91d9940f3d2c8b0c1f25",
       url: "https://github.com/gabriel-pinheiro/difracta-media/releases/download/v<version>/difracta-media-<version>.tar.gz",
     },
   },
