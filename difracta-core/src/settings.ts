@@ -139,6 +139,16 @@ export const settings = {
      */
     idleFrameMs: 1_000,
   },
+  preview: {
+    /**
+     * How long Studio's Preview waits after its panel stops changing size
+     * before it renders at the new size: a size change starts every Visual
+     * again, so a drag costs one restart, not one per step.
+     */
+    resizeSettleMs: 250,
+    /** For how many Installations and Outputs Studio remembers what the Preview showed; the oldest drop off. */
+    rememberedLimit: 64,
+  },
   live: {
     /** How often an Output page reports telemetry. */
     telemetryIntervalMs: 1_000,

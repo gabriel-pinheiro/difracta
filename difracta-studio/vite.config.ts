@@ -40,6 +40,7 @@ export default defineConfig(({ command }) => ({
       "/catalog": { target: runtime },
       "/bundled": { target: runtime },
       "/fonts": { target: runtime },
+      "/media": { target: runtime },
       "/output": { target: output, ws: true },
     },
   },

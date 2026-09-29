@@ -5,18 +5,16 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Inspector } from "@/inspector/inspector";
 import { readStored, writeStored } from "@/lib/storage";
 import { Navigator } from "@/navigator/navigator";
 import { CalibrationFollowsSelection } from "@/lib/calibration-follows-selection";
-import { BrowserProvider, useBrowser } from "@/library/browser-state";
-import { LibraryView } from "@/library/library-view";
+import { BrowserProvider } from "@/library/browser-state";
 import { ExpansionProvider } from "@/navigator/expansion";
 import { SelectionKeys } from "@/selection/selection-keys";
 import { NavigatorKeys } from "@/keyboard/navigator-keys";
 
-import { OutputsTab } from "./outputs-tab";
+import { Center } from "./center";
 
 const LAYOUT_KEY = "difracta.workspace.layout";
 
@@ -26,9 +24,9 @@ const isLayout = (candidate: unknown): candidate is Record<string, number> =>
   Object.values(candidate).every((value) => typeof value === "number");
 
 /**
- * Navigator, center tabs and inspector as three resizable columns. Column
- * sizes are remembered per browser; which rows are open and the Library's
- * binding reset with the document, as the selection (held in `App`) does.
+ * Navigator, center and inspector as three resizable columns. Column sizes
+ * are remembered per browser; which rows are open and the Library's binding
+ * reset with the document, as the selection (held in `App`) does.
  */
 export function Workspace({ view }: { readonly view: DocumentView }) {
   return (
@@ -44,7 +42,6 @@ export function Workspace({ view }: { readonly view: DocumentView }) {
 }
 
 function Columns({ view }: { readonly view: DocumentView }) {
-  const { binding } = useBrowser();
   return (
     <ResizablePanelGroup
       orientation="horizontal"
@@ -57,26 +54,7 @@ function Columns({ view }: { readonly view: DocumentView }) {
       </ResizablePanel>
       <ResizableHandle />
       <ResizablePanel id="center" minSize={320}>
-        {binding !== undefined ? (
-          <LibraryView view={view} binding={binding} />
-        ) : (
-          <Tabs defaultValue="outputs" className="flex h-full flex-col gap-0">
-            <TabsList
-              variant="line"
-              className="h-7 w-full shrink-0 justify-start rounded-none border-b px-2"
-            >
-              <TabsTrigger value="outputs" className="flex-none">
-                Outputs
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent
-              value="outputs"
-              className="min-h-0 flex-1 overflow-auto"
-            >
-              <OutputsTab view={view} />
-            </TabsContent>
-          </Tabs>
-        )}
+        <Center view={view} />
       </ResizablePanel>
       <ResizableHandle />
       <ResizablePanel id="inspector" defaultSize={288} minSize={256}>

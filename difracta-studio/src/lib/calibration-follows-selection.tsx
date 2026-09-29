@@ -9,6 +9,7 @@ import {
 import { useEffect, useRef } from "react";
 
 import { useSelection, type Selection } from "@/selection/selection";
+import { selectionSurface } from "@/selection/selection-surface";
 
 import { useCalibration } from "./calibration";
 import { useDocumentPath } from "./client";
@@ -44,13 +45,7 @@ export function CalibrationFollowsSelection({
     previous.current = selection;
     const current = latest.current;
     if (current.calibration === null) return;
-    const target = calibrationTarget(
-      selection,
-      current.surfaces,
-      current.masks,
-      current.paths,
-      current.regions,
-    );
+    const target = selectionSurface(selection, current);
     if (target === undefined) return;
     const { surface, ...shape } = target;
     const outputId = followedOutput(surface, current.calibration.outputId);
@@ -72,33 +67,4 @@ export function CalibrationFollowsSelection({
     });
   }, [selection, set]);
   return null;
-}
-
-interface Shape {
-  readonly maskId: string | null;
-  readonly pathId: string | null;
-  readonly regionId: string | null;
-}
-
-/** The Surface a selection is, or is part of, and what of it would be aligned. */
-function calibrationTarget(
-  selection: Selection | undefined,
-  surfaces: Table<Surface>,
-  masks: Table<Mask>,
-  paths: Table<Path>,
-  regions: Table<Region>,
-): ({ readonly surface: Surface } & Shape) | undefined {
-  const none: Shape = { maskId: null, pathId: null, regionId: null };
-  const on = (surfaceId: string | undefined, shape: Partial<Shape>) => {
-    const surface = surfaceId === undefined ? undefined : surfaces[surfaceId];
-    return surface === undefined ? undefined : { surface, ...none, ...shape };
-  };
-  if (selection?.kind === "surface") return on(selection.id, {});
-  if (selection?.kind === "mask")
-    return on(masks[selection.id]?.surfaceId, { maskId: selection.id });
-  if (selection?.kind === "path")
-    return on(paths[selection.id]?.surfaceId, { pathId: selection.id });
-  if (selection?.kind === "region")
-    return on(regions[selection.id]?.surfaceId, { regionId: selection.id });
-  return undefined;
 }

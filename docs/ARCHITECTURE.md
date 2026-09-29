@@ -1440,9 +1440,10 @@ from there instead of carrying their own literals.
 ## Rendering
 
 `difracta-render` draws one Output's frame into a canvas behind a two-method
-interface: `render(document, outputId, width, height, now)` and `dispose()`. The
-Output page owns the animation loop, the canvas size and telemetry, and hands
-the compositor a `mediaUrl(id)` resolver for the Installation's Media; the
+interface: `render(document, outputId, width, height, now)` and `dispose()`. Its
+host is the Output page or Studio's Preview, each with a compositor of its own.
+The Output page owns the animation loop, the canvas size and telemetry, and
+hands the compositor a `mediaUrl(id)` resolver for the Installation's Media; the
 compositor advances the Visual instances, draws, and reports what it did. Under
 Blackout, or before a document arrives, the loop ticks once per
 `settings.output.idleFrameMs` and a document change wakes it, so the frame after
@@ -1822,16 +1823,18 @@ another process and be tested without rendering anything.
 
 The left column is the navigator: the Installation as root row, then one
 collapsible section per entity kind. The right column is the inspector, showing
-the settings of whatever is selected. The center holds tabs; the Outputs tab
-shows one card per Output. Selection is Studio-local state and never reaches the
-runtime; the selected row and card carry an outline so the inspector's subject
-is visible at a glance. Rows with children open and close with a chevron: Output
-rows start open so their live sessions stay in view, Surface rows start closed
-so Regions, Masks and Paths do not crowd the list; creating a child or selecting
-one from an inspector opens its parent. Column sizes and section open states are
-remembered per browser in localStorage; row open states live in memory and reset
-with the Installation. An empty section says how to add its first entity, and an
-open row without children says so in one dim line.
+the settings of whatever is selected. The center holds tabs: the Preview, which
+is Studio's own rendering of an Output, a Surface or a Layer, and the Outputs
+tab, which shows one card per Output; the tab last used is remembered per
+browser. Selection is Studio-local state and never reaches the runtime; the
+selected row and card carry an outline so the inspector's subject is visible at
+a glance. Rows with children open and close with a chevron: Output rows start
+open so their live sessions stay in view, Surface rows start closed so Regions,
+Masks and Paths do not crowd the list; creating a child or selecting one from an
+inspector opens its parent. Column sizes and section open states are remembered
+per browser in localStorage; row open states live in memory and reset with the
+Installation. An empty section says how to add its first entity, and an open row
+without children says so in one dim line.
 
 Why per-entity folders: every entity kind contributes the same two pieces, a
 navigator section and an inspector, and they change together. Each kind lives in
@@ -1911,17 +1914,18 @@ a set of the current value, or a trigger. A run that skipped anything shows a
 toast naming what and why.
 
 The Library is the picker for Visuals and Filters. It is bound to one Visual or
-Filter Layer and takes over the center column while open: a search box, three
-facets (backend, Path, Cues) and a grid of tiles with thumbnails and badges.
-Search is fuzzy and ranked: a name starting with the query beats a name with a
-word starting with it, which beats the letters in order, and any name match
-beats a description with a word starting with the query (letters in order are
-tried on names only, since over a description they match nearly everything);
-recommended entries come first among equals and lead the list when nothing is
-typed. Clicking a tile or moving with the arrow keys applies the definition to
-the Layer through `layer.visual` or `layer.filter`, so the Outputs are the
-preview; Enter keeps it, Escape discards the browse and puts back what the Layer
-had when the Library opened, and the browse undoes as one step because the
+Filter Layer and takes over the center column while open, leaving the Preview
+above it when that is the tab in use: a search box, three facets (backend, Path,
+Cues) and a grid of tiles with thumbnails and badges. Search is fuzzy and
+ranked: a name starting with the query beats a name with a word starting with
+it, which beats the letters in order, and any name match beats a description
+with a word starting with the query (letters in order are tried on names only,
+since over a description they match nearly everything); recommended entries come
+first among equals and lead the list when nothing is typed. Clicking a tile or
+moving with the arrow keys applies the definition to the Layer through
+`layer.visual` or `layer.filter`, so the Outputs and the Preview show each
+candidate; Enter keeps it, Escape discards the browse and puts back what the
+Layer had when the Library opened, and the browse undoes as one step because the
 commands coalesce per Layer. Adding a Visual or Filter Layer opens the Library
 for it, since picking is the next thing to do; double-clicking a Layer row or
 the inspector's button opens it later. Selecting another Visual or Filter Layer
@@ -1946,12 +1950,108 @@ selecting anything else closes it. The binding, a Layer or a Media item, is
 Studio-local state (`library/browser-state.tsx`), and both kinds share the
 frame, keyboard and grid (`library/library-shell.tsx`).
 
-**Why apply on highlight rather than preview locally:** the projector is the
-only honest preview of a Visual on a real Surface, and Studio has no renderer of
-its own; applying to the runtime shows every candidate where it will be seen.
-**Why the center column rather than a dialog:** the navigator and the inspector
-stay usable, so a Layer's other settings can change while candidates are
-compared.
+**Why apply on highlight rather than try a candidate locally:** the projector is
+the only honest view of a Visual on a real Surface, and the Preview renders the
+runtime's document like any Output; applying to the runtime shows every
+candidate where it will be seen, and in the Preview with no second path to keep
+in step. **Why the center column rather than a dialog:** the navigator and the
+inspector stay usable, so a Layer's other settings can change while candidates
+are compared.
+
+The Preview (`difracta-studio/src/preview/`) renders an Output, a Surface flat
+or a Layer inside Studio with a compositor of its own (`preview-canvas.ts`), fed
+the document of Studio's view as deltas change it and the Cues the view hears.
+It is not an Output Session: it never attaches, reports no telemetry and appears
+on no Output card. Its header picks what is shown, Follow selection or a named
+Output, and while following the closest framing allowed, Output, Surface or
+Layer; the choice (`preview-choice.ts`) is remembered per Installation in
+localStorage. A named Output stays whatever is selected and shows the active
+Scene, so it shows what is on stage.
+
+Following (`preview-target.ts`), a selected Output is shown. A selected Surface,
+Region, Mask or Path names its Surface (`selection/selection-surface.ts`, which
+calibration follows too) and a Visual Layer the Surface of its Target. With the
+framing at Output the Preview moves to the Output that Surface is on: the one
+shown now when the Surface is on it, else the one picked for the Surface in its
+inspector, else the only one it is on. A Surface on several Outputs with none of
+those to prefer leaves the Preview where it is, and the header lists the Outputs
+to click. With the framing at Surface or Layer the Surface is shown flat,
+whether it is on an Output or not; Surface framing shows a Visual Layer as the
+flat Surface of its Target. With the framing at Layer a selected Layer is shown
+with only what it draws with: a Visual Layer on the flat Surface of its Target,
+a Filter Layer or a Group on the Output shown, since neither has a Target. The
+Layer stays shown while a selection that does not move the Preview is made,
+until another target is shown, a Scene is selected, or its Scene is no longer
+the one shown. A selected Scene, or the Scene of a selected Layer, is shown
+whether it plays or not, on whatever the Preview shows; it stays shown while
+other things are selected, until another Scene is, it becomes the active one, or
+the document closes, and the header names it while it is not the one playing.
+Any other selection leaves the Preview where it is.
+
+The Preview's copy of the document (`preview-document.ts`) has Blackout lifted,
+the Scene shown made the active one, and is otherwise the document itself,
+shared by reference; the header carries a Blackout badge while the Outputs are
+dark. An Output is rendered as its projector gets it, Calibration Mode included.
+A Surface shown flat is rendered on an Output that exists in the copy alone,
+under an id no Output or mapping of the document has: the Surface gets a mapping
+there with the corners of the full frame and no other Surface has one, so only
+Layers targeting it draw, Filter Layers transform it alone, and Calibration
+Mode, which is on a real Output, does not show.
+
+A Layer shown is rendered on that Surface or Output with the copy's Layers
+narrowed (`preview-layers.ts`), under the same ids so its Visual Instances are
+the ones the Preview already has. A Visual Layer is kept alone and moved to its
+Scene's root, so no Group gates it and no Filter Layer applies. A Group is kept
+with everything in it, moved to the root the same way. A Filter Layer is kept
+with every Layer below it in the stack and the Groups it is in, which still gate
+it, so the stack is drawn up to and including it and nothing above. A Layer's
+own enabled switch is kept, and the header says Disabled while that leaves
+nothing of the Layer to draw.
+
+The frame is letterboxed. An Output's ratio is the one its freshest Output
+Session reports, 16:9 while none does, or one picked in the header and
+remembered per Output. A Surface's is its size when it has one, else the shape
+of its mapping on the Output it is on, measured along its longer edges as its
+canvases are, else 16:9 (`preview-aspect.ts`); the header offers no ratio then.
+The canvas takes the size it is shown at, in device pixels, once the panel has
+kept that size for `settings.preview.resizeSettleMs`, and the old frame is
+stretched meanwhile. Frames are rendered only while the Preview is the tab in
+use and the page is visible; under the Outputs tab it stays mounted and idle, so
+coming back starts no Visual again.
+
+With Outline selection on in the header, off at first and remembered with the
+choice, an SVG over the frame (`preview-overlay.tsx`) outlines the selected
+Surface on the Output shown, by its mapping's corners; a selected Region there,
+by its bounds projected through that mapping with the compositor's `homography`;
+and a selected Region of the Surface shown flat, by its bounds
+(`preview-outline.ts`). The overlay takes no pointer events and is no part of
+the rendered frame.
+
+**Why a compositor in Studio rather than the Output's pixels:** composing needs
+no display attached, and a stream of frames would cost the Output encoding work
+and the network a video; the price is that the Preview is representative, not
+identical, since its Visual Instances are its own. **Why not an Output
+Session:** a session is a display showing the Installation, which the Output
+cards, the status strip and Desktop's quit warning count. **Why Blackout is
+lifted:** Blackout darkens the room, and what it hides is what the operator
+needs to see before releasing it. **Why Calibration Mode is kept on an Output:**
+an Output made only to be looked at in the Preview is calibrated there. **Why
+the size waits for the panel:** Visual Instances are made for a frame size, so
+every size rendered starts them again. **Why the Surface's Output is never
+guessed:** as with calibration, showing another projector's frame as if it were
+the one meant misleads more than staying put. **Why a flat Surface is a mapping
+in a copy of the document rather than a second way to render:** the compositor
+renders Outputs and nothing else, so a Surface heavily warped on its projector
+is tuned on the same code that will project it. **Why one framing switch rather
+than a choice per kind:** the framings nest, so the closest one allowed says
+what every selection shows, with no combination that shows nothing. **Why a
+Layer is shown out of its Groups:** looking at one Layer is how it is composed,
+and a Group switched off for the show would otherwise hide it; a Filter Layer
+stays in its Groups because what it transforms is the stack as the Outputs draw
+it. **Why the Scene shown stays:** a Scene is composed by selecting its Layers,
+then Surfaces, Controllers and Macros, and the Preview going back to what plays
+at each of those would hide the work; it is not remembered across sessions, so a
+show reopens on what plays.
 
 The Surface, Mask, Path and Region inspectors carry a Calibrate toggle and,
 while active, the view for the other Surfaces. Calibrating is on the Surface's
@@ -2011,11 +2111,10 @@ after its file, so there is nothing to ask until the file is known, and an item
 without a path would draw nothing and warn at once; other sections create a
 named placeholder because a Surface or a Scene is useful before it is
 configured. **Why Bundled… creates the item before anything is chosen:** as with
-a new Layer, the Outputs are the only honest preview, so the item exists from
-the first tile and every pick is shown where it will be seen; Escape takes it
-back out. **Why the status is not computed in Studio:** only the runtime has the
-disk the path resolves on; Studio shows what `live/media` reports and explains
-it.
+a new Layer, the Outputs are the only honest view, so the item exists from the
+first tile and every pick is shown where it will be seen; Escape takes it back
+out. **Why the status is not computed in Studio:** only the runtime has the disk
+the path resolves on; Studio shows what `live/media` reports and explains it.
 
 The Surface inspector lists every Output, in Output order, as an accordion
 (`entities/surface/surface-outputs.tsx`): each row has the Output's name and a

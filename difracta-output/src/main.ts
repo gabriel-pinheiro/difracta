@@ -1,8 +1,7 @@
-import { DifractaClient } from "@difracta/client";
+import { DifractaClient, runtimeOrigin } from "@difracta/client";
 import { settings } from "@difracta/core";
 
 import { OutputPage } from "./output-page.ts";
-import { runtimeOrigin } from "./runtime-origin.ts";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#frame");
 const overlay = document.querySelector<HTMLDivElement>("#overlay");

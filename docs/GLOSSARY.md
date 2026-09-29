@@ -200,11 +200,11 @@ makes a Visual Instance; it is not created inside Studio.
 
 ### Visual Instance
 
-One running copy of a Visual for one Layer on one Output. It holds its own state
-and is stepped every frame with the time elapsed since the previous frame and
-the Layer's current Parameter Values, then draws that state. Because it
-integrates time itself, a Parameter change alters what happens next and never
-where things are now.
+One running copy of a Visual for one Layer on one Output Session or in Studio's
+Preview. It holds its own state and is stepped every frame with the time elapsed
+since the previous frame and the Layer's current Parameter Values, then draws
+that state. Because it integrates time itself, a Parameter change alters what
+happens next and never where things are now.
 
 ### Catalog
 
@@ -519,7 +519,8 @@ A temporary per-Installation Runtime state that replaces ordinary Scene output
 with black without changing the Active Scene. Blackout is not persisted. It
 takes precedence over Calibration Mode: an Output under Blackout shows black
 even while one of its Surfaces is being calibrated, so the wall is dark the
-moment the performer asks for it.
+moment the performer asks for it. Studio's Preview is not darkened: it keeps
+showing what the Outputs would without Blackout.
 
 ## Applications and user interface
 
@@ -547,7 +548,7 @@ the mini-PC. The Output page is not the physical Projector.
 ### Output Session
 
 One Output page tab attached to one Output through the Runtime. An Output may
-have several at once (a display and a preview tab, say); each reports its own
+have several at once (a display and a browser tab, say); each reports its own
 Output Telemetry. A session that stops reporting is stale, then dropped.
 
 ### Display
@@ -656,9 +657,31 @@ the default when the value differs from it.
 
 The Studio view for picking from the Catalog. It is bound to one Layer, to pick
 its Visual or Filter, or to one bundled Media item, to pick its Bundled Media
-entry, and takes the center column while open, with search, facets and a grid of
-thumbnails. Picking applies at once, so the Outputs are the preview; Enter keeps
-the pick and Escape discards the browse, putting the previous one back.
+entry, and takes the center column while open, under the Preview when that is
+the tab in use, with search, facets and a grid of thumbnails. Picking applies at
+once, so the Outputs and the Preview show each candidate; Enter keeps the pick
+and Escape discards the browse, putting the previous one back.
+
+### Preview
+
+Studio's own rendering of an Output, of a Surface flat or of a Layer, in a tab
+of the center column. It follows the selection or stays on a named Output. It is
+representative, not identical to what an Output Session shows: its Visual
+Instances are its own, so what is random or counted per instance may differ.
+Blackout does not darken it; Calibration Mode shows in it on an Output. The
+Preview is not an Output Session and not an Output page. Do not call an Output
+page opened in a window `a preview`.
+
+### Framing
+
+How close the Preview shows what is selected while it follows the selection:
+Output, Surface or Layer, the closest one allowed. Output shows the Output the
+selection is on as its projector gets it. Surface shows the selection's Surface
+flat: filling the frame, undistorted, alone, under the Scene's Filter Layers.
+Layer shows a selected Layer with only what it draws with: a Visual Layer alone
+on the flat Surface of its Target, with no Filter Layer applied; a Filter Layer
+with the stack below it on the Output shown; a Group with only what is in it on
+the Output shown.
 
 ### Control
 

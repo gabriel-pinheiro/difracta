@@ -35,6 +35,16 @@ export function pickMappingOutput(
   for (const listener of listeners) listener();
 }
 
+/** The Output picked for the Surface, if any; it may no longer be one the Surface is on. */
+export function pickedMappingOutput(surfaceId: string): string | undefined {
+  return picks.get(surfaceId);
+}
+
+/** Notifies when any Surface's pick changes. */
+export function subscribeMappingPicks(listener: () => void): () => void {
+  return subscribe(listener);
+}
+
 /**
  * Which of a Surface's Outputs a mapping edit or a calibration is about: the
  * one showing its pattern now, else the one picked, else the only one it is
