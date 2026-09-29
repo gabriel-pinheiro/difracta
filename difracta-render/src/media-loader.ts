@@ -6,7 +6,7 @@ import {
   type Catalog,
   type Media,
   type MediaBeats,
-  type MediaType,
+  type FileMediaType,
   type Table,
 } from "@difracta/core";
 
@@ -25,7 +25,8 @@ import type { MediaContext, MediaHandle, MediaVideo } from "./sdk/media.ts";
 
 /**
  * The Output's Media, loaded ahead of use: on every document revision
- * `sync` gives each file and bundled item of the `media` table an element,
+ * `sync` gives each file and bundled item of the `media` table an element
+ * (a Screen Share has no file and gets none),
  * an image that decodes or a video that preloads, and drops the ones the
  * table lost or repointed, so
  * a Layer that starts showing an item finds it ready and nothing is
@@ -70,13 +71,16 @@ export interface MediaLoaderOptions {
   readonly timers?: PreloadTimers;
 }
 
-/** The `media` table, of which only what each item shows matters here; a Group shows nothing. */
+/**
+ * The `media` table, of which only what each item shows matters here; a
+ * Group shows nothing, and a Screen Share has no file: it is never loaded.
+ */
 export type MediaTable = Table<Media>;
 
 interface Entry {
   /** What the item shows, `file:<path>` or `bundled:<entry id>`: a change reloads it. */
   readonly source: string;
-  readonly type: MediaType;
+  readonly type: FileMediaType;
   readonly url: string;
   readonly handle: MediaHandle;
   /** Set for a video: its warm element and poster. */
@@ -213,7 +217,8 @@ export class MediaLoader implements MediaContext {
   #load(id: string, item: Media, source: string): Entry | undefined {
     const type = mediaItemTypeIn(item, this.#catalog);
     const base = this.#options.mediaUrl(id);
-    if (type === undefined || base === undefined) return undefined;
+    if (type === undefined || type === "live" || base === undefined)
+      return undefined;
     const loads = (this.#loads.get(id) ?? 0) + 1;
     this.#loads.set(id, loads);
     const url = withLoad(base, loads);

@@ -5,7 +5,7 @@ import {
   type Catalog,
   type Document,
 } from "@difracta/core";
-import type { MediaStatus } from "@difracta/protocol";
+import type { FileStatus } from "@difracta/protocol";
 import { stat } from "node:fs/promises";
 import path from "node:path";
 
@@ -47,7 +47,7 @@ export function locateBundled(
  * Where a Media item's file is, before looking at the disk: a file item's
  * path resolved against the Installation file's folder, a bundled item's
  * entry in the bundle's folder. `unknown` for no such item and for a Media
- * Group, which has no file; `unavailable` for a bundled item whose entry
+ * Group or a Screen Share, which have no file; `unavailable` for a bundled item whose entry
  * the Catalog lacks; `unsaved` when the Installation has no file yet, so no
  * file item resolves; `outside` when the resolved path leaves the folder
  * and the runtime does not allow that.
@@ -58,7 +58,8 @@ export function locateMedia(
   serving: MediaServing,
 ): MediaLocation {
   const item = source.document.media[id];
-  if (item === undefined || item.kind === "group") return { status: "unknown" };
+  if (item === undefined || item.kind === "group" || item.kind === "share")
+    return { status: "unknown" };
   if (item.kind === "bundled") {
     const file = locateBundled(serving, item.bundled);
     return file === undefined
@@ -92,12 +93,12 @@ export async function statMediaFile(
   }
 }
 
-/** The item's status for the live state: undefined when no such item exists or it is a Group. */
+/** The item's status for the live state: undefined when no such item exists, or it is a Group or a Screen Share. */
 export async function mediaStatusOf(
   source: MediaSource,
   id: string,
   serving: MediaServing,
-): Promise<MediaStatus | undefined> {
+): Promise<FileStatus | undefined> {
   const location = locateMedia(source, id, serving);
   switch (location.status) {
     case "unknown":

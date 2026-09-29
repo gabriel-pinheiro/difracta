@@ -259,17 +259,20 @@ const MediaBase = {
   order: z.string().min(1).default(DEFAULT_ORDER_KEY),
 };
 
-export const MEDIA_KINDS = ["file", "bundled", "group"] as const;
+export const MEDIA_KINDS = ["file", "bundled", "share", "group"] as const;
 export type MediaKind = (typeof MEDIA_KINDS)[number];
 
 /**
- * A Media item is one image or video the Installation refers to, or a
- * Group arranging items in the navigator. A `file` item's `path` is
- * relative to the Installation file's folder, POSIX separators, `..`
- * allowed; a `bundled` item names a Bundled Media entry of the Catalog by
- * id, and one the Catalog lacks stays, unavailable. The type (image or
- * video) is read from the file's extension or the entry
- * (`document/media.ts`) and never stored. Names are unique among siblings.
+ * A Media item is one image or video the Installation refers to, a Screen
+ * Share, or a Group arranging items in the navigator. A `file` item's
+ * `path` is relative to the Installation file's folder, POSIX separators,
+ * `..` allowed; a `bundled` item names a Bundled Media entry of the Catalog
+ * by id, and one the Catalog lacks stays, unavailable; a `share` item is a
+ * Screen Share, a named slot a Sharer shares into, holding no file and
+ * nothing about who shares. The type (image or video) is read from the
+ * file's extension or the entry, a Screen Share's is always live
+ * (`document/media.ts`), and it is never stored. Names are unique among
+ * siblings.
  * An item without a `kind`, as older files hold, is a file. A video file
  * may say how many `beats` it lasts and when its first one falls; a bundled
  * item's come from its entry.
@@ -293,6 +296,7 @@ export const MediaSchema = z.discriminatedUnion("kind", [
       bundled: z.string().min(1),
     })
     .strict(),
+  z.object({ ...MediaBase, kind: z.literal("share") }).strict(),
   z.object({ ...MediaBase, kind: z.literal("group") }).strict(),
 ]);
 export type Media = Entity<typeof MediaSchema, MediaId>;

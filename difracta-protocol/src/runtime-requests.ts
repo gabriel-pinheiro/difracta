@@ -1,7 +1,8 @@
 import { z } from "zod";
 
 /**
- * Runtime-scoped requests: the document, the Catalog and the Display Hosts.
+ * Runtime-scoped requests: the document, the Catalog, the Display Hosts and
+ * the Screen Shares.
  * These are not Document commands; they manage which Document the runtime
  * has open, read what the runtime is built with, or reach another
  * connection. Names and payload schemas live here so the runtime, Studio and
@@ -72,6 +73,12 @@ export const RuntimeRequestSchemas = {
   "displays.hide": z
     .object({ host: z.string().min(1), display: z.string().min(1) })
     .strict(),
+  /**
+   * Stop the share of a Screen Share of the open Installation, by Media id,
+   * whoever shares into it. Its Sharer hears that it was stopped. Fails when
+   * nobody shares into it.
+   */
+  "shares.stop": z.object({ mediaId: z.string().min(1) }).strict(),
 } as const;
 
 export type RuntimeRequestName = keyof typeof RuntimeRequestSchemas;

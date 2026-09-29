@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { MediaType } from "../document/media.ts";
+import { aMediaType, type MediaType } from "../document/media.ts";
 import { settings } from "../settings.ts";
 
 /**
@@ -78,8 +78,9 @@ export interface BooleanParameter extends ParameterBase {
 }
 
 /**
- * A Media item to show, by id, or `""` for none; only files of the accepted
- * type fit. Its value is a reference into the Installation, so the
+ * A Media item to show, by id, or `""` for none; only items of the accepted
+ * type fit: `image` or `video` for files and bundled items, `live` for a
+ * Screen Share. Its value is a reference into the Installation, so the
  * Address is not linkable and removing the item clears the value.
  */
 export interface MediaParameter extends ParameterBase {
@@ -184,7 +185,7 @@ export function validateParameterValue(
     case "media":
       return typeof value === "string"
         ? undefined
-        : `must be the id of ${definition.accepts === "image" ? "an image" : "a video"} Media item, or "" for none`;
+        : `must be the id of ${aMediaType(definition.accepts)} Media item, or "" for none`;
     case "text":
       return textProblem(value, definition.multiline === true);
   }

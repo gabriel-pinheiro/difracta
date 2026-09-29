@@ -27,7 +27,7 @@ import { useSelection } from "@/selection/selection";
 
 /**
  * The control for a media Address: a select over the Media items of the
- * type it accepts, None first, and a "+" menu that adds an item and picks
+ * type it accepts, None first, and, for an image or a video, a "+" menu that adds an item and picks
  * it here in one flow, as the Target row's "+" makes a Surface: File…
  * through the same picker the Media section uses, or Bundled…, which adds
  * a bundled item, sets it here so the Outputs show it, and opens the
@@ -55,7 +55,14 @@ export function MediaControl({
     typeof value === "string" && items.some((item) => item.value === value)
       ? value
       : null;
-  const noun = resolved.accepts === "video" ? "Video" : "Image";
+  const noun =
+    resolved.accepts === "video"
+      ? "Video"
+      : resolved.accepts === "live"
+        ? "Screen Share"
+        : "Image";
+  // A Screen Share is not a file or a clip, so File… and Bundled… cannot make one.
+  const creatable = resolved.accepts !== "live";
   return (
     <div className="flex w-full min-w-0 items-center gap-1">
       <Select
@@ -77,60 +84,62 @@ export function MediaControl({
           ))}
         </SelectContent>
       </Select>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button
-              variant="outline"
-              size="icon"
-              className="size-7 shrink-0"
-              data-media-create={trigger}
+      {creatable && (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="outline"
+                size="icon"
+                className="size-7 shrink-0"
+                data-media-create={trigger}
+              />
+            }
+            title={`Add ${noun === "Image" ? "an image" : "a video"} to Media and pick it here`}
+            aria-label={`New ${resolved.label}`}
+          >
+            <Plus />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <CreateMenuItems
+              items={[
+                {
+                  label: "File…",
+                  icon: FilePlus,
+                  onSelect: () =>
+                    create({
+                      accepts: resolved.accepts,
+                      onCreated: (id) => send(id),
+                    }),
+                },
+                {
+                  label: "Bundled…",
+                  icon: bundledMediaIcon,
+                  disabled: hasBundledMedia(resolved.accepts)
+                    ? undefined
+                    : NO_BUNDLED_MEDIA,
+                  onSelect: () =>
+                    createBundled({
+                      accepts: resolved.accepts,
+                      onCreated: (id) => {
+                        send(id);
+                        openMedia(id, {
+                          created: true,
+                          parameter: {
+                            accepts: resolved.accepts,
+                            anchor: selection,
+                            restore: () => send(current ?? ""),
+                            returnFocus: `[data-media-create="${CSS.escape(trigger)}"]`,
+                          },
+                        });
+                      },
+                    }),
+                },
+              ]}
             />
-          }
-          title={`Add ${noun === "Image" ? "an image" : "a video"} to Media and pick it here`}
-          aria-label={`New ${resolved.label}`}
-        >
-          <Plus />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <CreateMenuItems
-            items={[
-              {
-                label: "File…",
-                icon: FilePlus,
-                onSelect: () =>
-                  create({
-                    accepts: resolved.accepts,
-                    onCreated: (id) => send(id),
-                  }),
-              },
-              {
-                label: "Bundled…",
-                icon: bundledMediaIcon,
-                disabled: hasBundledMedia(resolved.accepts)
-                  ? undefined
-                  : NO_BUNDLED_MEDIA,
-                onSelect: () =>
-                  createBundled({
-                    accepts: resolved.accepts,
-                    onCreated: (id) => {
-                      send(id);
-                      openMedia(id, {
-                        created: true,
-                        parameter: {
-                          accepts: resolved.accepts,
-                          anchor: selection,
-                          restore: () => send(current ?? ""),
-                          returnFocus: `[data-media-create="${CSS.escape(trigger)}"]`,
-                        },
-                      });
-                    },
-                  }),
-              },
-            ]}
-          />
-        </DropdownMenuContent>
-      </DropdownMenu>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
       {dialog}
     </div>
   );

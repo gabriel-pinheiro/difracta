@@ -67,7 +67,8 @@ Document
 ├── regions { [id]: Region }          surfaceId, bounds (topLeft, bottomRight)
 ├── masks { [id]: Mask }              surfaceId, mode, points, feather
 ├── paths { [id]: Path }              surfaceId, points, closed
-├── media { [id]: Media }             kind, parentId, order; file: path (relative to the folder)
+├── media { [id]: Media }             kind, parentId, order; file: path (relative to the folder);
+│                                     bundled: bundled (entry id); share: nothing more
 ├── scenes { [id]: Scene }            name, order
 ├── layers { [id]: Layer }            kind, sceneId, parentId, enabled, order, + per kind
 │                                     visual: visual, parameters, target, paths, opacity, blendMode
@@ -228,54 +229,61 @@ lose steps, whereas deltas apply in full in any order.
 
 ### Media
 
-A Media item is one image or video the Installation shows, or a Media Group
-arranging items in the navigator. The `media` table has the Controllers' and
-Macros' tree shape (`kind` of `file`, `bundled` or `group`, `parentId`, `order`;
-`document/tree.ts`), and a name is unique among its siblings. A bundled item
-names a Bundled Media entry in `bundled` (see Bundled Media below). A file has a
-`path` relative to the Installation file's folder, POSIX separators, `..`
-allowed. Its type, image or video, is read from the extension (`settings.media`
-lists them; `document/media.ts` derives it) and never stored; a path with any
-other extension is refused. An item written before Groups existed, with no
-`kind` or `parentId`, reads as a file at the root.
+A Media item is one image or video the Installation shows, a Screen Share, or a
+Media Group arranging items in the navigator. The `media` table has the
+Controllers' and Macros' tree shape (`kind` of `file`, `bundled`, `share` or
+`group`, `parentId`, `order`; `document/tree.ts`), and a name is unique among
+its siblings. A bundled item names a Bundled Media entry in `bundled` (see
+Bundled Media below). A Screen Share holds nothing beyond name and place (see
+Screen Shares below). A file has a `path` relative to the Installation file's
+folder, POSIX separators, `..` allowed. Its type, image or video, is read from
+the extension (`settings.media` lists them; `document/media.ts` derives it) and
+never stored; a path with any other extension is refused. A Screen Share's type
+is always `live` (`MEDIA_TYPES` is image, video, live; `FILE_MEDIA_TYPES`, what
+a file or a Bundled Media entry can be, image and video). An item written before
+Groups existed, with no `kind` or `parentId`, reads as a file at the root.
 
 `media.create` adds a file (kind `file`, the default, with a path), a bundled
-item (kind `bundled`, with an entry id the Catalog has) or a Group (kind
-`group`, neither) last in its parent unless `after` places it, naming a file
-after its file and a bundled item after its entry unless told otherwise.
-`media.move` places an item in another Group or at the root, carrying a Group's
-contents and refusing cycles; `entity.move` reorders among siblings;
-`media.ungroup` dissolves a Group; `media.rename`; `media.path` for a file only;
-`media.bundled` for a bundled item only, swapping its entry and, while the item
-is still called after its previous entry, its name, as `layer.visual` does for a
-Layer; `media.beats` for a video file only, writing its Beats and First Beat or,
+item (kind `bundled`, with an entry id the Catalog has), a Screen Share (kind
+`share`, neither) or a Group (kind `group`, neither) last in its parent unless
+`after` places it, naming a file after its file, a bundled item after its entry
+and a Screen Share "Screen Share" unless told otherwise. `media.move` places an
+item in another Group or at the root, carrying a Group's contents and refusing
+cycles; `entity.move` reorders among siblings; `media.ungroup` dissolves a
+Group; `media.rename`; `media.path` for a file only, refusing a bundled item, a
+Screen Share and a Group by name; `media.bundled` for a bundled item only,
+swapping its entry and, while the item is still called after its previous entry,
+its name, as `layer.visual` does for a Layer; `media.beats` for a video file
+only (a Screen Share is refused by name), writing its Beats and First Beat or,
 with `beats` null, removing both, a First Beat of zero stored as none;
 `media.remove`, which takes a Group's contents with it. All are authoring. A
 file repointed by `media.path` keeps its Beats while it stays a video. The CLI
 has shortcuts for the everyday ones: `difracta media add <path> [--group G]`,
 `difracta media group <name> [--group G]`,
+`difracta media screen-share [name] [--group G]`,
 `difracta media beats <media> <beats|none> [--first-beat <seconds>]` and
 `difracta media list`, the tree indented by Group with kind, type, status, path
-and Beats. `mediaBeatsIn` answers an item's Beats whatever its kind, a bundled
+and Beats; a Screen Share shows kind `share`, type `live` and its share's
+status. `mediaBeatsIn` answers an item's Beats whatever its kind, a bundled
 item's from its entry. The path helpers in `document/media.ts` are pure and run
 in the browser too: one relativizes an absolute path against the document's
 folder, which Desktop's picker and the CLI use, and one says whether a resolved
 path stays under that folder.
 
 A Visual refers to an item through a Parameter of kind `media`
-(`{ kind: "media", accepts: "image" | "video", default: "" }`), whose value is a
-file's or bundled item's id or `""` for none. Its Address is of type `media`:
-the options are none plus the items of the accepted type in navigator order
-(`mediaItemTypeIn` reads a bundled item's type from the Catalog), Groups and
-bundled items whose entry the Catalog lacks never among them, `address.set` and
-`address.edit` refuse anything else, a Macro `set` action swaps artwork, and a
-Link is refused. `layer.visual` checks the value the same way; `layer.reset`
-puts `""` back. `media.remove` clears every Parameter holding the item, or any
-item inside a removed Group, to `""`, as removing a Surface clears Targets, and
-drops the Macro actions that would set it; `media.path` does the same when the
-new extension changes the type, since the Parameters that held it accept only
-the type it was, and so does `media.bundled` when the new entry is of the other
-type. The file on disk is never touched.
+(`{ kind: "media", accepts: "image" | "video" | "live", default: "" }`), whose
+value is a file's, bundled item's or Screen Share's id or `""` for none. Its
+Address is of type `media`: the options are none plus the items of the accepted
+type in navigator order (`mediaItemTypeIn` reads a bundled item's type from the
+Catalog), Groups and bundled items whose entry the Catalog lacks never among
+them, `address.set` and `address.edit` refuse anything else, a Macro `set`
+action swaps artwork, and a Link is refused. `layer.visual` checks the value the
+same way; `layer.reset` puts `""` back. `media.remove` clears every Parameter
+holding the item, or any item inside a removed Group, to `""`, as removing a
+Surface clears Targets, and drops the Macro actions that would set it;
+`media.path` does the same when the new extension changes the type, since the
+Parameters that held it accept only the type it was, and so does `media.bundled`
+when the new entry is of the other type. The file on disk is never touched.
 
 **Why a table and a reference rather than a path on the Layer:** the same file
 is shown by several Layers and swapped by Macros; one entity gives it a name, a
@@ -283,9 +291,11 @@ status and one place to change the path. **Why relative paths:** a show folder
 is copied to the stage machine or mounted into a container, and the file must
 still be found beside the Installation. **Why the type is derived:** the
 extension already says it; storing it would be one more thing to keep in step.
-**Why `kind` is file, bundled or group and image or video is `type`:** every
-tree in the document keys on `kind === "group"`, so the Media tree reuses the
-same move, ungroup and rename helpers.
+**Why `kind` is file, bundled, share or group and image, video or live is
+`type`:** every tree in the document keys on `kind === "group"`, so the Media
+tree reuses the same move, ungroup and rename helpers, and a Parameter asks for
+what it can show (a picture, a clip, a live picture) whatever the item is made
+of.
 
 ### Bundled Media
 
@@ -670,11 +680,11 @@ they could not notice, so the runtime sends each of them a new `snapshot`.
 - `subscribe` with `live: true` adds the **live state** to the snapshot and
   sends `live` messages afterwards: patches relative to the live root, with no
   revision. Live state is what is happening right now around the document, today
-  the OSC door, the Output Sessions, the connected Display Hosts and the status
-  of each Media item's file; it is never saved, never undone, and never changes
-  the document revision. Studio reads it under the `live` path root
-  (`["live", "outputs", id, "sessions"]`) with the same subscriptions as the
-  document. Output pages never ask for it.
+  the OSC door, the Output Sessions, the connected Display Hosts, the status of
+  each Media item's file and who shares into each Screen Share; it is never
+  saved, never undone, and never changes the document revision. Studio reads it
+  under the `live` path root (`["live", "outputs", id, "sessions"]`) with the
+  same subscriptions as the document. Output pages never ask for it.
 - `attach` declares the connection an Output page showing one Output; the
   runtime keeps an **Output Session** per attached connection. `telemetry`
   reports frame interval, render work, resolution, pixel ratio and workload
@@ -687,6 +697,10 @@ they could not notice, so the runtime sends each of them a new `snapshot`.
   `showing`, Display id → Output id. The host sends it again, whole, on every
   change, and `null` to step down; the runtime refuses it from any other kind of
   client. See Display Hosts below.
+- `share`, `share-view` and `share-signal` are the Screen Shares' messages, and
+  `share-viewer`, `share-ended`, `share-viewing` and `share-signal` the
+  runtime's answers: a `desktop` connection shares into a slot, any connection
+  views one, and signalling passes between them unread. See Screen Shares below.
 - `command` is acknowledged with a `reply`. The caller's own delta is flushed
   before its reply, so code that runs on the reply (select what was just
   created) already finds it in the view. `history.undo` and `history.redo` are
@@ -695,9 +709,10 @@ they could not notice, so the runtime sends each of them a new `snapshot`.
   frame on the client; the runtime applies it as `address.set`.
 - `request` covers runtime-scoped operations: `documents.new/open` (replace the
   document; refused while it has unsaved changes unless `discard`),
-  `documents.save/revert/close`, `catalog.list` and `displays.list/show/hide`.
-  Paths in them are absolute paths on the runtime's machine. A pinned connection
-  is refused `new`, `open`, `close` and a `save` to another path.
+  `documents.save/revert/close`, `catalog.list`, `displays.list/show/hide` and
+  `shares.stop`. Paths in them are absolute paths on the runtime's machine. A
+  pinned connection is refused `new`, `open`, `close` and a `save` to another
+  path.
 
 The document as a file does not travel on the socket: `GET /document` downloads
 a copy and `PUT /document` replaces the content (see Files).
@@ -720,13 +735,16 @@ message and hands it on. `client-session.ts` is one connection and its batched
 sends, `client-sessions.ts` who among them hears what, `document-commands.ts`
 runs commands, and `runtime-requests.ts` validates a `request`, applies the
 pinned refusal and calls the request's handler. Handlers come by feature
-(`document-requests.ts`, `catalog-requests.ts`, `display-requests.ts`) and the
-table's type makes a request without a handler a compile error.
+(`document-requests.ts`, `catalog-requests.ts`, `display-requests.ts`,
+`screen-shares.ts`) and the table's type makes a request without a handler a
+compile error.
 
 ### Media status
 
 `["live", "media", <id>]` holds `{ status }` for every Media file and bundled
-item of the open document (a Media Group has no file and no entry): `ok`,
+item of the open document (a Media Group has no file and no entry), and a Screen
+Share's state for each Screen Share (see Screen Shares below), so a reader shows
+one status for every item whatever its kind. A file's or bundled item's is `ok`,
 `missing` (no file at the resolved path), `outside` (the path leaves the
 Installation file's folder and the runtime does not allow that), `unsaved` (the
 Installation has no path yet, so no file item resolves) or, for a bundled item
@@ -735,7 +753,9 @@ only, `unavailable` (the runtime's Catalog lacks its entry). The runtime
 when it is saved to a new path and after any command that touches `media`, and
 replicates only the entries that changed; there is no file watcher, so a file
 that appears later is noticed at the next of those moments.
-`difracta media list` prints it beside each item.
+`difracta media list` prints it beside each item. `media-status.ts` never
+touches a Screen Share's entry, even under an id a file had before, and the
+snapshot merges the two.
 
 **Why stat on those moments and not watch:** the moments are when the answer can
 change from the document's side, which is what an operator asks about; a watcher
@@ -795,6 +815,123 @@ are already clients of the same runtime, so the runtime is the one place that
 knows every host and can check the Output exists before anyone opens anything.
 **Why the host owns `showing`:** only the host knows whether the Output is
 really up on the Display, or stopped being so without being asked.
+
+### Screen Shares
+
+```text
+Sharer (desktop) ── share {mediaId, share: {sharer, source}} ──▶ Runtime ── live patches ──▶ live subscribers
+Viewer ── share-view {mediaId, view} ──▶ Runtime ── share-viewer {viewerId, joined} ──▶ Sharer
+                                         Runtime ── share-viewing {idle | live | interrupted | refused} ──▶ Viewer
+Sharer ── share-signal {mediaId, viewerId, payload} ──▶ Runtime ── share-signal {mediaId, payload} ──▶ that Viewer
+Viewer ── share-signal {mediaId, payload} ──▶ Runtime ── share-signal {mediaId, viewerId, payload} ──▶ Sharer
+Any client ── request shares.stop {mediaId} ──▶ Runtime ── share-ended {reason: stopped} ──▶ Sharer
+```
+
+A Screen Share is a Media item of kind `share` (see Media above): a slot. A
+Sharer, a connection of kind `desktop`, shares a screen or window into it; any
+connection views it as a Viewer. Pictures travel over WebRTC, one peer
+connection per Viewer, straight between the two; the runtime keeps who shares
+into each slot and who views it, and relays their signalling. Everything is
+keyed by slot, the Media id, so one connection may share into several slots and
+view several. The wire schemas are in `difracta-protocol/src/screen-shares.ts`;
+the runtime's side is `live/screen-shares.ts`, which decides what is taken, and
+`live/share-slot.ts`, one slot with its share and Viewers.
+
+- `share { mediaId, share: { sharer, source } | null, resume? }` declares,
+  updates or stops (null) the connection's share of a slot: the Sharer's name
+  and whether it shares a `screen` or a `window`, nothing else. The runtime
+  refuses it from any other kind of client, for an id that is not a `share` item
+  of the open Installation, and when none is open, answering
+  `share-ended { reason: "refused", message }`. A declaration from another
+  connection replaces the share: the first Sharer hears
+  `share-ended { reason: "replaced" }` and every Viewer is announced to the new
+  one.
+- `share-view { mediaId, view }` joins (true) or leaves a slot. The runtime
+  answers each join, and tells each Viewer of every later change, with
+  `share-viewing`: `idle` (nobody shares; it waits, and is connected when a
+  Sharer comes), `live` or `interrupted` with the share's id, which changes when
+  another share starts in the slot so the Viewer drops what it had, or `refused`
+  with the reason: the slot is not in the open Installation, or it already has
+  `settings.shares.maxViewers` Viewers, waiting ones included. A join from a
+  Viewer already there is how a Viewer asks for a new offer: the runtime
+  announces it to the Sharer again.
+- `share-viewer { mediaId, viewerId, joined }` tells the Sharer of each Viewer
+  that joins or leaves; `viewerId` is the Viewer's session id, stable for its
+  connection. On `joined` the Sharer offers to that Viewer, dropping any
+  connection it had to it. While the Sharer is away a Viewer's request for a new
+  offer goes nowhere; it asks again once it hears `live`.
+- `share-signal { mediaId, viewerId?, payload }` carries an opaque payload
+  (offers, answers, ICE candidates, whatever the two ends agree on): from the
+  Sharer, `viewerId` names one Viewer of the slot; from a Viewer it is absent
+  and the runtime adds it on the way to the Sharer. The runtime validates the
+  envelope, never the payload, and bounds it at `settings.shares.maxSignalBytes`
+  characters of JSON. A payload from a connection that does not share into the
+  slot, for a Viewer that is not one of its, or from a Viewer while nobody is
+  connected as its Sharer, is dropped.
+- `shares.stop { mediaId }` is a `request` any client may make: the share ends,
+  its Sharer hears `share-ended { reason: "stopped" }`, the Viewers `idle`. It
+  fails when nobody shares into the slot.
+
+The live state keeps a slot's state where every Media item's status is,
+`["media", id]`: `{ status: "idle" }`, or
+`{ status: "live" | "interrupted", sharer, source, since, viewers }`, where
+`since` is when the share started and `viewers` counts the slot's Viewers,
+waiting ones included. A share that starts or ends sets the entry whole;
+everything else is one patch per property (`status`, `sharer`, `source`,
+`viewers`).
+
+A share belongs to its slot and its Sharer's connection, not to the document. A
+Scene change touches nothing. Removing the slot, or replacing the document with
+one that has no `share` item of the same id, ends the share with
+`share-ended { reason: "removed" }` and refuses its Viewers; a revert, a Save
+As, reopening the file or any other replacement that keeps the slot keeps the
+share. A Viewer's socket closing removes it, and its Sharer hears so. A Sharer's
+socket closing makes its shares `interrupted`: the Viewers keep whatever peer
+connection still works, since the picture never went through the runtime. The
+same Sharer is recognised by its connection's actor (`hello`'s `client.actor`,
+which `@difracta/client` sends on every reconnect): a declaration marked
+`resume`, which the client sends after a reconnect, from a connection with that
+actor within `settings.shares.interruptedForMs` takes the share back, with the
+same id and `since`, and the runtime announces the Viewers that joined meanwhile
+and says which left. After the delay the slot falls to `idle`. A `resume` takes
+a slot only while nobody else shares into it, so a Sharer replaced while away
+does not take it back and hears `replaced` instead. A declaration without
+`resume` is always a new share, from the same actor too: a Desktop that started
+again holds no peer connection, so every Viewer is announced to it. A runtime
+restart needs nothing of its own: every client reconnects, Sharers declare again
+and Viewers ask again, under new Viewer ids.
+
+In `@difracta/client`, `client.sharing` (`screen-share/sharing.ts`) is the
+Sharer's side: `share(mediaId, { sharer, source })`, `stop(mediaId)`,
+`signal(mediaId, viewerId, payload)`, and listeners for Viewers joining and
+leaving, their payloads, and a share that ended without it asking, which it then
+forgets. `client.viewing` (`screen-share/viewing.ts`) is the Viewer's:
+`view(mediaId)`, `requestOffer(mediaId)`, `leave(mediaId)`,
+`signal(mediaId, payload)`, `state(mediaId)` and listeners for its standing and
+the Sharer's payloads. After a reconnect the client declares every share again,
+as a resume, and asks again for every slot it views. Neither holds any WebRTC
+object. The CLI has `difracta share list` (each slot with status, Sharer, screen
+or window, since when and Viewers, from the live state) and
+`difracta share stop <media>`; `difracta media screen-share [name]` adds a slot.
+
+**Why the runtime relays and never reads:** it is already the one place every
+client can reach, so a Sharer and a Viewer on different machines need no other
+server, and a runtime that only passes opaque payloads between named ends has
+nothing to get wrong about codecs or networks, while the picture itself never
+costs it anything. **Why keyed by slot:** Layers, Macros and the live state
+already name the Media item; keying the protocol, the state and the Sharer's own
+bookkeeping by the same id lets one Desktop share into several slots and one
+Output view several without any other identity. **Why a second Sharer replaces
+the first rather than being refused:** at a show the person at the laptop that
+means to share now is right, and whoever shared before may have walked away; the
+first Sharer is told, so nothing is silently lost. **Why a share starts only
+from its own machine:** choosing a screen or window, and the operating system's
+consent to capture it, happen where the content is; a request from another
+machine could not answer the system's picker and would start a capture nobody at
+that machine chose. Stopping is safe from anywhere, so any client may stop.
+**Why no window title travels:** a title can carry a document's name, a chat or
+a URL, and it would reach every client of the runtime and the file of anyone who
+looked; the Sharer's name and screen or window are enough to tell shares apart.
 
 ## OSC and OSCQuery
 
@@ -1437,10 +1574,12 @@ attaches the packages to the tag's GitHub Release.
 coalesce window and limit, autosave delay, default host, port and document mode,
 the Media extensions, whether files outside the show folder are served and the
 pinned Bundled Media release, the discovery service and its delays, how long a
-Display Host gets to answer, client reconnect backoff, CLI connect timeout,
-Desktop's waits for its runtime to start and stop and for a runtime elsewhere to
-answer, its window sizes and how many runtimes it remembers. Packages import
-from there instead of carrying their own literals.
+Display Host gets to answer, the Viewers a Screen Share takes, how long an
+interrupted share waits for its Sharer and how large a relayed signalling
+payload may be, client reconnect backoff, CLI connect timeout, Desktop's waits
+for its runtime to start and stop and for a runtime elsewhere to answer, its
+window sizes and how many runtimes it remembers. Packages import from there
+instead of carrying their own literals.
 
 ## Rendering
 

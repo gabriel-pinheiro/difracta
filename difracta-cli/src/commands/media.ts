@@ -34,27 +34,28 @@ export interface MediaListing {
   readonly parentId: string | null;
   /** How many Groups the item is inside. */
   readonly depth: number;
-  /** A file's, relative to the Installation file's folder; null for a Group and a bundled item. */
+  /** A file's, relative to the Installation file's folder; null for any other kind. */
   readonly path: string | null;
-  /** A bundled item's Bundled Media entry id; null for a file and a Group. */
+  /** A bundled item's Bundled Media entry id; null for any other kind. */
   readonly bundled: string | null;
   /**
-   * From the file's extension or the bundled entry; null for a Group,
-   * undefined for a file Difracta cannot show or an entry the runtime lacks.
+   * From the file's extension or the bundled entry, live for a Screen
+   * Share; null for a Group, undefined for a file Difracta cannot show or
+   * an entry the runtime lacks.
    */
   readonly type: MediaType | null | undefined;
   /** How many beats a video lasts, its own or its entry's; null for one without. */
   readonly beats: number | null;
   /** The time in seconds of the first beat; null without beats. */
   readonly firstBeat: number | null;
-  /** From the live state; undefined before the runtime has looked, and for a Group. */
+  /** From the live state, a Screen Share's too; undefined before the runtime has looked, and for a Group. */
   readonly status: LiveState["media"][string]["status"] | undefined;
 }
 
 /**
  * Every Media item in navigator order, Groups first-class, with the
- * runtime's word on whether each file is there; `catalog` gives bundled
- * items their type.
+ * runtime's word on whether each file is there or who shares into each
+ * Screen Share; `catalog` gives bundled items their type.
  */
 export function listMedia(
   document: Pick<Document, "media">,
@@ -143,7 +144,7 @@ export function registerMedia(program: Command, cli: Cli): void {
   const media = program
     .command("media")
     .description(
-      "Images and videos the Installation shows, arranged in Media Groups. A Media item of kind file is a file next to the Installation file (or elsewhere, stored as a relative path), of type image or video by its extension; one of kind bundled shows a clip Difracta ships (`media bundled`). A Visual's media Parameter names one by id. `difracta run media.move` and `media.ungroup` rearrange them; `run media.bundled` swaps a bundled item's clip.",
+      "Images, videos and Screen Shares the Installation shows, arranged in Media Groups. A Media item of kind file is a file next to the Installation file (or elsewhere, stored as a relative path), of type image or video by its extension; one of kind bundled shows a clip Difracta ships (`media bundled`); one of kind share is a Screen Share, of type live, a slot a Difracta Desktop shares a screen or window into (`media screen-share`, `share list`). A Visual's media Parameter names one by id. `difracta run media.move` and `media.ungroup` rearrange them; `run media.bundled` swaps a bundled item's clip.",
     );
 
   /** Sends `media.create`, into the Group `group` names if given, and prints what it made with `extra` lines after. */
@@ -247,9 +248,27 @@ export function registerMedia(program: Command, cli: Cli): void {
     );
 
   media
+    .command("screen-share [name]")
+    .description(
+      "Add a Screen Share, a slot a Difracta Desktop shares a screen or window into, last at the root or in --group; named Screen Share unless a name is given. A share starts only from the Sharer's own Desktop; `share list` shows who shares into each, `share stop` stops one.",
+    )
+    .option(...GROUP_OPTION)
+    .action((name: string | undefined, local: { group?: string }) =>
+      cli.withDocument((client, summary) =>
+        create(
+          client,
+          summary,
+          { kind: "share", ...(name === undefined ? {} : { name }) },
+          local.group,
+          [],
+        ),
+      ),
+    );
+
+  media
     .command("list")
     .description(
-      "List the Media items in navigator order, indented by Group: name, id, kind (file, bundled or group), type (image or video), status (ok, missing, outside the Installation's folder, unsaved while the Installation has no file, or unavailable for a bundled clip this runtime lacks), the file's path or the bundled entry's id, and the beats of a video that has them.",
+      "List the Media items in navigator order, indented by Group: name, id, kind (file, bundled, share or group), type (image, video, or live for a Screen Share), status (ok, missing, outside the Installation's folder, unsaved while the Installation has no file, or unavailable for a bundled clip this runtime lacks; for a Screen Share idle, live or interrupted), the file's path or the bundled entry's id, and the beats of a video that has them.",
     )
     .action(() =>
       cli.withDocument(async (client, summary) => {

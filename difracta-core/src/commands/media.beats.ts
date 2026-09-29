@@ -33,6 +33,10 @@ export const mediaBeats = defineCommand({
       return rejected(`Media “${payload.mediaId}” does not exist.`);
     if (media.kind === "group")
       return rejected(`“${media.name}” is a Media Group, which has no beats.`);
+    if (media.kind === "share")
+      return rejected(
+        `“${media.name}” is a Screen Share, which has no beats; only a video has beats.`,
+      );
     if (media.kind === "bundled")
       return rejected(
         `“${media.name}” is bundled Media; its beats are its entry's and cannot be changed.`,

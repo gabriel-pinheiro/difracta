@@ -9,12 +9,20 @@ import { childrenOf, descendantsOf, flattenTree } from "./tree.ts";
  * is relative to the Installation file's folder, with POSIX separators and
  * `..` allowed, so a show folder moves between machines with its files. The
  * type is read from the extension and never stored; a bundled item's comes
- * from its Bundled Media entry in the Catalog. These helpers run in the
- * browser as well as in Node, so paths are handled here rather than with
- * `node:path`.
+ * from its Bundled Media entry in the Catalog, and a Screen Share is always
+ * `live`. These helpers run in the browser as well as in Node, so paths are
+ * handled here rather than with `node:path`.
  */
-export const MEDIA_TYPES = ["image", "video"] as const;
+export const MEDIA_TYPES = ["image", "video", "live"] as const;
 export type MediaType = (typeof MEDIA_TYPES)[number];
+
+/** The types a file can be, by its extension: what a file or a Bundled Media entry holds. */
+export const FILE_MEDIA_TYPES = ["image", "video"] as const;
+export type FileMediaType = (typeof FILE_MEDIA_TYPES)[number];
+
+/** "an image", "a video", "a live": the type with its article, for messages. */
+export const aMediaType = (type: MediaType): string =>
+  type === "image" ? "an image" : `a ${type}`;
 
 /** The Media items directly under the root (`parentId` null) or a Group, in order. */
 export const childMedia = (
@@ -33,12 +41,14 @@ export const descendantMedia = (
 ): readonly Media[] => descendantsOf(media, mediaId);
 
 /**
- * The type of a Media file from its path, or undefined for a Group, a file
- * Difracta cannot show, and a bundled item, whose type only the Catalog
- * knows (`mediaItemTypeIn`).
+ * The type of a Media file from its path, `live` for a Screen Share, or
+ * undefined for a Group, a file Difracta cannot show, and a bundled item,
+ * whose type only the Catalog knows (`mediaItemTypeIn`).
  */
-export const mediaItemType = (item: Media): MediaType | undefined =>
-  item.kind === "file" ? mediaTypeOf(item.path) : undefined;
+export function mediaItemType(item: Media): MediaType | undefined {
+  if (item.kind === "file") return mediaTypeOf(item.path);
+  return item.kind === "share" ? "live" : undefined;
+}
 
 /**
  * The type of any Media item: a file's from its extension, a bundled item's
@@ -69,7 +79,7 @@ export function mediaBeatsIn(
   item: Media,
   catalog: Catalog,
 ): MediaBeats | undefined {
-  if (item.kind === "group") return undefined;
+  if (item.kind === "group" || item.kind === "share") return undefined;
   const source =
     item.kind === "bundled" ? catalog.mediaEntry(item.bundled) : item;
   if (source?.beats === undefined) return undefined;
@@ -107,7 +117,7 @@ export function mediaExtension(path: string): string | undefined {
 }
 
 /** The type a path's extension says it is; undefined for one Difracta cannot show. */
-export function mediaTypeOf(path: string): MediaType | undefined {
+export function mediaTypeOf(path: string): FileMediaType | undefined {
   const extension = mediaExtension(path);
   if (extension === undefined) return undefined;
   if (IMAGE_EXTENSIONS.includes(extension)) return "image";
@@ -235,8 +245,8 @@ export function withinFolder(folder: string, resolved: string): boolean {
 /**
  * Why `value` cannot be the value of a Media Parameter accepting `accepts`,
  * or undefined when it can: the empty string for none, or the id of a Media
- * file or bundled item of that type. A Group is never a value, nor is a
- * bundled item whose entry `catalog` lacks.
+ * file, bundled item or Screen Share of that type. A Group is never a value,
+ * nor is a bundled item whose entry `catalog` lacks.
  */
 export function mediaValueProblem(
   document: Pick<Document, "media">,
@@ -244,7 +254,7 @@ export function mediaValueProblem(
   accepts: MediaType,
   value: unknown,
 ): string | undefined {
-  const expected = `must be the id of ${anOf(accepts)} Media item, or "" for none`;
+  const expected = `must be the id of ${aMediaType(accepts)} Media item, or "" for none`;
   if (value === "") return undefined;
   if (typeof value !== "string") return expected;
   const item = document.media[value];
@@ -256,11 +266,9 @@ export function mediaValueProblem(
   if (type === undefined && item.kind === "bundled")
     return `${expected}; “${item.name}” is Bundled Media “${item.bundled}”, which this runtime lacks`;
   if (type !== accepts)
-    return `${expected}; “${item.name}” is ${type === undefined ? "a file of another type" : `${anOf(type)} ${type}`}`;
+    return `${expected}; “${item.name}” is ${type === undefined ? "a file of another type" : type === "live" ? "a Screen Share, which is live" : aMediaType(type)}`;
   return undefined;
 }
-
-const anOf = (type: MediaType): string => (type === "image" ? "an" : "a");
 
 /**
  * Patches setting to `""` every Media Parameter value that `clear` rejects,

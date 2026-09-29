@@ -1,4 +1,5 @@
 import {
+  aMediaType,
   settings,
   type Catalog,
   type Definition,
@@ -138,7 +139,7 @@ export function describeParameter(parameter: ParameterDefinition): string {
     case "boolean":
       return `${parameter.label.padEnd(16)} boolean  default ${String(parameter.default)}${tail}`;
     case "media":
-      return `${parameter.label.padEnd(16)} media    default "" (none)  the id of ${parameter.accepts === "image" ? "an image" : "a video"} Media item (\`difracta media list\`)${tail}`;
+      return `${parameter.label.padEnd(16)} media    default "" (none)  the id of ${aMediaType(parameter.accepts)} Media item (\`difracta media list\`)${tail}`;
     case "text":
       return `${parameter.label.padEnd(16)} text     default ${JSON.stringify(parameter.default)}  ${parameter.multiline === true ? "line breaks allowed" : "a single line"}${tail}`;
   }

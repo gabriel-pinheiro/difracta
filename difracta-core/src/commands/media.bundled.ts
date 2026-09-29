@@ -17,8 +17,8 @@ import { treeRename } from "../document/tree.ts";
  * An item still called after its previous entry ("Flash Cut", "Flash Cut 2")
  * takes the new entry's name, as a Layer takes its Visual's; a name the
  * person typed stays. It coalesces per item, so browsing entries undoes as
- * one step. A file or a Group is refused, and so is an entry the Catalog
- * lacks.
+ * one step. A file, a Screen Share or a Group is refused, and so is an
+ * entry the Catalog lacks.
  */
 export const mediaBundled = defineCommand({
   name: "media.bundled",
@@ -38,7 +38,9 @@ export const mediaBundled = defineCommand({
       return rejected(
         media.kind === "group"
           ? `“${media.name}” is a Media Group, which shows no Bundled Media.`
-          : `“${media.name}” is a Media file; media.path changes its file.`,
+          : media.kind === "share"
+            ? `“${media.name}” is a Screen Share, which shows no Bundled Media.`
+            : `“${media.name}” is a Media file; media.path changes its file.`,
       );
     const entry = catalog.mediaEntry(payload.bundled);
     if (entry === undefined)

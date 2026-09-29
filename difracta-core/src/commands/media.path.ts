@@ -12,8 +12,8 @@ import {
  * Points a Media file at another file. The type follows the extension, so
  * a change from image to video (or back) clears the Parameters that held
  * the item: they accept only the type it was, and an item that stops being
- * a video loses its beats. A Group has no path, nor
- * does a bundled item, whose entry `media.bundled` changes.
+ * a video loses its beats. A Group has no path, nor does a Screen Share,
+ * nor a bundled item, whose entry `media.bundled` changes.
  */
 export const mediaPath = defineCommand({
   name: "media.path",
@@ -34,6 +34,10 @@ export const mediaPath = defineCommand({
     if (media.kind === "bundled")
       return rejected(
         `“${media.name}” is bundled Media, which has no path; media.bundled changes its entry.`,
+      );
+    if (media.kind === "share")
+      return rejected(
+        `“${media.name}” is a Screen Share, which has no path; a Sharer shares into it.`,
       );
     const problem = mediaPathProblem(payload.path);
     if (problem !== undefined) return rejected(problem);

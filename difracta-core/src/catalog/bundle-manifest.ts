@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { MEDIA_TYPES } from "../document/media.ts";
+import { FILE_MEDIA_TYPES } from "../document/media.ts";
 import { settings } from "../settings.ts";
 import type { MediaDefinition } from "./catalog.ts";
 
@@ -20,7 +20,7 @@ export const BundleEntrySchema = z
     notes: z.string().min(1),
     /** Segments start with a letter or digit, so none is `.` or `..`. */
     file: z.string().regex(/^[a-z0-9][a-z0-9._-]*(\/[a-z0-9][a-z0-9._-]*)*$/),
-    type: z.enum(MEDIA_TYPES),
+    type: z.enum(FILE_MEDIA_TYPES),
     recommended: z.literal(true).optional(),
     loop: z.literal(true).optional(),
     hit: z.literal(true).optional(),

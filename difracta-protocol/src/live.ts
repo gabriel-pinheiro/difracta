@@ -2,13 +2,15 @@ import { settings } from "@difracta/core";
 import { z } from "zod";
 
 import { DisplayHostLiveSchema } from "./display-hosts.ts";
+import { SHARE_STATUSES, ShareLiveSchema } from "./screen-shares.ts";
 
 /**
  * Live state: what is happening right now around a document, replicated to
  * subscribers that ask for it (`subscribe` with `live: true`) but never
  * written to the file, never in undo history, and never versioned by the
  * document revision. Today it holds the OSC door, the Output Sessions, the
- * connected Display Hosts and whether each Media item's file is there.
+ * connected Display Hosts, whether each Media item's file is there and who
+ * shares into each Screen Share.
  */
 const Count = z
   .object({
@@ -107,13 +109,17 @@ export const OscLiveSchema = z
   .strict();
 export type OscLive = z.infer<typeof OscLiveSchema>;
 
-export const MEDIA_STATUSES = [
+export const FILE_STATUSES = [
   "ok",
   "missing",
   "outside",
   "unsaved",
   "unavailable",
 ] as const;
+export type FileStatus = (typeof FILE_STATUSES)[number];
+
+/** Every status a Media item can show: a file's or bundled item's, or a Screen Share's. */
+export const MEDIA_STATUSES = [...FILE_STATUSES, ...SHARE_STATUSES] as const;
 export type MediaStatus = (typeof MEDIA_STATUSES)[number];
 
 /**
@@ -124,9 +130,17 @@ export type MediaStatus = (typeof MEDIA_STATUSES)[number];
  * its Bundled Media entry. The first four are about files; a bundled item
  * is `ok` or `unavailable`, or `missing` if the bundle's file is gone.
  */
-export const MediaLiveSchema = z
-  .object({ status: z.enum(MEDIA_STATUSES) })
+export const FileLiveSchema = z
+  .object({ status: z.enum(FILE_STATUSES) })
   .strict();
+export type FileLive = z.infer<typeof FileLiveSchema>;
+
+/**
+ * A Media item's status: a file's or bundled item's, or a Screen Share's
+ * (`screen-shares.ts`), which also says who shares into it. One path per
+ * item, so a reader shows one status whatever the kind.
+ */
+export const MediaLiveSchema = z.union([FileLiveSchema, ShareLiveSchema]);
 export type MediaLive = z.infer<typeof MediaLiveSchema>;
 
 export const LiveStateSchema = z
@@ -140,7 +154,7 @@ export const LiveStateSchema = z
     ),
     /** Connected Display Hosts by id; they belong to connections, not to the document. */
     displayHosts: z.record(z.string(), DisplayHostLiveSchema),
-    /** Each Media item of the open document by id, with whether its file is there. */
+    /** Each Media item of the open document by id: whether its file is there, or a Screen Share's state. */
     media: z.record(z.string(), MediaLiveSchema),
   })
   .strict();

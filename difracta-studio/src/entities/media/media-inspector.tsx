@@ -27,7 +27,10 @@ import { requestMediaPath } from "./media-path-request";
 import { describeMediaStatus, type MediaLive } from "./media-status";
 import { layersUsing } from "./media-usage";
 
-/** A Media item's inspector: a Group has only its name; a file or bundled item has the rest. */
+/**
+ * A Media item's inspector: a Group and a Screen Share have only their
+ * name; a file or bundled item has the rest.
+ */
 export function MediaInspector({
   view,
   id,
@@ -43,7 +46,7 @@ export function MediaInspector({
     if (item === undefined) select({ kind: "installation" });
   }, [item, select]);
   if (item === undefined) return null;
-  if (item.kind !== "group")
+  if (item.kind !== "group" && item.kind !== "share")
     return <MediaFileInspector view={view} item={item} />;
   return (
     <>

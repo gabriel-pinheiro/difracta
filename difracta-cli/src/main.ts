@@ -9,6 +9,7 @@ import { registerMedia } from "./commands/media.ts";
 import { registerRead } from "./commands/read.ts";
 import { registerRun } from "./commands/run.ts";
 import { registerRuntimes } from "./commands/runtimes.ts";
+import { registerShare } from "./commands/share.ts";
 import { registerStatus } from "./commands/status.ts";
 import { registerTree } from "./commands/tree.ts";
 import { DEFAULT_URL } from "./connection.ts";
@@ -50,6 +51,7 @@ registerCatalog(program, cli);
 registerDocuments(program, cli);
 registerDisplays(program, cli);
 registerMedia(program, cli);
+registerShare(program, cli);
 
 try {
   await program.parseAsync();

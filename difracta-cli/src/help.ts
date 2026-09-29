@@ -53,7 +53,8 @@ Working from a shell
              only with the runtime's --media-anywhere). "media group <name>
              [--group G]" adds a Media Group to arrange them; media.move and
              media.ungroup rearrange. "media list" shows the tree with each
-             file's status: ok, missing, outside, unsaved. A Visual's media
+             file's status: ok, missing, outside, unsaved (a Screen Share's:
+             idle, live, interrupted). A Visual's media
              Parameter takes a file's id or name, or "" for none:
              edit layer/Wall/param/media Logo. Names are unique within a
              Group, so a name used in two Groups is ambiguous: give the id.
@@ -68,6 +69,12 @@ Working from a shell
              "media beats <media> 16" gives a file its own. Video's Sync to
              Tempo plays such a clip at the Tempo it is given and chases the
              beat Cue, so the pulse lands on the beat without a jump.
+             A Screen Share is a Media item of kind share, type live: a
+             slot a Difracta Desktop (the Sharer) shares a screen or window
+             into. "media screen-share [name] [--group G]" adds one; a share
+             starts only from the Sharer's own Desktop. "share list" shows
+             each slot's status (idle, live, interrupted), Sharer, screen or
+             window and Viewers; "share stop <media>" stops one.
 
   Order      A create lands first in its Group (a Layer: on top; a Media
              item: last). Pass "after": <sibling id|name> to place it below

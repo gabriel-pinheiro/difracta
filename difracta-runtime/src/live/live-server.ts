@@ -23,6 +23,7 @@ import { documentsModeFor } from "./documents-mode.ts";
 import { MediaStatuses } from "./media-status.ts";
 import { OutputPresence } from "./output-presence.ts";
 import { RuntimeRequests } from "./runtime-requests.ts";
+import { ScreenShares } from "./screen-shares.ts";
 
 function decodeRawData(data: RawData): string {
   if (data instanceof ArrayBuffer) return Buffer.from(data).toString("utf8");
@@ -65,6 +66,7 @@ export class LiveServer {
   readonly #presence = new OutputPresence();
   readonly #hosts = new DisplayHosts();
   readonly #media: MediaStatuses;
+  readonly #shares: ScreenShares;
   readonly #displayRequests: DisplayRequests;
   readonly #requests: RuntimeRequests;
   readonly #unsubscribe: readonly (() => void)[];
@@ -78,13 +80,19 @@ export class LiveServer {
       catalog: options.catalog,
       bundledDir: options.bundledDir,
     });
+    this.#shares = new ScreenShares({
+      document: () => options.store.currentSession()?.document,
+      send: (sessionId, message) => this.#sessions.sendTo(sessionId, message),
+    });
     this.#attached = new AttachedSession({
       onEvent: (event) => this.#sessions.fanOutEvent(event),
       onDelta: (delta) => {
         this.#sessions.fanOutDelta(delta);
         this.#reconcilePresence();
-        if (delta.patches.some((patch) => patch.path[0] === "media"))
+        if (delta.patches.some((patch) => patch.path[0] === "media")) {
+          this.#shares.reconcile();
           this.#refreshMedia();
+        }
       },
     });
     this.#displayRequests = new DisplayRequests({
@@ -96,6 +104,7 @@ export class LiveServer {
       ...documentRequests(options.store),
       ...catalogRequests(options.catalog),
       ...this.#displayRequests.handlers(),
+      "shares.stop": ({ mediaId }) => this.#shares.stop(mediaId),
     });
     const fanOutLive = (patches: readonly Patch[]): void =>
       this.#sessions.fanOutLive(this.#attached.id, patches);
@@ -103,6 +112,7 @@ export class LiveServer {
       options.store.onChange(() => {
         const swapped = this.#attached.follow(options.store.currentSession());
         this.#reconcilePresence();
+        this.#shares.reconcile();
         // A document opened, replaced or saved to a new path resolves its Media anew.
         this.#refreshMedia();
         this.#sessions.broadcast({
@@ -114,11 +124,13 @@ export class LiveServer {
       this.#presence.onChange(fanOutLive),
       this.#hosts.onChange(fanOutLive),
       this.#media.onChange(fanOutLive),
+      this.#shares.onChange(fanOutLive),
       options.osc?.onChange((state) =>
         fanOutLive([{ op: "set", path: ["osc"], value: state }]),
       ) ?? (() => undefined),
     ];
     this.#attached.follow(options.store.currentSession());
+    this.#shares.reconcile();
     this.#refreshMedia();
   }
 
@@ -128,7 +140,8 @@ export class LiveServer {
       osc: this.#options.osc?.state() ?? EMPTY_LIVE_STATE.osc,
       ...this.#presence.state(),
       ...this.#hosts.state(),
-      ...this.#media.state(),
+      // A Screen Share's entry is the shares', every other item's the file statuses'.
+      media: { ...this.#media.state().media, ...this.#shares.state() },
     };
   }
 
@@ -147,6 +160,7 @@ export class LiveServer {
     this.#presence.close();
     this.#displayRequests.close();
     this.#hosts.close();
+    this.#shares.close();
     this.#media.close();
     this.#sessions.disconnectAll();
   }
@@ -166,6 +180,7 @@ export class LiveServer {
       this.#sessions.delete(session);
       this.#presence.detach(session.id);
       this.#displayRequests.withdraw(session.id);
+      this.#shares.disconnected(session.id);
       this.#releaseCalibration(session);
     });
   }
@@ -244,6 +259,11 @@ export class LiveServer {
           message.requestId,
           message.outcome,
         );
+        break;
+      case "share":
+      case "share-view":
+      case "share-signal":
+        this.#shares.receive(session, message);
         break;
       case "command":
         this.#command(session, message);

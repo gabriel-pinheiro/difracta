@@ -17,6 +17,7 @@ import {
   type Surface,
 } from "../document/document.ts";
 import {
+  aMediaType,
   flattenMedia,
   mediaItemTypeIn,
   type MediaType,
@@ -117,8 +118,8 @@ export function layerDefinition(layer: Layer, catalog: Catalog) {
 }
 
 /**
- * None first, then the Media files and bundled items of `type` in navigator
- * order, Groups and bundled items the Catalog lacks left out, so a control
+ * None first, then the Media files, bundled items and Screen Shares of
+ * `type` in navigator order, Groups and bundled items the Catalog lacks left out, so a control
  * lists them as they are.
  */
 function mediaOptions(
@@ -537,7 +538,7 @@ export function addressValueProblem(
     case "media":
       return resolved.options?.some((option) => option.value === value)
         ? undefined
-        : `must be "" for none or the id of ${resolved.accepts === "video" ? "a video" : "an image"} Media item${
+        : `must be "" for none or the id of ${aMediaType(resolved.accepts ?? "image")} Media item${
             (resolved.options?.length ?? 0) > 1
               ? `: ${(resolved.options ?? [])
                   .filter((option) => option.value !== "")

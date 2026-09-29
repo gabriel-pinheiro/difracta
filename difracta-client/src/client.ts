@@ -15,6 +15,8 @@ import {
 
 import { DocumentView } from "./document-view.ts";
 import { OfferedDisplays } from "./offered-displays.ts";
+import { Sharing } from "./screen-share/sharing.ts";
+import { Viewing } from "./screen-share/viewing.ts";
 import { Signal } from "./signal.ts";
 
 export type ConnectionPhase =
@@ -52,8 +54,8 @@ export class CommandError extends Error {
  * One connection to a runtime. Holds the open document's summary, one
  * DocumentView per subscribed document, acknowledged commands and requests,
  * a per-frame coalesced input queue (latest value per address wins), for an
- * Output page the Output it is attached to, and for Desktop the Displays it
- * offers.
+ * Output page the Output it is attached to, for Desktop the Displays it
+ * offers and the Screen Shares it shares into, and the ones it views.
  */
 export class DifractaClient {
   readonly phase = new Signal<ConnectionPhase>("connecting");
@@ -69,6 +71,10 @@ export class DifractaClient {
   readonly lastError = new Signal<string | undefined>(undefined);
   /** For a client of kind `desktop`: the Displays it offers as a Display Host. */
   readonly displayHost = new OfferedDisplays((message) => this.#send(message));
+  /** For a client of kind `desktop`: the Screen Shares it shares into, as a Sharer. */
+  readonly sharing = new Sharing((message) => this.#send(message));
+  /** The Screen Shares this connection views. */
+  readonly viewing = new Viewing((message) => this.#send(message));
 
   readonly #options: ClientOptions;
   readonly #views = new Map<string, DocumentView>();
@@ -284,6 +290,8 @@ export class DifractaClient {
         if (this.#attachedOutput !== null)
           this.#send({ type: "attach", outputId: this.#attachedOutput });
         this.displayHost.resend();
+        this.sharing.resend();
+        this.viewing.resend();
         break;
       case "document":
         this.document.set(parsed.summary);
@@ -330,6 +338,17 @@ export class DifractaClient {
       }
       case "display-request":
         void this.displayHost.receive(parsed);
+        break;
+      case "share-viewer":
+      case "share-ended":
+        this.sharing.receive(parsed);
+        break;
+      case "share-viewing":
+        this.viewing.receive(parsed);
+        break;
+      case "share-signal":
+        if (parsed.viewerId === undefined) this.viewing.receive(parsed);
+        else this.sharing.receive(parsed);
         break;
       case "error":
         this.lastError.set(parsed.message);

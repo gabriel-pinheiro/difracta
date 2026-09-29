@@ -14,7 +14,7 @@ import { orderKeyForNew } from "../document/tree.ts";
 import { generateId, id } from "../ids.ts";
 
 /**
- * A new Media file, bundled item or Media Group, last at the root or in the
+ * A new Media file, bundled item, Screen Share or Media Group, last at the root or in the
  * Group it was added to, or right after the sibling `after` names (null for
  * first), so items added one after another keep the order they came in. A
  * file is named after its file unless a name is given; its path is stored
@@ -22,14 +22,16 @@ import { generateId, id } from "../ids.ts";
  * made POSIX, so a caller on a machine with the file relativizes it first
  * (`relativeMediaPath`). The extension decides the type, and one Difracta
  * cannot show is refused. A bundled item names a Bundled Media entry the
- * Catalog has and is named after it unless a name is given. A Group has
- * neither.
+ * Catalog has and is named after it unless a name is given. A Screen
+ * Share, a slot a Sharer shares into, and a Group have neither; a Screen
+ * Share is named "Screen Share" unless a name is given, numbered while a
+ * sibling holds the name.
  */
 export const mediaCreate = defineCommand({
   name: "media.create",
   kind: "authoring",
   description:
-    "Add a Media item: kind file (default) with an image (png, jpg, jpeg, webp, gif, svg) or video (mp4, webm, mov) path relative to the Installation file's folder, named after the file unless a name is given; kind bundled with the id of a Bundled Media entry (`difracta media bundled`) in bundled, named after the entry unless a name is given; or kind group, a Media Group, with neither.",
+    "Add a Media item: kind file (default) with an image (png, jpg, jpeg, webp, gif, svg) or video (mp4, webm, mov) path relative to the Installation file's folder, named after the file unless a name is given; kind bundled with the id of a Bundled Media entry (`difracta media bundled`) in bundled, named after the entry unless a name is given; kind share, a Screen Share (type live), a named slot a Difracta Desktop shares a screen or window into, with neither; or kind group, a Media Group, with neither.",
   payload: z
     .object({
       id: z.string().min(1).optional(),
@@ -46,6 +48,7 @@ export const mediaCreate = defineCommand({
     .strict(),
   label: ({ kind, name, path, bundled }) => {
     if (kind === "group") return "Add Media Group";
+    if (kind === "share") return "Add Screen Share";
     if (kind === "bundled")
       return `Add Bundled Media “${name ?? bundled ?? ""}”`;
     return `Add Media “${name ?? mediaNameOf(path ?? "")}”`;
@@ -70,23 +73,18 @@ export const mediaCreate = defineCommand({
     const taken = siblings.map((sibling) => sibling.name);
     const base = { id: mediaId, parentId: payload.parentId, order };
     if (payload.kind !== "file" && payload.path !== undefined)
-      return rejected(
-        payload.kind === "group"
-          ? "A Media Group has no path."
-          : "A bundled Media item has no path; it names its entry in bundled.",
-      );
+      return rejected(NO_PATH[payload.kind]);
     if (payload.kind !== "bundled" && payload.bundled !== undefined)
-      return rejected(
-        payload.kind === "group"
-          ? "A Media Group names no Bundled Media entry."
-          : "A Media file names no Bundled Media entry; add kind bundled for that.",
-      );
+      return rejected(NO_BUNDLED[payload.kind]);
     let media: Media;
-    if (payload.kind === "group") {
+    if (payload.kind === "group" || payload.kind === "share") {
       media = {
         ...base,
-        kind: "group",
-        name: uniqueName(taken, payload.name ?? "Group"),
+        kind: payload.kind,
+        name: uniqueName(
+          taken,
+          payload.name ?? (payload.kind === "group" ? "Group" : "Screen Share"),
+        ),
       };
     } else if (payload.kind === "bundled") {
       if (payload.bundled === undefined)
@@ -118,3 +116,15 @@ export const mediaCreate = defineCommand({
     return accepted([{ op: "set", path: ["media", mediaId], value: media }]);
   },
 });
+
+const NO_PATH = {
+  bundled: "A bundled Media item has no path; it names its entry in bundled.",
+  share: "A Screen Share has no path; a Sharer shares into it.",
+  group: "A Media Group has no path.",
+} as const;
+
+const NO_BUNDLED = {
+  file: "A Media file names no Bundled Media entry; add kind bundled for that.",
+  share: "A Screen Share names no Bundled Media entry.",
+  group: "A Media Group names no Bundled Media entry.",
+} as const;

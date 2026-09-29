@@ -169,7 +169,7 @@ export function MediaRows({
   );
 }
 
-/** One Media file row; it subscribes to its own live status so a stat elsewhere leaves it alone. */
+/** One Media file, bundled item or Screen Share row; it subscribes to its own live status so a stat elsewhere leaves it alone. */
 function MediaFileRow({
   view,
   item,
@@ -185,10 +185,11 @@ function MediaFileRow({
 }) {
   const live = useDocumentPath<MediaLive>(view, ["live", "media", item.id]);
   const type = mediaItemTypeIn(item, catalog) ?? "image";
-  const warning = mediaWarning(
-    live,
-    item.kind === "bundled" ? "bundled" : "file",
-  );
+  // A Screen Share's status is not a file's; the row shows only its type.
+  const warning =
+    item.kind === "share"
+      ? undefined
+      : mediaWarning(live, item.kind === "bundled" ? "bundled" : "file");
   return (
     <NavigatorRow
       id={item.id}

@@ -52,7 +52,7 @@ export function parseByteRange(
  * honoured, which video seeking needs. Any origin may read it, so an
  * Output page served from elsewhere (a dev server, another runtime's
  * Studio) can upload the picture to a texture. 404 for an unknown id, a
- * Media Group, a bundled item whose entry the Catalog lacks, a missing
+ * Media Group, a Screen Share, a bundled item whose entry the Catalog lacks, a missing
  * file or an Installation without a path; 403 when the resolved path
  * leaves the Installation's folder and the runtime does not allow that.
  *
@@ -95,7 +95,9 @@ export function registerMediaRoutes(
             error:
               item?.kind === "group"
                 ? `“${name}” is a Media Group, which has no file.`
-                : `No Media item “${request.params.id}”.`,
+                : item?.kind === "share"
+                  ? `“${name}” is a Screen Share, which has no file.`
+                  : `No Media item “${request.params.id}”.`,
           });
         case "unavailable":
           return reply.status(404).send({

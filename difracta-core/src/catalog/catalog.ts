@@ -1,4 +1,4 @@
-import type { MediaType } from "../document/media.ts";
+import type { FileMediaType } from "../document/media.ts";
 import type { ParameterSchema } from "./parameters.ts";
 
 /**
@@ -75,7 +75,7 @@ export interface MediaDefinition {
   readonly notes?: string;
   /** Sorted first when picking: a good default. */
   readonly recommended?: boolean;
-  readonly type: MediaType;
+  readonly type: FileMediaType;
   /** Loops without a visible seam. */
   readonly loop?: boolean;
   /** Works as a one-shot on a beat. */

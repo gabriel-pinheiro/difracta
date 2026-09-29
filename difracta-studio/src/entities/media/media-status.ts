@@ -1,6 +1,6 @@
 import type { Media, Table } from "@difracta/core";
 
-/** What the runtime reports under `["live", "media", <id>]`. */
+/** What the runtime reports under `["live", "media", <id>]` for a file or bundled item. */
 export type MediaStatus =
   "ok" | "missing" | "outside" | "unsaved" | "unavailable";
 
@@ -77,13 +77,15 @@ export function mediaWarning(
   return describeMediaStatus(live.status, kind);
 }
 
-/** How many Media rows warn, for the collapsed Media section; a Group has no file to warn about. */
+/** How many Media rows warn, for the collapsed Media section; a Group and a Screen Share have no file to warn about. */
 export function mediaWarningCount(
   media: Table<Media>,
   live: MediaLiveTable,
 ): number {
   return Object.values(media).filter(
     (item) =>
-      item.kind !== "group" && mediaWarning(live[item.id]) !== undefined,
+      item.kind !== "group" &&
+      item.kind !== "share" &&
+      mediaWarning(live[item.id]) !== undefined,
   ).length;
 }

@@ -182,6 +182,21 @@ export const settings = {
      */
     requestTimeoutMs: 10_000,
   },
+  shares: {
+    /**
+     * The most Viewers one Screen Share takes, waiting ones included: the
+     * Sharer encodes once per Viewer.
+     */
+    maxViewers: 8,
+    /**
+     * How long a share whose Sharer's connection dropped stays
+     * `interrupted`, waiting for the same Sharer to declare it again,
+     * before it falls to `idle`.
+     */
+    interruptedForMs: 30_000,
+    /** The largest signalling payload the runtime relays, as JSON characters. */
+    maxSignalBytes: 64 * 1024,
+  },
   client: {
     /** First reconnect delay; doubles on each failure up to the maximum. */
     reconnectInitialMs: 500,

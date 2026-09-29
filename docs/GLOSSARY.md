@@ -253,17 +253,43 @@ definition's defaults.
 
 ### Media
 
-One image or video the Installation refers to, as an entity in the `media`
-table. A Media item is of kind `file`, with a `path` relative to the
-Installation File's folder, POSIX separators and `..` allowed, or of kind
-`bundled`, naming a Bundled Media entry by id. Its type, image or video, is read
-from the file's extension (png, jpg, jpeg, webp, gif, svg; mp4, webm, mov) or
-from the entry, and never stored. Items are arranged in Media Groups, and a name
-is unique among its siblings. The Runtime serves the file at `GET /media/<id>`
-and reports in the live state whether it is there: `ok`, `missing`, `outside`
-the folder, or `unsaved` while the Installation has no file for the path to be
+One image, video or Screen Share the Installation refers to, as an entity in the
+`media` table. A Media item is of kind `file`, with a `path` relative to the
+Installation File's folder, POSIX separators and `..` allowed, of kind
+`bundled`, naming a Bundled Media entry by id, or of kind `share`, a Screen
+Share. Its type is read from the file's extension (image: png, jpg, jpeg, webp,
+gif, svg; video: mp4, webm, mov) or from the entry, is `live` for a Screen
+Share, and is never stored. Items are arranged in Media Groups, and a name is
+unique among its siblings. The Runtime serves a file at `GET /media/<id>` and
+reports in the live state whether it is there: `ok`, `missing`, `outside` the
+folder, or `unsaved` while the Installation has no file for the path to be
 relative to; a bundled item is `ok`, or `unavailable` when the Runtime's Catalog
-lacks its entry.
+lacks its entry; a Screen Share is `idle`, `live` or `interrupted`.
+
+### Screen Share
+
+A Media item of kind `share`, of type `live`: a named slot a Sharer shares a
+screen or window into. It is authored like any item, Layers point at it, and
+someone shares into it at the show. The file holds the slot only: no file, and
+nothing about who shares. In the live state it is `idle` while nobody shares,
+`live` while a Sharer does, with the Sharer's name, whether it is a screen or a
+window, since when and how many Viewers it has, and `interrupted` while the
+Sharer's connection to the Runtime is gone, until the Sharer comes back or a
+delay passes. A second Sharer replaces the first; anyone may stop a share. Do
+not call it a stream, a feed or a capture.
+
+### Sharer
+
+The Difracta Desktop sharing into a Screen Share, named as its Display Host is
+named. It captures on its own machine and sends the picture to each Viewer
+directly; only a share's signalling goes through the Runtime. A share starts
+only from the Sharer's own machine.
+
+### Viewer
+
+A page receiving a Screen Share: an Output page, or Studio. Each has its own
+connection to the Sharer, and a Screen Share takes a limited number of them. A
+Viewer may wait for a slot nobody shares yet.
 
 ### Beats
 
@@ -291,11 +317,11 @@ nothing.
 ### Media Parameter
 
 A Parameter of kind `media` a Visual declares, holding a Media id or `""` for
-none, restricted to one type (`accepts: "image" | "video"`). Its Address lists
-the Media items of that type as its options, files and bundled items, in
-navigator order and without Groups, so a Macro can swap artwork; it is not
-linkable. Removing the Media item, or the Group holding it, clears every Media
-Parameter holding it.
+none, restricted to one type (`accepts: "image" | "video" | "live"`). Its
+Address lists the Media items of that type as its options, files, bundled items
+or Screen Shares, in navigator order and without Groups, so a Macro can swap
+artwork; it is not linkable. Removing the Media item, or the Group holding it,
+clears every Media Parameter holding it.
 
 ### Text Parameter
 

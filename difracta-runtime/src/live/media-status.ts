@@ -1,5 +1,5 @@
 import type { Patch } from "@difracta/core";
-import type { LiveState, MediaLive } from "@difracta/protocol";
+import type { FileLive, LiveState } from "@difracta/protocol";
 
 import {
   mediaStatusOf,
@@ -16,14 +16,14 @@ interface Snapshot {
 /**
  * Whether each Media item's file is there, under `["media", id]` in the
  * live state; a bundled item's is `unavailable` when the Catalog lacks its
- * entry. The runtime stats every file on each refresh: when a document
+ * entry. A Screen Share has no file: its entry is `screen-shares.ts`'s. The runtime stats every file on each refresh: when a document
  * opens or is replaced, when it is saved to a new path and after any command
  * that touches `media`. There is no file watcher. Refreshes are serialized
  * and a refresh asked for while one runs follows it, with the newest
  * snapshot, so the state always ends at the latest document.
  */
 export class MediaStatuses {
-  readonly #entries = new Map<string, MediaLive>();
+  readonly #entries = new Map<string, FileLive>();
   readonly #listeners = new Set<(patches: readonly Patch[]) => void>();
   readonly #serving: MediaServing;
   #queued: Snapshot | null | undefined;
@@ -67,7 +67,7 @@ export class MediaStatuses {
   }
 
   async #compute(snapshot: Snapshot | null): Promise<void> {
-    const next = new Map<string, MediaLive>();
+    const next = new Map<string, FileLive>();
     if (snapshot !== null)
       for (const id of Object.keys(snapshot.document.media)) {
         const status = await mediaStatusOf(snapshot, id, this.#serving);
@@ -75,7 +75,9 @@ export class MediaStatuses {
       }
     const patches: Patch[] = [];
     for (const id of this.#entries.keys())
-      if (!next.has(id)) patches.push({ op: "remove", path: ["media", id] });
+      // A Screen Share's entry is `screen-shares.ts`'s, even under an id a file had.
+      if (!next.has(id) && snapshot?.document.media[id]?.kind !== "share")
+        patches.push({ op: "remove", path: ["media", id] });
     for (const [id, entry] of next)
       if (this.#entries.get(id)?.status !== entry.status)
         patches.push({ op: "set", path: ["media", id], value: entry });

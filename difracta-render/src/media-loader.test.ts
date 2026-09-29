@@ -265,10 +265,12 @@ describe("MediaLoader", () => {
     expect(instance.get("clip")).toBe(before);
   });
 
-  it("skips Groups and items with no URL or an extension it cannot show", () => {
-    const { instance, images } = loader((id) =>
-      id === "far" ? undefined : `/media/${id}`,
-    );
+  it("skips Groups, Screen Shares and items with no URL or an extension it cannot show", () => {
+    const asked: string[] = [];
+    const { instance, images, videos } = loader((id) => {
+      asked.push(id);
+      return id === "far" ? undefined : `/media/${id}`;
+    });
     instance.sync({
       far: item("far", "far.png"),
       odd: item("odd", "odd.txt"),
@@ -279,8 +281,18 @@ describe("MediaLoader", () => {
         parentId: null,
         order: "a",
       },
+      slides: {
+        id: brand("media", "slides"),
+        kind: "share",
+        name: "Slides",
+        parentId: null,
+        order: "b",
+      },
     });
     expect(images).toHaveLength(0);
+    expect(videos).toHaveLength(0);
+    expect(asked).not.toContain("slides");
+    expect(instance.get("slides")).toBeUndefined();
     expect(instance.get("art")).toBeUndefined();
     expect(instance.get("far")).toBeUndefined();
   });

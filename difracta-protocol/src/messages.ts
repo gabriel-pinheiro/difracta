@@ -7,6 +7,10 @@ import {
   DisplayOutcomeSchema,
 } from "./display-hosts.ts";
 import { LiveStateSchema, OutputTelemetrySchema } from "./live.ts";
+import {
+  SHARE_CLIENT_MESSAGES,
+  SHARE_SERVER_MESSAGES,
+} from "./screen-shares.ts";
 
 /**
  * The live protocol between the runtime and every client (Studio, Output,
@@ -26,9 +30,14 @@ import { LiveStateSchema, OutputTelemetrySchema } from "./live.ts";
  * - Display Hosts: a `desktop` connection offers its Displays with
  *   `display-host`; the runtime sends it a `display-request` for each
  *   `displays.show` or `displays.hide` and waits for its `display-reply`.
+ * - Screen Shares: a `desktop` connection shares into a slot with `share`,
+ *   any connection views one with `share-view`, and `share-signal` carries
+ *   their WebRTC signalling through the runtime unread
+ *   (`screen-shares.ts`).
  *
  * `command` is a document-scoped acknowledged operation (registry commands,
- * undo, redo). `request` is a runtime-scoped one (documents, the Catalog).
+ * undo, redo). `request` is a runtime-scoped one (documents, the Catalog,
+ * Displays, Screen Shares).
  *
  * A runtime holds one document at a time. It is still addressed by id so a
  * client can tell a replaced document from the one it subscribed to.
@@ -135,6 +144,7 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
       outcome: DisplayOutcomeSchema,
     })
     .strict(),
+  ...SHARE_CLIENT_MESSAGES,
 ]);
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 
@@ -268,6 +278,7 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
       request: DisplayActionSchema,
     })
     .strict(),
+  ...SHARE_SERVER_MESSAGES,
   z.object({ type: z.literal("error"), message: z.string() }).strict(),
 ]);
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
