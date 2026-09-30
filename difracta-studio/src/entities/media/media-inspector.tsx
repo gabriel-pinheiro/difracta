@@ -15,21 +15,20 @@ import { useDocumentCommands } from "@/documents/document-commands";
 import { InspectorHeading } from "@/inspector/fields/inspector-heading";
 import { NameField } from "@/inspector/fields/name-field";
 import { catalog } from "@/lib/catalog";
-import { useCommand, useDocumentPath, useSignal } from "@/lib/client";
+import { useCommand, useDocumentPath } from "@/lib/client";
 import { useSelection } from "@/selection/selection";
-
-import { layerIcons } from "@/entities/layer/layer-icons";
 
 import { BeatsBlock } from "./beats-block";
 import { BundledBlock } from "./bundled-block";
 import { mediaTypeLabels } from "./media-icons";
 import { requestMediaPath } from "./media-path-request";
 import { describeMediaStatus, type MediaLive } from "./media-status";
-import { layersUsing } from "./media-usage";
+import { ShareInspector } from "./share-inspector";
+import { UsedByBlock } from "./used-by-block";
 
 /**
- * A Media item's inspector: a Group and a Screen Share have only their
- * name; a file or bundled item has the rest.
+ * A Media item's inspector: a Group has only its name, a Screen Share its
+ * own (`share-inspector.tsx`), a file or bundled item the rest.
  */
 export function MediaInspector({
   view,
@@ -46,7 +45,8 @@ export function MediaInspector({
     if (item === undefined) select({ kind: "installation" });
   }, [item, select]);
   if (item === undefined) return null;
-  if (item.kind !== "group" && item.kind !== "share")
+  if (item.kind === "share") return <ShareInspector view={view} item={item} />;
+  if (item.kind !== "group")
     return <MediaFileInspector view={view} item={item} />;
   return (
     <>
@@ -80,11 +80,8 @@ function MediaFileInspector({
 }) {
   const id = item.id;
   const command = useCommand(view);
-  const { select } = useSelection();
   const { selected } = useDocumentCommands();
   const live = useDocumentPath<MediaLive>(view, ["live", "media", id]);
-  // Uses read every Layer's Parameters: a change anywhere may add one.
-  const document = useSignal(view.document);
   const [request, setRequest] = useState<NameRequest | undefined>(undefined);
   const desktop = desktopBridge() !== undefined;
   const type = mediaItemTypeIn(item, catalog);
@@ -92,7 +89,6 @@ function MediaFileInspector({
     live === undefined
       ? undefined
       : describeMediaStatus(live.status, item.kind);
-  const uses = document === undefined ? [] : layersUsing(document, catalog, id);
   const setPath = (path: string): void => {
     void command("media.path", { mediaId: id, path });
   };
@@ -176,38 +172,16 @@ function MediaFileInspector({
             </p>
           )}
         </div>
-        <div className="grid grid-cols-[minmax(0,1fr)] gap-1">
-          <span className="text-xs text-muted-foreground">Used by</span>
-          {uses.length === 0 ? (
-            <p className="text-[0.6875rem]/relaxed text-muted-foreground">
+        <UsedByBlock
+          view={view}
+          mediaId={id}
+          none={
+            <>
               No Layer shows this item. Pick it in a Layer's{" "}
               {type === "video" ? "Video" : "Image"} row.
-            </p>
-          ) : (
-            <ul className="grid grid-cols-[minmax(0,1fr)] gap-px">
-              {uses.map(({ layer, parameter, label }) => {
-                const Icon = layerIcons[layer.kind];
-                return (
-                  <li key={`${layer.id}:${parameter}`}>
-                    <button
-                      type="button"
-                      className="flex h-6 w-full items-center gap-1.5 rounded-sm px-1.5 text-left text-xs hover:bg-accent hover:text-accent-foreground"
-                      onClick={() => {
-                        select({ kind: "layer", id: layer.id });
-                      }}
-                    >
-                      <Icon className="size-3.5 shrink-0 text-muted-foreground" />
-                      <span className="truncate">{layer.name}</span>
-                      <span className="ml-auto text-[0.625rem] text-muted-foreground">
-                        {label}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
+            </>
+          }
+        />
       </div>
       <NameDialog request={request} onClose={() => setRequest(undefined)} />
     </>

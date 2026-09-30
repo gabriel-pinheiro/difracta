@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/context-menu";
 import { catalog } from "@/lib/catalog";
 import { useCommand, useDocumentPath } from "@/lib/client";
+import { cn } from "@/lib/utils";
 import { DisabledHint } from "@/navigator/create-menu";
 import { useExpansion } from "@/navigator/expansion";
 import {
@@ -30,6 +31,8 @@ import { isSelected, useSelection } from "@/selection/selection";
 
 import { mediaGroupIcon, mediaTypeIcons } from "./media-icons";
 import { mediaWarning, type MediaLive } from "./media-status";
+import { shareLive } from "./share-slots";
+import { describeShare, shareStatusTone } from "./share-status";
 
 /** The Media items under the root or one Group as rows; Groups open onto their own. */
 export function MediaRows({
@@ -169,7 +172,12 @@ export function MediaRows({
   );
 }
 
-/** One Media file, bundled item or Screen Share row; it subscribes to its own live status so a stat elsewhere leaves it alone. */
+/**
+ * One Media file, bundled item or Screen Share row; it subscribes to its
+ * own live status so a stat elsewhere leaves it alone. A file shows its
+ * type or what is wrong with it, a Screen Share whether somebody shares
+ * into it: idle, live or interrupted.
+ */
 function MediaFileRow({
   view,
   item,
@@ -185,7 +193,9 @@ function MediaFileRow({
 }) {
   const live = useDocumentPath<MediaLive>(view, ["live", "media", item.id]);
   const type = mediaItemTypeIn(item, catalog) ?? "image";
-  // A Screen Share's status is not a file's; the row shows only its type.
+  // A Screen Share shows its status in place of its type; it has no file to warn about.
+  const share =
+    item.kind === "share" ? describeShare(shareLive(live)) : undefined;
   const warning =
     item.kind === "share"
       ? undefined
@@ -199,7 +209,15 @@ function MediaFileRow({
       selected={selected}
       onSelect={onSelect}
     >
-      {warning === undefined ? (
+      {share !== undefined ? (
+        <span
+          className={cn("text-[0.625rem]", shareStatusTone[share.word])}
+          title={`${share.label}. ${share.explanation}`}
+          data-share-status={share.word}
+        >
+          {share.word}
+        </span>
+      ) : warning === undefined ? (
         <span className="text-[0.625rem] text-muted-foreground">{type}</span>
       ) : (
         <NavigatorWarning

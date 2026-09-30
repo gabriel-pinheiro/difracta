@@ -10,7 +10,11 @@ import type { CreateItem } from "@/navigator/navigator-row";
 import { NavigatorSection } from "@/navigator/navigator-section";
 import { useSelection } from "@/selection/selection";
 
-import { bundledMediaIcon, mediaGroupIcon } from "./media-icons";
+import {
+  bundledMediaIcon,
+  mediaGroupIcon,
+  mediaTypeIcons,
+} from "./media-icons";
 import { MediaRows } from "./media-rows";
 import { mediaWarningCount, type MediaLiveTable } from "./media-status";
 import {
@@ -26,8 +30,10 @@ import {
  * the file first (a native picker in Desktop, a typed path in a browser)
  * since the item takes its name from the file; Bundled…, which adds an
  * item on the first Bundled Media entry at once and opens the Library on
- * it, so picking the clip is previewing it; and Group, which asks for a
- * name. A new item lands last in the Group whose "+" was used.
+ * it, so picking the clip is previewing it; Screen Share, which adds a slot
+ * and selects it, whose inspector says how to share into it; and Group,
+ * which asks for a name. A new item lands last in the Group whose "+" was
+ * used.
  */
 export function MediaSection({ view }: { readonly view: DocumentView }) {
   const command = useCommand(view);
@@ -35,7 +41,7 @@ export function MediaSection({ view }: { readonly view: DocumentView }) {
   const media = useDocumentPath<Table<Media>>(view, ["media"]) ?? {};
   const live = useDocumentPath<MediaLiveTable>(view, ["live", "media"]) ?? {};
   const { openMedia } = useBrowser();
-  const { create, createBundled, dialog } = useCreateMedia();
+  const { create, createBundled, createShare, dialog } = useCreateMedia();
   const [naming, setNaming] = useState<NameRequest | undefined>(undefined);
   const roots = childMedia(media, null);
 
@@ -78,6 +84,11 @@ export function MediaSection({ view }: { readonly view: DocumentView }) {
             openMedia(id, { created: true });
           },
         }),
+    },
+    {
+      label: "Screen Share",
+      icon: mediaTypeIcons.live,
+      onSelect: () => createShare({ parentId, onCreated: (id) => show(id) }),
     },
     {
       label: "Group",

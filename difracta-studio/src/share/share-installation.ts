@@ -5,7 +5,7 @@ import {
 } from "@difracta/client";
 import { generateId, type Media, type Table } from "@difracta/core";
 
-import { shareSlots, type ShareSlot } from "./share-slots";
+import { shareSlots, type ShareSlot } from "@/entities/media/share-slots";
 import type { Sharer } from "./sharer";
 
 /** The open Installation, as far as the share window names it. */

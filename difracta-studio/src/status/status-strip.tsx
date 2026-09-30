@@ -23,7 +23,9 @@ import { useInPageBar } from "@/menu/use-in-page-bar";
 
 import { liveSessions, sessionList } from "@/entities/output/output-live";
 
-/** Bottom strip: runtime connection, save state, outputs and blackout at a glance. */
+import { ActiveShares } from "./active-shares";
+
+/** Bottom strip: runtime connection, save state, Screen Shares, outputs and blackout at a glance. */
 export function StatusStrip() {
   const client = useClient();
   const phase = useSignal(client.phase);
@@ -61,6 +63,7 @@ export function StatusStrip() {
           saveText(selected)
         )}
       </span>
+      {view !== undefined && <ActiveShares view={view} />}
       {view !== undefined && <DocumentStatus view={view} />}
       {view !== undefined && !inPageBar && (
         <BlackoutToggle view={view} className="py-0 text-[0.6875rem]" />

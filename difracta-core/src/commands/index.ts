@@ -2,6 +2,7 @@ import { emptyCatalog, type Catalog } from "../catalog/catalog.ts";
 import type { CommandDefinition } from "../command/command.ts";
 import { CommandRegistry } from "../command/registry.ts";
 import { addressEdit } from "./address.edit.ts";
+import { addressesEdit } from "./addresses.edit.ts";
 import { addressSet, addressToggle } from "./address.set.ts";
 import { addressTrigger } from "./address.trigger.ts";
 import { calibrationExit, calibrationSet } from "./calibration.ts";
@@ -166,6 +167,7 @@ export const builtInCommands: readonly CommandDefinition<never>[] = [
   macroActionRemove,
   macroActionMove,
   addressEdit,
+  addressesEdit,
   addressSet,
   addressToggle,
   addressTrigger,

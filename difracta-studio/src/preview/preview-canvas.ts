@@ -3,12 +3,18 @@ import {
   createCompositor,
   type Compositor,
   type CompositorOptions,
+  type ViewerClaim,
 } from "@difracta/render";
 import { builtInCatalog } from "@difracta/visuals";
 
 import type { PreviewFrame } from "./preview-document";
 
-export interface PreviewCanvasOptions extends CompositorOptions {
+export interface PreviewCanvasOptions extends Omit<
+  CompositorOptions,
+  "viewer"
+> {
+  /** The Preview's claim on the page's Viewer; the canvas disposes it. */
+  readonly viewer: ViewerClaim;
   /** Told what stops the frames from drawing, and `undefined` once they draw again. */
   readonly onProblem: (message: string | undefined) => void;
 }
@@ -21,11 +27,14 @@ export interface PreviewCanvasOptions extends CompositorOptions {
  * stretched, since rendering at another size starts every Visual again. The
  * loop runs only while the Preview is active and the page is visible. The
  * compositor is made by the first frame, so a display without WebGL2 is a
- * problem reported like any other.
+ * problem reported like any other. Screen Shares come through a claim on
+ * the page's Viewer, which wants nothing while the loop is stopped, so a
+ * Preview nobody looks at views no share.
  */
 export class PreviewCanvas {
   readonly #canvas: HTMLCanvasElement;
   readonly #options: CompositorOptions;
+  readonly #viewer: ViewerClaim;
   /** `null` once making it failed: the display will not change its mind. */
   #compositor: Compositor | null | undefined;
   readonly #observer: ResizeObserver;
@@ -42,6 +51,7 @@ export class PreviewCanvas {
     this.#canvas = canvas;
     this.#onProblem = onProblem;
     this.#options = compositor;
+    this.#viewer = compositor.viewer;
     this.#observer = new ResizeObserver(() => this.#resized());
     this.#observer.observe(canvas);
     document.addEventListener("visibilitychange", this.#run);
@@ -69,6 +79,7 @@ export class PreviewCanvas {
     this.#observer.disconnect();
     window.clearTimeout(this.#settleTimer);
     this.#compositor?.dispose();
+    this.#viewer.dispose();
   }
 
   /** Starts or stops the loop to match what is wanted now. */
@@ -79,6 +90,7 @@ export class PreviewCanvas {
     if (!wanted && this.#animationFrame !== undefined) {
       cancelAnimationFrame(this.#animationFrame);
       this.#animationFrame = undefined;
+      this.#viewer.pause();
     }
   };
 

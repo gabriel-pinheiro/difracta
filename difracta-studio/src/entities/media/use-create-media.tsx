@@ -30,7 +30,8 @@ export function hasBundledMedia(accepts?: MediaType): boolean {
 }
 
 /**
- * Adds a Media file or a bundled item from wherever a "+" for one sits: the
+ * Adds a Media file, a bundled item or a Screen Share from wherever a "+"
+ * for one sits: the
  * Media section or a Media Group's row (into that Group), a Layer's media
  * row, a Macro action's. For a file, in Desktop the native picker opens
  * straight away and the item is named after the file by `media.create`; in
@@ -42,6 +43,7 @@ export function hasBundledMedia(accepts?: MediaType): boolean {
 export function useCreateMedia(): {
   readonly create: (options?: CreateMediaOptions) => void;
   readonly createBundled: (options?: CreateMediaOptions) => void;
+  readonly createShare: (options?: CreateMediaOptions) => void;
   readonly dialog: ReactNode;
 } {
   const client = useClient();
@@ -125,9 +127,38 @@ export function useCreateMedia(): {
     },
     [client, view],
   );
+  /**
+   * Adds a Screen Share, a slot somebody shares into later from Difracta
+   * Desktop, named "Screen Share" (numbered when taken) by `media.create`.
+   */
+  const createShare = useCallback(
+    (options?: CreateMediaOptions) => {
+      if (view === undefined) return;
+      const id = generateId("media");
+      client
+        .command<CommandResult>(view.documentId, "media.create", {
+          id,
+          kind: "share",
+          parentId: options?.parentId ?? null,
+        })
+        .then(
+          (result) => {
+            showWarnings(result.warnings ?? []);
+            options?.onCreated?.(id);
+          },
+          (failure: unknown) => {
+            toast.error(
+              failure instanceof Error ? failure.message : String(failure),
+            );
+          },
+        );
+    },
+    [client, view],
+  );
   return {
     create,
     createBundled,
+    createShare,
     dialog: (
       <NameDialog request={request} onClose={() => setRequest(undefined)} />
     ),

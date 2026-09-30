@@ -18,6 +18,11 @@ export type {
   ShareViewingState,
 } from "./live-peer.ts";
 export type { ShareCount } from "./live-viewer.ts";
+export {
+  SharedViewer,
+  type LiveSource,
+  type ViewerClaim,
+} from "./shared-viewer.ts";
 export { loopbackShares } from "./loopback-share.ts";
 export type { RenderIssue } from "./issues.ts";
 export { maskTextureSize } from "./masks.ts";

@@ -1,7 +1,7 @@
 import type { Media, Table } from "@difracta/core";
 import { describe, expect, it } from "vitest";
 
-import { shareSlots, slotStatus } from "./share-slots";
+import { activeShares, shareLive, shareSlots, slotStatus } from "./share-slots";
 
 const item = (
   id: string,
@@ -101,5 +101,50 @@ describe("The slots the share window offers", () => {
     expect(slot === undefined ? "" : slotStatus(slot)).toBe(
       "Nobody shares into it",
     );
+  });
+});
+
+describe("Studio's reading of the slots", () => {
+  const booth = {
+    status: "live",
+    sharer: "booth-pc",
+    source: "screen",
+    since: 5,
+    viewers: 1,
+  } as const;
+
+  it("reads a slot's entry, idle until the runtime says more", () => {
+    expect(shareLive(undefined)).toEqual({ status: "idle" });
+    expect(shareLive({ status: "idle" })).toEqual({ status: "idle" });
+    expect(shareLive(booth)).toBe(booth);
+    // A file's status under an id just made a slot says nothing of a share.
+    expect(shareLive({ status: "missing" })).toEqual({ status: "idle" });
+  });
+
+  it("lists the slots somebody shares into, interrupted ones included", () => {
+    expect(
+      activeShares(media, {
+        m_laptop: { status: "idle" },
+        m_booth: booth,
+        m_guest: { ...booth, status: "interrupted", sharer: "guest" },
+      }),
+    ).toEqual([
+      {
+        id: "m_booth",
+        name: "booth",
+        sharer: "booth-pc",
+        interrupted: false,
+        mine: false,
+      },
+      {
+        id: "m_guest",
+        name: "guest",
+        sharer: "guest",
+        interrupted: true,
+        mine: false,
+      },
+    ]);
+    expect(activeShares(media, {})).toEqual([]);
+    expect(activeShares(undefined, { m_booth: booth })).toEqual([]);
   });
 });

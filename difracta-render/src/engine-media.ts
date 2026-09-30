@@ -4,6 +4,7 @@ import type { ShareSignalling } from "./live-peer.ts";
 import { LiveViewer, type ShareCount } from "./live-viewer.ts";
 import { wantedShares } from "./live-wanted.ts";
 import { MediaLoader, type VideoCount } from "./media-loader.ts";
+import type { LiveSource } from "./shared-viewer.ts";
 import type {
   MediaContext,
   MediaHandle,
@@ -15,19 +16,22 @@ export interface EngineMediaOptions {
   readonly catalog: Catalog;
   readonly mediaUrl: (id: string) => string | undefined;
   readonly shares: ShareSignalling | undefined;
+  /** A Viewer shared with the rest of the page, in place of one of its own over `shares`. */
+  readonly viewer?: LiveSource | undefined;
 }
 
 /**
  * The Media one compositor's instances reach: the files and bundled items
  * the loader holds (`media-loader.ts`) and the Screen Shares the Viewer
- * receives (`live-viewer.ts`). `sync` brings both in step with a document
+ * receives (`live-viewer.ts`), or a claim on a Viewer the page shares
+ * among several compositors (`shared-viewer.ts`). `sync` brings both in step with a document
  * on an Output, the Viewer with the shares wanted there, worked out once
  * per document and Output since a document is immutable per revision.
  */
 export class EngineMedia implements MediaContext {
   readonly #catalog: Catalog;
   readonly #loader: MediaLoader;
-  readonly #viewer: LiveViewer;
+  readonly #viewer: LiveSource;
   #wantedFor:
     | { document: Document; outputId: string; shares: ReadonlySet<string> }
     | undefined;
@@ -38,7 +42,8 @@ export class EngineMedia implements MediaContext {
       mediaUrl: options.mediaUrl,
       catalog: options.catalog,
     });
-    this.#viewer = new LiveViewer({ signalling: options.shares });
+    this.#viewer =
+      options.viewer ?? new LiveViewer({ signalling: options.shares });
   }
 
   sync(document: Document, outputId: string): void {

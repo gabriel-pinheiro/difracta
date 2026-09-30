@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 
 import { captureSource } from "./share-capture";
 import type { SharePageProps } from "./share-page";
-import { slotStatus, type ShareSlot } from "./share-slots";
+import { slotStatus, type ShareSlot } from "@/entities/media/share-slots";
 import { SourcePicker } from "./source-picker";
 
 const QUALITIES: readonly {

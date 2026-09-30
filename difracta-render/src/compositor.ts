@@ -14,6 +14,7 @@ import { FontLoader } from "./font-loader.ts";
 import { EngineMedia } from "./engine-media.ts";
 import type { ShareSignalling } from "./live-peer.ts";
 import type { ShareCount } from "./live-viewer.ts";
+import type { LiveSource } from "./shared-viewer.ts";
 import { MediaTextures } from "./media-textures.ts";
 import { TextRasters } from "./text-rasters.ts";
 import { planFrame, plannedSurfaces, type LayerDraw } from "./plan.ts";
@@ -59,6 +60,12 @@ export interface CompositorOptions {
    * Without it nothing is viewed and every Screen Share stays empty.
    */
   readonly shares?: ShareSignalling;
+  /**
+   * A claim on the page's one Viewer (`SharedViewer`), for a page where
+   * other places view the same shares, as in Studio; it takes the place of
+   * `shares`, and disposing the compositor disposes the claim.
+   */
+  readonly viewer?: LiveSource;
 }
 
 export interface FrameReport {
@@ -169,6 +176,7 @@ class WebGLCompositor implements Compositor {
       catalog,
       mediaUrl: options.mediaUrl ?? (() => undefined),
       shares: options.shares,
+      viewer: options.viewer,
     });
     this.#text = new TextRasters(
       new FontLoader({

@@ -3,6 +3,7 @@ import { settings } from "@difracta/core";
 import { useEffect, useRef, useState } from "react";
 
 import { studioRuntimeOrigin } from "@/lib/runtime-origin";
+import { useShareViewer } from "@/lib/share-viewer";
 
 import { PreviewCanvas } from "./preview-canvas";
 import { previewFrames } from "./preview-document";
@@ -33,6 +34,7 @@ export function PreviewFrame({
   const mount = useRef<HTMLDivElement>(null);
   const host = useRef<PreviewCanvas>(undefined);
   const [problem, setProblem] = useState<string>();
+  const shares = useShareViewer();
 
   useEffect(() => {
     const parent = mount.current;
@@ -46,6 +48,7 @@ export function PreviewFrame({
         `${runtime}${settings.runtime.mediaPath}/${encodeURIComponent(id)}`,
       fontUrl: (file) =>
         `${runtime}${settings.runtime.fontsPath}/${encodeURIComponent(file)}`,
+      viewer: shares.claim(),
       onProblem: setProblem,
     });
     return () => {
@@ -53,7 +56,7 @@ export function PreviewFrame({
       host.current = undefined;
       element.remove();
     };
-  }, []);
+  }, [shares]);
 
   useEffect(() => {
     const canvas = host.current;

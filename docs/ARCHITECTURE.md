@@ -644,14 +644,18 @@ coalescing per Address so a drag is one step; `address.set` is the same write
 for show control, never undone. Both share one reducer, which refuses an unknown
 Address, a value the type does not accept (a number outside its range or off its
 step grid is refused by name, never snapped), and an Address a Controller
-drives, which cannot be written directly by anyone. A trigger Address is fired
-rather than written, through `address.trigger` and `address/fire.ts`: a Layer's
-Cue changes nothing in the document and returns an event instead, a Scene's play
-sets the active Scene, a Macro's run performs its actions. The runtime commits a
-command's patches before announcing its events to every session subscribed to
-the document, so a Macro's Parameter changes are in place before its Cue lands.
-An event is never stored, undone or replayed to a session that connects later;
-an Output hands it to the Layer's Visual instance as `cue(key)`.
+drives, which cannot be written directly by anyone. `addresses.edit` is
+`address.edit` for several Addresses at once, one undoable step labelled by
+their properties and coalescing per set of Addresses, refused whole when one
+write is: what a gesture moving several values together sends, such as the Live
+crop rectangle dragged whole. A trigger Address is fired rather than written,
+through `address.trigger` and `address/fire.ts`: a Layer's Cue changes nothing
+in the document and returns an event instead, a Scene's play sets the active
+Scene, a Macro's run performs its actions. The runtime commits a command's
+patches before announcing its events to every session subscribed to the
+document, so a Macro's Parameter changes are in place before its Cue lands. An
+event is never stored, undone or replayed to a session that connects later; an
+Output hands it to the Layer's Visual instance as `cue(key)`.
 
 **Why:** hand-written target unions mean every new controllable thing needs
 changes in the domain, protocol, inspector, OSC router and discovery tree. With
@@ -914,6 +918,10 @@ as a resume, and asks again for every slot it views. Neither holds any WebRTC
 object. The CLI has `difracta share list` (each slot with status, Sharer, screen
 or window, since when and Viewers, from the live state) and
 `difracta share stop <media>`; `difracta media screen-share [name]` adds a slot.
+Studio adds a slot from the Media section, shows each slot's status in its row
+and inspector and every active share in its status strip, stops a share with
+`shares.stop`, and views a slot as one Viewer per window while a picture of it
+is on screen (see Studio).
 
 **Why the runtime relays and never reads:** it is already the one place every
 client can reach, so a Sharer and a Viewer on different machines need no other
@@ -1906,10 +1914,17 @@ frame, and the texture with it, until a new connection's first frame replaces it
 or the runtime says nobody shares, which empties the handle. The compositor
 reports the slots viewed, the ones connected and a refusal's words, which the
 Output page sends as `workload.shares` in its telemetry and `difracta outputs`
-prints. A compositor given no `shares`, as Studio's Preview, views nothing, and
-its Live Layers are blank. `loopbackShares` (`loopback-share.ts`) is a Sharer
-inside the page over real peer connections, for the thumbnails and the GPU
-suite, which have no runtime.
+prints. A compositor given no `shares` views nothing, and its Live Layers are
+blank. A page with several places that show shares gives each compositor a
+`viewer` instead of `shares`: a claim on the page's one `SharedViewer`
+(`shared-viewer.ts`), which holds one `LiveViewer` and views the union of what
+its claims want, a slot while any claim wants it, leaving it `leaveAfterMs`
+after the last one stopped; a claim can `pause`, wanting nothing until its next
+sync, and disposing the compositor disposes its claim. Every claim reads the
+same slots, so the page is one Viewer per slot however many places show it.
+Studio is that page (see Studio). `loopbackShares` (`loopback-share.ts`) is a
+Sharer inside the page over real peer connections, for the thumbnails and the
+GPU suite, which have no runtime.
 
 **Why the engine is the Viewer, and not the Visual:** a share has one picture
 per Output however many Layers show it, it must be there before the Layer that
@@ -1924,10 +1939,14 @@ Sharer waiting for its own connection to fail took fifteen seconds in the spike
 where an asking Viewer took a quarter of one. **Why `lost` comes from the
 connection and not from frames stopping:** a Sharer may send nothing while its
 screen is still, so a slide that does not change and a share that dropped look
-the same in frames, and only the connection tells them apart. **Why a connection
-id in every payload:** the runtime relays in order but the two ends replace
-connections on their own, and a candidate added to the wrong connection fails
-it.
+the same in frames, and only the connection tells them apart. **Why one Viewer
+per page rather than one per compositor:** the runtime knows a Viewer by its
+connection and the Sharer offers once per Viewer, so two engines on one
+connection would both answer the same offer, and a connection per place would
+cost the Sharer another encode, of the eight a share takes, for a picture the
+page already has. **Why a connection id in every payload:** the runtime relays
+in order but the two ends replace connections on their own, and a candidate
+added to the wrong connection fails it.
 
 **Why a video upload is flushed:** the copy is a command queued with the rest of
 the frame's, and Chromium's hardware decoder on Linux (VA-API) can reuse the
@@ -2220,13 +2239,14 @@ adds an item and picks it on the Layer in one flow, as the "+" on a Path row
 makes a Path: File… through the Media section's picker, Bundled… as the
 section's Bundled… but on an entry of the accepted type, setting the Parameter
 to the new item before the Library opens on it, with only entries of that type
-offered; Escape there puts the Parameter back and removes the item. A value
-whose item is gone shows as None. The options come with the Address
-(`layerAddresses` takes the Media table), so the Link picker and the Macro
-picker, which resolve against the whole document, list the same items. Sliders
-and the color input stream every position through `address.edit`, one send in
-flight at a time. The Parameters header has Reset all, one `layer.reset` step.
-Section open states are remembered per section.
+offered; Escape there puts the Parameter back and removes the item. For a
+Parameter accepting `live` the "+" offers New Screen Share instead, which adds a
+slot and picks it. A value whose item is gone shows as None. The options come
+with the Address (`layerAddresses` takes the Media table), so the Link picker
+and the Macro picker, which resolve against the whole document, list the same
+items. Sliders and the color input stream every position through `address.edit`,
+one send in flight at a time. The Parameters header has Reset all, one
+`layer.reset` step. Section open states are remembered per section.
 
 The Controllers section is a tree like a Scene's: Number, Color and Text
 Controllers with their live value at the right (a percentage, a swatch, the
@@ -2432,31 +2452,31 @@ the row's end, the type as a dim word or, when the runtime cannot serve the
 file, an amber warning naming the status (`live/media/<id>`: missing, outside
 the show folder, or unsaved) explained on hover, the way a Layer without a
 Target warns; each row subscribes to its own status, and the collapsed section's
-warning count skips Groups. The section's "+" is a menu of File…, Bundled… and
-Group, and a Group row's "+" and context menu offer the same (Add File…, Add
-Bundled…, Add Group) with Ungroup and Remove; a new item lands last in the Group
-whose menu was used, and Group asks for a name. Bundled… sends `media.create`
-with kind `bundled` on the first entry the Library shows with nothing typed (the
-first Recommended one), selects the item and opens the Library bound to it; with
-no Bundled Media in the Catalog it is disabled, and its tooltip says
-`npm run media:fetch` puts them in place. File… asks for the file first: in
-Desktop it opens the native picker straight away, in a browser a dialog with a
-path field, then sends `media.create` with the path relativized against the
-Installation file's folder and the Group as `parentId`, and selects the new
-item. Without a file for the Installation yet, the path is sent as it came, and
-the row's "unsaved" warning says to save first. A Group's inspector has only its
-name. A bundled item's inspector has the name, "Bundled" with the entry's name,
-badges, description, size, length and Beats and a Change… button that opens the
-Library on the item, then the type, the status (`unavailable` when this
-runtime's bundle lacks the entry) and "Used by", with no path. A file's
-inspector has the name, the path as text committed on blur (`media.path`) with,
-in Desktop, a Browse button running the same picker, the type its extension
-says, the status with its reason, for a video its Beats and First Beat
-(`media.beats`) beside the tempo they make of the length the browser reads from
-the file's metadata, and "Used by": the Layers whose media Parameter holds the
-item, found by reading each Layer's definition for which Parameter is a media
-one; clicking one selects the Layer and opens its Scene row. Remove works from
-the context menu, the Delete key and Edit ▸ Remove like every entity.
+warning count skips Groups. The section's "+" is a menu of File…, Bundled…,
+Screen Share and Group, and a Group row's "+" and context menu offer the same
+(Add File…, Add Bundled…, Add Screen Share, Add Group) with Ungroup and Remove;
+a new item lands last in the Group whose menu was used, and Group asks for a
+name. Bundled… sends `media.create` with kind `bundled` on the first entry the
+Library shows with nothing typed (the first Recommended one), selects the item
+and opens the Library bound to it; with no Bundled Media in the Catalog it is
+disabled, and its tooltip says `npm run media:fetch` puts them in place. File…
+asks for the file first: in Desktop it opens the native picker straight away, in
+a browser a dialog with a path field, then sends `media.create` with the path
+relativized against the Installation file's folder and the Group as `parentId`,
+and selects the new item. Without a file for the Installation yet, the path is
+sent as it came, and the row's "unsaved" warning says to save first. A Group's
+inspector has only its name. A bundled item's inspector has the name, "Bundled"
+with the entry's name, badges, description, size, length and Beats and a Change…
+button that opens the Library on the item, then the type, the status
+(`unavailable` when this runtime's bundle lacks the entry) and "Used by", with
+no path. A file's inspector has the name, the path as text committed on blur
+(`media.path`) with, in Desktop, a Browse button running the same picker, the
+type its extension says, the status with its reason, for a video its Beats and
+First Beat (`media.beats`) beside the tempo they make of the length the browser
+reads from the file's metadata, and "Used by": the Layers whose media Parameter
+holds the item, found by reading each Layer's definition for which Parameter is
+a media one; clicking one selects the Layer and opens its Scene row. Remove
+works from the context menu, the Delete key and Edit ▸ Remove like every entity.
 
 **Why the "+" opens the picker before creating:** `media.create` names the item
 after its file, so there is nothing to ask until the file is known, and an item
@@ -2467,6 +2487,58 @@ a new Layer, the Outputs are the only honest view, so the item exists from the
 first tile and every pick is shown where it will be seen; Escape takes it back
 out. **Why the status is not computed in Studio:** only the runtime has the disk
 the path resolves on; Studio shows what `live/media` reports and explains it.
+
+A Screen Share row shows, in place of a type, its status from `live/media/<id>`:
+`idle` dim, `live` green, `interrupted` amber, explained on hover
+(`entities/media/share-status.ts`). Screen Share in a "+" menu sends
+`media.create` with kind `share` and selects the slot. Its inspector
+(`share-inspector.tsx`) has the name, the status in words, and while somebody
+shares the Sharer, screen or window, since when, the Viewers out of the eight a
+share takes, the picture, and Stop, which sends `shares.stop`; idle, it says how
+a share starts: in Difracta Desktop on the computer to share from, File ▸ Share
+Screen... There is no Start: a share starts only on its Sharer's machine. "Used
+by" follows, as for a file. The status strip lists every slot somebody shares
+into, `live` or `interrupted`, with its Sharer (`status/active-shares.tsx`), in
+every Studio whoever shares, and clicking one selects the slot. The share
+window's list and the strip read the slots the same way
+(`entities/media/share-slots.ts`).
+
+Studio is one Viewer (`lib/share-viewer.tsx`): a `SharedViewer` over its
+client's `viewing`, made with the client and living as long, of which every
+place showing a share takes a claim. The Preview's compositor gets one as its
+`viewer`, so a Live Layer shows the share there as on an Output, and the claim
+wants nothing while the Preview's loop is stopped (another tab in use, the page
+hidden). `SharePicture` (`entities/media/share-picture.tsx`) claims one slot
+while it is mounted and the page visible and copies each new frame of it into a
+canvas at the size shown, keeping the slot's last known shape (16:9 before any)
+for an empty frame; the slot's inspector and the crop editor show it. So Studio
+views a slot only while a picture of it is on screen, one Viewer per slot for
+the whole window, and leaves `settings.shares.viewer.leaveAfterMs` after the
+last picture goes. A slot's own inspector shows its picture only while somebody
+shares, so looking at an idle slot views nothing.
+
+A Visual may add a panel to the Layer inspector above its Parameter rows
+(`entities/layer/visual-panels.ts`, by Visual id); the rows stay below it, so
+everything a panel writes is an Address like any other. Live has the crop editor
+(`entities/layer/live-crop/`): the slot's picture with the rectangle its four
+crops leave, drawn as the Visual's instance makes them (`cropRect`, Left and Top
+winning when they cross), what is cut dimmed. Each side drags, streaming
+`address.edit` to that crop, and the inside drags the whole rectangle at its
+size, streaming `addresses.edit` with all four, one send in flight at a time as
+the sliders do; values are on the Parameters' step, a side stops `minCropSide`
+short of the side facing it, and each drag undoes as one step. A crop a
+Controller drives shows where the Controller puts it and has no grip, and the
+inside does not drag while any is driven. With no Screen Share picked, or nobody
+sharing, the frame is empty and the crops still drag.
+
+**Why Studio does not start a share:** choosing a screen or window, and the
+operating system's consent, happen where the content is. **Why the status strip
+names every share:** a screen on its way to a projector is something the person
+at any Studio should not lose track of, whoever started it. **Why one Viewer for
+the window:** see Rendering; a Preview, a crop editor and an inspector showing
+the same slot cost the Sharer one encode, not three. **Why a panel above the
+rows rather than a control in place of them:** the crops stay Addresses a Link,
+a Macro or the CLI moves, and a row is where a Link shows.
 
 The Surface inspector lists every Output, in Output order, as an accordion
 (`entities/surface/surface-outputs.tsx`): each row has the Output's name and a

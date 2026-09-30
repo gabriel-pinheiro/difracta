@@ -218,6 +218,7 @@ export const thumbnailsRoot = new URL("../thumbnails/", import.meta.url);
 
 export { bundledRoot, fontsRoot };
 export { bundledFonts, fontParameter } from "./fonts/fonts.ts";
+export { cropRect, type CropRect } from "./visuals/live-crop.ts";
 
 export function thumbnailFile(id: string): string {
   return `${id}.png`;

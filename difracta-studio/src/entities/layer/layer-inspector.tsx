@@ -39,6 +39,7 @@ import { useSelection } from "@/selection/selection";
 
 import { DefinitionBlock } from "./definition-block";
 import { PathRows } from "./path-rows";
+import { visualPanels } from "./visual-panels";
 
 /** The value an Address points at inside its Layer: the path minus `layers/<id>`. */
 function valueAt(layer: Layer, resolved: ResolvedAddress): AddressValue {
@@ -161,6 +162,10 @@ export function LayerInspector({
             requirements={definition.paths ?? []}
           />,
         ];
+  const Panel =
+    layer.kind === "visual" && layer.visual !== null
+      ? visualPanels[layer.visual]
+      : undefined;
   const allDefault = parameters.every(
     (entry) =>
       linkAt({ links }, entry.address) !== undefined ||
@@ -231,6 +236,9 @@ export function LayerInspector({
             </Button>
           }
         >
+          {Panel !== undefined && layer.kind === "visual" && (
+            <Panel view={view} layer={layer} />
+          )}
           {parameters.length === 0 ? (
             <p className="text-[0.6875rem]/relaxed text-muted-foreground">
               {definition.name} has no Parameters.

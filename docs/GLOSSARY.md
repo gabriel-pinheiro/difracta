@@ -291,7 +291,10 @@ A page receiving a Screen Share: an Output page, or Studio. Each has its own
 connection to the Sharer, and a Screen Share takes a limited number of them. A
 Viewer may wait for a slot nobody shares yet. An Output page views a slot while
 a Layer of the Active Scene on one of its Surfaces names it, enabled or not, and
-asks the Sharer for the picture again by itself when its connection drops.
+asks the Sharer for the picture again by itself when its connection drops. A
+Studio window is one Viewer, whatever shows the share in it (the Preview, the
+crop editor, the Screen Share's inspector), and views a slot only while a
+picture of it is on screen.
 
 ### Beats
 

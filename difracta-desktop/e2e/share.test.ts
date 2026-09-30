@@ -118,6 +118,13 @@ describe("Difracta Desktop as a Sharer", () => {
     const page = await openShareWindow();
     await shareTheScreen(page, port);
 
+    // Studio says so too: the slot's row and the status strip's reminder.
+    await studio
+      .locator(`[data-active-share="${SLOT}"]`)
+      .getByText(`Laptop · ${hostname()}`)
+      .waitFor();
+    await studio.locator('[data-share-status="live"]').waitFor();
+
     // Closing hides: the share goes on, and the menu brings the window back.
     await closeShareWindow();
     await eventually(shareWindows, ([window]) => window?.visible === false);
@@ -137,6 +144,8 @@ describe("Difracta Desktop as a Sharer", () => {
     await page.getByRole("alert").filter({ hasText: "Laptop" }).waitFor();
     await page.getByTestId("share-start").waitFor();
     expect((await slotLive(port)).status).toBe("idle");
+    await studio.locator('[data-share-status="idle"]').waitFor();
+    expect(await studio.locator("[data-active-share]").count()).toBe(0);
 
     // With nothing shared, closing closes.
     await page.close();
