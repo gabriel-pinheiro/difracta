@@ -5,9 +5,14 @@ import {
   executeCommand,
   type Document,
 } from "@difracta/core";
-import { createCompositor, defineVisual } from "@difracta/render";
+import {
+  createCompositor,
+  defineVisual,
+  loopbackShares,
+} from "@difracta/render";
 
 import { builtInCatalog } from "../src/index.ts";
+import { sharedScreen } from "./thumbnail-screen.ts";
 import { THUMBNAIL_VIDEO_ENTRY, thumbnailSetups } from "./thumbnail-setups.ts";
 
 /**
@@ -20,7 +25,9 @@ import { THUMBNAIL_VIDEO_ENTRY, thumbnailSetups } from "./thumbnail-setups.ts";
  * A Visual with a Media Parameter gets a picture or a clip of the Bundled
  * Media as a Media item, served from the data URL the script passes, and
  * its frames are paced by the browser's own, since the file loads and a
- * video plays on the browser's clock. A Visual that draws text is paced
+ * video plays on the browser's clock. A Visual with a Parameter for a
+ * Screen Share gets a slot a screen is shared into from inside the page
+ * (`thumbnail-screen.ts`), paced the same way. A Visual that draws text is paced
  * the same way, since its Bundled Font loads, from a data URL too. A
  * definition with a setup (`thumbnail-setups.ts`) gets its Parameter
  * values, its length and its say on the Cue. The result is the canvas as
@@ -35,6 +42,9 @@ export type ThumbnailMedia = Readonly<
 
 /** The Bundled Fonts' files as data URLs, by file name. */
 export type FontFiles = Readonly<Record<string, string>>;
+
+/** The Screen Share a Visual showing one gets. */
+const THUMBNAIL_SHARE = "thumbnail_share";
 
 /** How long a definition runs before its picture, unless its setup or the command says. */
 const DEFAULT_SECONDS = 3;
@@ -99,6 +109,10 @@ function installation(kind: ThumbnailKind, id: string): Document {
     kind: "bundled",
     bundled: THUMBNAIL_VIDEO_ENTRY,
   });
+  document = run(document, "media.create", {
+    id: THUMBNAIL_SHARE,
+    kind: "share",
+  });
   document = run(document, "surface.create", {
     id: "sur",
     name: "Frame",
@@ -133,7 +147,9 @@ function installation(kind: ThumbnailKind, id: string): Document {
           value:
             parameter.accepts === "image"
               ? "thumbnail_image"
-              : "thumbnail_video",
+              : parameter.accepts === "live"
+                ? THUMBNAIL_SHARE
+                : "thumbnail_video",
         });
     for (const [name, value] of Object.entries(
       thumbnailSetups[visualId]?.parameters ?? {},
@@ -187,9 +203,11 @@ export async function renderThumbnail(
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
+  const screen = sharedScreen();
   const compositor = createCompositor(canvas, catalog, {
     mediaUrl: (mediaId) => media[mediaId as keyof ThumbnailMedia],
     fontUrl: (file) => fonts[file],
+    shares: loopbackShares({ [THUMBNAIL_SHARE]: screen.stream }),
   });
   const scene = installation(kind, id);
   const setup = thumbnailSetups[id];
@@ -207,6 +225,7 @@ export async function renderThumbnail(
     if (cue !== undefined && CUE_LEAD_FRAMES.includes(frames - frame))
       compositor.trigger("thumbnail", cue);
     const now = paced ? await nextFrame() : (frame * 1000) / 60;
+    if (paced) screen.draw();
     // The picture must be drawn in this task: the canvas keeps no drawing
     // buffer past it, so the last frame is forced by a new revision.
     const last = frame >= frames;
@@ -223,6 +242,7 @@ export async function renderThumbnail(
   }
   const png = canvas.toDataURL("image/png");
   compositor.dispose();
+  screen.stop();
   return png;
 }
 

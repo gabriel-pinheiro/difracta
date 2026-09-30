@@ -46,6 +46,8 @@ export interface FrameMetrics {
   };
   /** Video Layers planned, video elements held and the ones playing, from the last frame. */
   readonly videos: FrameReport["videos"];
+  /** Screen Shares viewed and connected, and why a Viewer was refused, from the last frame. */
+  readonly shares: FrameReport["shares"];
   /** The Layers the last frame reported as unable to run. */
   readonly issues: readonly RenderIssue[];
 }
@@ -75,6 +77,7 @@ export class FrameCanvas {
     shaders: { planned: 0, running: 0, rendered: 0 },
     filters: { planned: 0, running: 0, executed: 0 },
     videos: { layers: 0, players: 0, playing: 0 },
+    shares: { viewed: 0, connected: 0 },
     issues: [],
   };
 
@@ -120,6 +123,7 @@ export class FrameCanvas {
         planned: this.#lastReport.filters.planned,
       },
       videos: this.#lastReport.videos,
+      shares: this.#lastReport.shares,
       issues: this.#lastReport.issues,
     };
   }

@@ -88,6 +88,7 @@ describe("liveStatus", () => {
               renderMs: 3.3,
               resolution: "1920×1080",
               videos: { playing: 1, players: 4, layers: 6, pastHardware: 0 },
+              shares: null,
               issues: [
                 {
                   layerId: "lay",
@@ -104,6 +105,7 @@ describe("liveStatus", () => {
               renderMs: null,
               resolution: null,
               videos: null,
+              shares: null,
               issues: [],
             },
           ],
@@ -168,6 +170,47 @@ describe("liveStatus", () => {
     expect(formatLiveStatus(status).slice(1, 3)).toEqual([
       "  s1  connected  60 fps  3.3 ms  1920×1080  videos 19 playing / 30 players / 40 Layers",
       "    warning: more than 16 video players playing; the 3 past that may decode on the CPU",
+    ]);
+  });
+
+  it("says the Screen Shares an Output views, and why it was refused as a Viewer", () => {
+    const viewing: LiveState = {
+      ...live,
+      outputs: {
+        out_tv: {
+          sessions: {
+            s1: {
+              sessionId: "s1",
+              outputId: "out_tv",
+              connectedAt: 10,
+              reportedAt: 30,
+              stale: false,
+              telemetry: {
+                ...telemetry,
+                issues: [],
+                workload: {
+                  ...telemetry.workload,
+                  shares: {
+                    viewed: 2,
+                    connected: 1,
+                    refused: "“Laptop” has its 8 Viewers.",
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+    const status = liveStatus(stage(), viewing);
+    expect(status.outputs[0]?.sessions[0]?.shares).toEqual({
+      viewed: 2,
+      connected: 1,
+      refused: "“Laptop” has its 8 Viewers.",
+    });
+    expect(formatLiveStatus(status).slice(2, 4)).toEqual([
+      "    Screen Shares: 1 connected / 2 viewed",
+      "    warning: refused as a Viewer: “Laptop” has its 8 Viewers.",
     ]);
   });
 

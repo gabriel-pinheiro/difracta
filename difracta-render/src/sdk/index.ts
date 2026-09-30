@@ -12,6 +12,7 @@ export {
   type MediaContext,
   type MediaHandle,
   type MediaImage,
+  type MediaLive,
   type MediaVideo,
   type Textures,
 } from "./media.ts";

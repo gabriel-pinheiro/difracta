@@ -37,18 +37,18 @@ consistent.
 
 ## Packages
 
-| Package             | Role                                                                                                                                                 | Depends on                       |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
-| `difracta-core`     | Document model (normalized tables), patches, Addresses, Catalog and Parameter types, command registry, pure command reducers, undo history, settings | zod                              |
-| `difracta-visuals`  | The built-in Catalog: Visual and Filter definitions, their implementations and thumbnails, and the fetched Bundled Media                             | core, render                     |
-| `difracta-protocol` | Wire schemas for the live socket and runtime requests                                                                                                | core                             |
-| `difracta-client`   | Connection, snapshot plus delta replica (`DocumentView`), acknowledged commands, coalesced inputs; Zeroconf browsing under `/discovery` (Node only)  | core, protocol, bonjour-service  |
-| `difracta-runtime`  | Node host: document sessions, files and autosave, live server, static serving                                                                        | core, protocol, visuals, fastify |
-| `difracta-render`   | Visual SDK (instances, player, helpers) and the WebGL2 compositor: homographies, Mask textures, calibration patterns                                 | core                             |
-| `difracta-output`   | One display's page; no React                                                                                                                         | client, render                   |
-| `difracta-studio`   | React authoring and performance UI                                                                                                                   | client, visuals                  |
-| `difracta-cli`      | `difracta` command for shells and agents                                                                                                             | client                           |
-| `difracta-desktop`  | Electron application: a bundled runtime of its own or a runtime elsewhere, its Studio in a window, native file dialogs and OS file opening           | client, runtime (bundled)        |
+| Package             | Role                                                                                                                                                                                              | Depends on                       |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| `difracta-core`     | Document model (normalized tables), patches, Addresses, Catalog and Parameter types, command registry, pure command reducers, undo history, settings, the payloads a Sharer and a Viewer exchange | zod                              |
+| `difracta-visuals`  | The built-in Catalog: Visual and Filter definitions, their implementations and thumbnails, and the fetched Bundled Media                                                                          | core, render                     |
+| `difracta-protocol` | Wire schemas for the live socket and runtime requests                                                                                                                                             | core                             |
+| `difracta-client`   | Connection, snapshot plus delta replica (`DocumentView`), acknowledged commands, coalesced inputs; Zeroconf browsing under `/discovery` (Node only)                                               | core, protocol, bonjour-service  |
+| `difracta-runtime`  | Node host: document sessions, files and autosave, live server, static serving                                                                                                                     | core, protocol, visuals, fastify |
+| `difracta-render`   | Visual SDK (instances, player, helpers) and the WebGL2 compositor: homographies, Mask textures, calibration patterns; the Viewer of Screen Shares                                                 | core                             |
+| `difracta-output`   | One display's page; no React                                                                                                                                                                      | client, render                   |
+| `difracta-studio`   | React authoring and performance UI                                                                                                                                                                | client, visuals                  |
+| `difracta-cli`      | `difracta` command for shells and agents                                                                                                                                                          | client                           |
+| `difracta-desktop`  | Electron application: a bundled runtime of its own or a runtime elsewhere, its Studio in a window, native file dialogs and OS file opening                                                        | client, runtime (bundled)        |
 
 **Why:** Studio and Output are separate packages because an Output page runs in
 smart-TV browsers and must stay tiny. Everything that can be pure lives in
@@ -688,10 +688,11 @@ they could not notice, so the runtime sends each of them a new `snapshot`.
 - `attach` declares the connection an Output page showing one Output; the
   runtime keeps an **Output Session** per attached connection. `telemetry`
   reports frame interval, render work, resolution, pixel ratio and workload
-  (Layers and Filters run per frame, and the video players playing and held)
-  once a second (`settings.live`). A session with no report for a few seconds
-  shows as stale, one silent for minutes is dropped, and a closed socket drops
-  it at once. Removing the Output drops its sessions.
+  (Layers and Filters run per frame, the video players playing and held, and the
+  Screen Shares viewed and connected, with a refusal's words) once a second
+  (`settings.live`). A session with no report for a few seconds shows as stale,
+  one silent for minutes is dropped, and a closed socket drops it at once.
+  Removing the Output drops its sessions.
 - `display-host` declares a connection of kind `desktop` a **Display Host**: its
   name, its Displays (id, label, bounds, scale factor, primary, internal) and
   `showing`, Display id → Output id. The host sends it again, whole, on every
@@ -860,14 +861,14 @@ the runtime's side is `live/screen-shares.ts`, which decides what is taken, and
   connection. On `joined` the Sharer offers to that Viewer, dropping any
   connection it had to it. While the Sharer is away a Viewer's request for a new
   offer goes nowhere; it asks again once it hears `live`.
-- `share-signal { mediaId, viewerId?, payload }` carries an opaque payload
-  (offers, answers, ICE candidates, whatever the two ends agree on): from the
-  Sharer, `viewerId` names one Viewer of the slot; from a Viewer it is absent
-  and the runtime adds it on the way to the Sharer. The runtime validates the
-  envelope, never the payload, and bounds it at `settings.shares.maxSignalBytes`
-  characters of JSON. A payload from a connection that does not share into the
-  slot, for a Viewer that is not one of its, or from a Viewer while nobody is
-  connected as its Sharer, is dropped.
+- `share-signal { mediaId, viewerId?, payload }` carries an opaque payload (an
+  offer, an answer or an ICE candidate, as `ShareSignal` in core says, which
+  only the two ends read): from the Sharer, `viewerId` names one Viewer of the
+  slot; from a Viewer it is absent and the runtime adds it on the way to the
+  Sharer. The runtime validates the envelope, never the payload, and bounds it
+  at `settings.shares.maxSignalBytes` characters of JSON. A payload from a
+  connection that does not share into the slot, for a Viewer that is not one of
+  its, or from a Viewer while nobody is connected as its Sharer, is dropped.
 - `shares.stop { mediaId }` is a `request` any client may make: the share ends,
   its Sharer hears `share-ended { reason: "stopped" }`, the Viewers `idle`. It
   fails when nobody shares into the slot.
@@ -1575,11 +1576,13 @@ coalesce window and limit, autosave delay, default host, port and document mode,
 the Media extensions, whether files outside the show folder are served and the
 pinned Bundled Media release, the discovery service and its delays, how long a
 Display Host gets to answer, the Viewers a Screen Share takes, how long an
-interrupted share waits for its Sharer and how large a relayed signalling
-payload may be, client reconnect backoff, CLI connect timeout, Desktop's waits
-for its runtime to start and stop and for a runtime elsewhere to answer, its
-window sizes and how many runtimes it remembers. Packages import from there
-instead of carrying their own literals.
+interrupted share waits for its Sharer, how large a relayed signalling payload
+may be and a Viewer's waits (before leaving a slot, before asking for a new
+offer, between asks), how long Live holds a lost frame and the least a crop
+leaves, client reconnect backoff, CLI connect timeout, Desktop's waits for its
+runtime to start and stop and for a runtime elsewhere to answer, its window
+sizes and how many runtimes it remembers. Packages import from there instead of
+carrying their own literals.
 
 ## Rendering
 
@@ -1587,11 +1590,11 @@ instead of carrying their own literals.
 interface: `render(document, outputId, width, height, now)` and `dispose()`. Its
 host is the Output page or Studio's Preview, each with a compositor of its own.
 The Output page owns the animation loop, the canvas size and telemetry, and
-hands the compositor a `mediaUrl(id)` resolver for the Installation's Media; the
-compositor advances the Visual instances, draws, and reports what it did. Under
-Blackout, or before a document arrives, the loop ticks once per
-`settings.output.idleFrameMs` and a document change wakes it, so the frame after
-a Blackout lands within one display frame.
+hands the compositor a `mediaUrl(id)` resolver for the Installation's Media and
+its client's `viewing` for the Screen Shares; the compositor advances the Visual
+instances, draws, and reports what it did. Under Blackout, or before a document
+arrives, the loop ticks once per `settings.output.idleFrameMs` and a document
+change wakes it, so the frame after a Blackout lands within one display frame.
 
 `planFrame` is the pure part: given a document and an Output it lists what to
 draw this frame. Outside Calibration Mode that is the active Scene's Visual
@@ -1762,6 +1765,61 @@ got. **Why the warm element is handed over rather than kept as the poster:** a
 player opened on Play starts a frame or two late, one already on its first frame
 starts at once, and the poster needs no decoder.
 
+Screen Shares: the engine is the Viewer (`live-viewer.ts`, one `live-slot.ts`
+per slot), kept beside the loader in `engine-media.ts`, which is the `media`
+context the instances get, and outside the GPU resources like it. The host hands
+the compositor `shares`, the signalling: `view`, `leave`, `requestOffer`,
+`signal`, `state` and the two listeners, which `client.viewing` is as it stands,
+so the engine imports no client; peer connections, video elements and timers are
+injected too, and the tests run the whole lifecycle with none of a browser's.
+Each frame `wantedShares` (`live-wanted.ts`, asked once per document revision)
+says which slots this Output views: the ones a Visual Layer of the active Scene
+names in a Media Parameter accepting `live`, enabled or not, with a Target on
+this Output. The Viewer views a slot that became wanted and leaves one
+`settings.shares.viewer.leaveAfterMs` after it stopped being, or at once when
+the `media` table lost it. A slot holds one video element and at most one
+receive-only `RTCPeerConnection` with no ICE servers. The Sharer offers and the
+slot answers, in the payloads of `ShareSignal` (`core/shares/share-signal.ts`):
+`offer`, `answer` and `ice`, each under the `connection` id the Sharer gave its
+offer, so a candidate of a connection since replaced is dropped. A new offer
+replaces the connection in hand; a share under another id drops it and waits for
+its Sharer's offer; an `interrupted` share keeps it, since only the Sharer's
+socket to the runtime is gone. While the runtime says somebody shares and the
+connection is neither up nor on its way, the slot asks for a new offer with
+`requestOffer`: at once when the connection `failed`, after
+`askAfterDisconnectedMs` when it is `disconnected`, after `askEveryMs` when
+there is none, and again every `askEveryMs` until an offer arrives. A refused
+Viewer asks to view again every `retryRefusedMs`. An instance reads a slot
+through `media.live(id)`: a handle like any Media's, whose version counts the
+frames presented, and `lost`, true while the picture in the handle is the last
+one of a connection that is `disconnected` or `failed`. The element keeps that
+frame, and the texture with it, until a new connection's first frame replaces it
+or the runtime says nobody shares, which empties the handle. The compositor
+reports the slots viewed, the ones connected and a refusal's words, which the
+Output page sends as `workload.shares` in its telemetry and `difracta outputs`
+prints. A compositor given no `shares`, as Studio's Preview, views nothing, and
+its Live Layers are blank. `loopbackShares` (`loopback-share.ts`) is a Sharer
+inside the page over real peer connections, for the thumbnails and the GPU
+suite, which have no runtime.
+
+**Why the engine is the Viewer, and not the Visual:** a share has one picture
+per Output however many Layers show it, it must be there before the Layer that
+shows it is enabled, and what to do when a connection drops is the same for
+every Layer; an instance that negotiated would do all of that per Layer and
+could not be tested without a browser. **Why on demand:** every Viewer is one
+more encode on the Sharer's machine, so an Output that shows no Layer of a share
+must not cost one; counting disabled Layers keeps the Macro that enables one
+from starting a negotiation on the beat. **Why recovery is the Viewer's to
+ask:** the side that stopped receiving is the one that knows, and sooner; a
+Sharer waiting for its own connection to fail took fifteen seconds in the spike
+where an asking Viewer took a quarter of one. **Why `lost` comes from the
+connection and not from frames stopping:** a Sharer may send nothing while its
+screen is still, so a slide that does not change and a share that dropped look
+the same in frames, and only the connection tells them apart. **Why a connection
+id in every payload:** the runtime relays in order but the two ends replace
+connections on their own, and a candidate added to the wrong connection fails
+it.
+
 **Why a video upload is flushed:** the copy is a command queued with the rest of
 the frame's, and Chromium's hardware decoder on Linux (VA-API) can reuse the
 buffer it reads before the queue is sent, so the texture gets a frame from
@@ -1884,6 +1942,19 @@ Video has a transport of stopped, paused and playing driven by its Cues,
 Autoplay and the element's end, and holds a playback while playing or paused;
 stopped, it shows the shared handle or nothing, unless Keep Warm has it hold the
 playback for the next Play.
+
+Live (`live.ts`) shows a Screen Share from `media.live(id)` with the same Fit
+(`FIT_GLSL` in `media-fit.ts`) and no Tint: four Crop Parameters, each the
+fraction cut from one side, become the rectangle the fragment samples
+(`live-crop.ts`, which keeps `settings.shares.viewer.minCropSide` of the picture
+when opposite crops would meet, Left and Top winning), and the Fit works on that
+rectangle's shape. It reports `changed` with each frame that arrives. While the
+share is `lost` the instance counts `dt`: with On Signal Loss at Hold it shows
+the last frame for `holdSeconds` and then reports `blank`, at Blank it does at
+once. **Why the crop is the Visual's and clamped there, not refused by the
+Parameters' ranges:** two Layers cut two parts of one screen, a Macro moves a
+crop like any Address, and a range that kept Left and Right from meeting would
+forbid cutting a corner out.
 
 Video follows a tempo through the Media item's Beats (`media.beats(id)` in the
 context, read from the `media` table on every call, so an edit reaches a clip

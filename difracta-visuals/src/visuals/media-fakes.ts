@@ -3,6 +3,7 @@ import {
   createShaderPlayer,
   type MediaContext,
   type MediaHandle,
+  type MediaLive,
   type MediaVideo,
   type ShaderVisual,
 } from "@difracta/render/sdk";
@@ -28,6 +29,11 @@ export function fakeHandle(id: string): FakeHandle {
     },
   };
   return handle;
+}
+
+/** A Screen Share the test connects, advances and loses by hand. */
+export function fakeLive(id: string): { handle: FakeHandle; lost: boolean } {
+  return { handle: fakeHandle(id), lost: false };
 }
 
 /** A playback that records the transport calls it gets; rate and loop only when they change, like the element's. */
@@ -78,11 +84,13 @@ export function context(
   handles: Record<string, MediaHandle> = {},
   videos: Record<string, () => MediaVideo> = {},
   beats: Record<string, MediaBeats> = {},
+  lives: Record<string, MediaLive> = {},
 ): MediaContext {
   return {
     get: (id) => handles[id],
     video: (id) => videos[id]?.(),
     beats: (id) => beats[id],
+    live: (id) => lives[id],
   };
 }
 

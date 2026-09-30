@@ -289,7 +289,9 @@ only from the Sharer's own machine.
 
 A page receiving a Screen Share: an Output page, or Studio. Each has its own
 connection to the Sharer, and a Screen Share takes a limited number of them. A
-Viewer may wait for a slot nobody shares yet.
+Viewer may wait for a slot nobody shares yet. An Output page views a slot while
+a Layer of the Active Scene on one of its Surfaces names it, enabled or not, and
+asks the Sharer for the picture again by itself when its connection drops.
 
 ### Beats
 
@@ -372,6 +374,19 @@ does ending without Loop. Every Layer on every Output plays its own copy of the
 file on the browser's clock, and a hidden Layer pauses it. A stopped Layer holds
 no video player, and Play takes the one the Output keeps ready for the Media
 item; Keep Warm has the Layer hold its own while stopped.
+
+### Live
+
+The built-in shader Visual that shows a Screen Share on its Target as the Output
+receives it: cropped by four Crop Parameters, Left, Top, Right and Bottom, each
+the fraction of the picture cut from that side, then through the same Fit as
+Image, which works on what the crops leave. Every Layer of an Output showing one
+slot shares one picture. The Layer is blank while nobody shares and until a
+frame arrives. On Signal Loss says what it does when the connection to the
+Sharer drops while the share goes on: Hold keeps the last frame for a few
+seconds and then goes blank, Blank shows nothing at once. It has no Tint and no
+Cues. Live names the Visual and the Media type; the Media item is a Screen
+Share.
 
 ### Controller
 

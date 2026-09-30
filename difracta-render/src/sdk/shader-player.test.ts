@@ -62,6 +62,7 @@ describe("createShaderPlayer", () => {
       get: (id) => (id === "pic" ? picture : undefined),
       video: () => undefined,
       beats: () => undefined,
+      live: () => undefined,
     };
     let frames = 0;
     const sampler = defineShaderVisual({

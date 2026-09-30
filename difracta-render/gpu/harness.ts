@@ -33,7 +33,8 @@ export interface Renderer {
   /**
    * With `media` (data URLs by Media item id) or `fonts` (data URLs by a
    * Bundled Font's file name) the frames are paced by the browser and wait
-   * for a first draw.
+   * for a first draw, and so with `shares` (a picture's data URL by Screen
+   * Share id), each shared from inside the page.
    */
   render(
     document: Document,
@@ -42,6 +43,7 @@ export interface Renderer {
     frames?: number,
     media?: Readonly<Record<string, string>>,
     fonts?: Readonly<Record<string, string>>,
+    shares?: Readonly<Record<string, string>>,
   ): Promise<Frame>;
   close(): Promise<void>;
 }
@@ -86,7 +88,7 @@ export async function launchRenderer(): Promise<Renderer> {
   await page.goto(ORIGIN);
   await page.addScriptTag({ content: await bundle() });
   return {
-    async render(document, width, height, frames = 1, media, fonts) {
+    async render(document, width, height, frames = 1, media, fonts, shares) {
       const result: RenderedFrames = await page.evaluate(
         (options) =>
           window.render(
@@ -97,8 +99,18 @@ export async function launchRenderer(): Promise<Renderer> {
             options.frames,
             options.media,
             options.fonts,
+            options.shares,
           ),
-        { document, outputId: OUTPUT, width, height, frames, media, fonts },
+        {
+          document,
+          outputId: OUTPUT,
+          width,
+          height,
+          frames,
+          media,
+          fonts,
+          shares,
+        },
       );
       if (escaped.length > 0) {
         const messages = escaped.splice(0).map((error) => error.message);

@@ -29,6 +29,7 @@ interface OutputPageOptions {
  * by clicking, and it lists them under the message too when the value names
  * no Output or several. Everything shown is built as DOM nodes and text,
  * never as HTML, since the query and the names come from outside. Telemetry goes out once a second while attached.
+ * The compositor views Screen Shares through the client's `viewing`.
  */
 export class OutputPage {
   readonly #options: OutputPageOptions;
@@ -44,6 +45,7 @@ export class OutputPage {
     this.#frame = new FrameCanvas(options.canvas, {
       mediaUrl: options.mediaUrl,
       fontUrl: options.fontUrl,
+      shares: options.client.viewing,
     });
     options.client.phase.subscribe(() => this.#refresh());
     options.client.document.subscribe(() => this.#refresh());
@@ -139,7 +141,7 @@ export class OutputPage {
   }
 
   #report(): void {
-    const { layers, shaders, filters, videos, issues, ...metrics } =
+    const { layers, shaders, filters, videos, shares, issues, ...metrics } =
       this.#frame.metrics();
     const telemetry: OutputTelemetry = {
       ...metrics,
@@ -160,6 +162,7 @@ export class OutputPage {
           relevant: filters.planned,
         },
         videos,
+        shares,
       },
       issues: issues.slice(0, MAX_TELEMETRY_ISSUES),
     };

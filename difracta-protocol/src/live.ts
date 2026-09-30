@@ -45,6 +45,21 @@ export function videosPastHardware(count: Pick<VideoCount, "playing">): number {
   return Math.max(0, count.playing - settings.media.video.hardwareDecoders);
 }
 
+/**
+ * Screen Shares on an Output: the slots it views, waiting ones included,
+ * the ones whose peer connection is up, and, when the runtime refused it
+ * as a Viewer of one, the runtime's words. A page cannot tell whether it
+ * decodes a share in hardware.
+ */
+const ShareViewCount = z
+  .object({
+    viewed: z.number().int().nonnegative(),
+    connected: z.number().int().nonnegative(),
+    refused: z.string().optional(),
+  })
+  .strict();
+export type ShareViewCount = z.infer<typeof ShareViewCount>;
+
 /** How many issues one telemetry report carries at most; the Output keeps the first ones. */
 export const MAX_TELEMETRY_ISSUES = 8;
 
@@ -76,6 +91,8 @@ export const OutputTelemetrySchema = z
         filters: Count,
         /** Optional so a report without it still validates. */
         videos: VideoCount.optional(),
+        /** Optional so a report without it still validates. */
+        shares: ShareViewCount.optional(),
       })
       .strict(),
     /**

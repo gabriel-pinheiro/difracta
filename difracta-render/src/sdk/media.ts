@@ -11,6 +11,7 @@ import type { MediaBeats } from "@difracta/core";
  * decoded video frame, so an instance reports `changed` exactly when the
  * texture the engine would upload differs. `media.beats(id)` answers a
  * video's length in beats, for an instance that follows a tempo.
+ * `media.live(id)` is a Screen Share as this Output receives it.
  */
 export type MediaImage =
   | HTMLImageElement
@@ -63,6 +64,22 @@ export interface MediaVideo {
   dispose(): void;
 }
 
+/**
+ * A Screen Share as the engine receives it, one per slot and shared by
+ * every instance showing it, since a share has one picture. The engine
+ * views the slot, negotiates and recovers; an instance only reads. The
+ * handle's `image` is null until a frame of the share arrived and again
+ * once nobody shares, and `version` advances per frame presented, which on
+ * a still screen is seldom. `lost` says the picture in the handle is the
+ * last one of a connection that dropped and has not come back: the
+ * instance decides how long that frame is worth showing, counting `dt`.
+ * The clock is the stream's, under the exception a video element has.
+ */
+export interface MediaLive {
+  readonly handle: MediaHandle;
+  readonly lost: boolean;
+}
+
 export interface MediaContext {
   /**
    * The item's shared picture: an image once decoded, or a video's first
@@ -77,6 +94,11 @@ export interface MediaContext {
    * change reaches a clip that is playing.
    */
   beats(id: string): MediaBeats | undefined;
+  /**
+   * The Screen Share item as this Output receives it; undefined for
+   * anything else, and where nothing views shares, as in a Preview.
+   */
+  live(id: string): MediaLive | undefined;
 }
 
 /** The handles an update hands the engine, by name: `{ media: handle }` binds `u_media` and `u_media_size`. */
@@ -87,4 +109,5 @@ export const NO_MEDIA: MediaContext = {
   get: () => undefined,
   video: () => undefined,
   beats: () => undefined,
+  live: () => undefined,
 };

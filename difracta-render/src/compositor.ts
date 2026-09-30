@@ -11,7 +11,9 @@ import { frameIssues, type RenderIssue } from "./issues.ts";
 import { LayerPlayers, type LayerFrame } from "./layer-players.ts";
 import { MaskTextures } from "./masks.ts";
 import { FontLoader } from "./font-loader.ts";
-import { MediaLoader } from "./media-loader.ts";
+import { EngineMedia } from "./engine-media.ts";
+import type { ShareSignalling } from "./live-peer.ts";
+import type { ShareCount } from "./live-viewer.ts";
 import { MediaTextures } from "./media-textures.ts";
 import { TextRasters } from "./text-rasters.ts";
 import { planFrame, plannedSurfaces, type LayerDraw } from "./plan.ts";
@@ -52,6 +54,11 @@ export interface CompositorOptions {
    * loads and every text Layer stays blank.
    */
   readonly fontUrl?: (file: string) => string | undefined;
+  /**
+   * How this page views Screen Shares: `client.viewing` for an Output page.
+   * Without it nothing is viewed and every Screen Share stays empty.
+   */
+  readonly shares?: ShareSignalling;
 }
 
 export interface FrameReport {
@@ -86,6 +93,8 @@ export interface FrameReport {
     readonly players: number;
     readonly playing: number;
   };
+  /** Screen Shares: the slots viewed, the ones connected, and why a Viewer was refused. */
+  readonly shares: ShareCount;
   /** Planned Layers drawing nothing because their Visual or Filter cannot run. */
   readonly issues: readonly RenderIssue[];
 }
@@ -120,13 +129,13 @@ export function createCompositor(
  * (mask texture, homography) and per Layer (instance, canvas, texture), and
  * skips frames whose inputs did not change and whose Layers drew nothing
  * new, so a static Scene costs the Output only the instances' updates. The
- * Media loader is kept outside the GPU resources: elements survive a lost
- * context, textures do not.
+ * Media (`engine-media.ts`) is kept outside the GPU resources: elements and
+ * peer connections survive a lost context, textures do not.
  */
 class WebGLCompositor implements Compositor {
   readonly #canvas: HTMLCanvasElement;
   readonly #catalog: Catalog;
-  readonly #loader: MediaLoader;
+  readonly #media: EngineMedia;
   readonly #text: TextRasters;
   #resources: Resources | undefined;
   #lost = false;
@@ -156,9 +165,10 @@ class WebGLCompositor implements Compositor {
   ) {
     this.#canvas = canvas;
     this.#catalog = catalog;
-    this.#loader = new MediaLoader({
-      mediaUrl: options.mediaUrl ?? (() => undefined),
+    this.#media = new EngineMedia({
       catalog,
+      mediaUrl: options.mediaUrl ?? (() => undefined),
+      shares: options.shares,
     });
     this.#text = new TextRasters(
       new FontLoader({
@@ -184,7 +194,8 @@ class WebGLCompositor implements Compositor {
         layers: NO_LAYERS,
         shaders: NO_LAYERS,
         filters: NO_FILTERS,
-        videos: { layers: 0, ...this.#loader.videos() },
+        videos: { layers: 0, ...this.#media.videos() },
+        shares: this.#media.shares(),
         issues: NO_ISSUES,
       };
     const dt =
@@ -197,7 +208,7 @@ class WebGLCompositor implements Compositor {
     this.#lastNow = now;
     const resources = (this.#resources ??= this.#setup());
     const { gl, program } = resources;
-    this.#loader.sync(document.media);
+    this.#media.sync(document, outputId);
     // Parameter Links resolve here, once per frame: the Layers planned and
     // drawn carry what their Controllers make of them.
     const plan = planFrame(
@@ -205,7 +216,7 @@ class WebGLCompositor implements Compositor {
       outputId,
       this.#catalog,
     );
-    this.#loader.preload(() => plannedMedia(plan.layers, this.#catalog));
+    this.#media.preload(() => plannedMedia(plan.layers, this.#catalog));
     const step = resources.players.step(plan.layers, dt, width, height);
     resources.media.retain(step.textures);
     this.#text.retain(step.textures);
@@ -220,7 +231,8 @@ class WebGLCompositor implements Compositor {
       running: chain.running,
       executed: passes.length,
     };
-    const videos = { layers: step.videoLayers, ...this.#loader.videos() };
+    const videos = { layers: step.videoLayers, ...this.#media.videos() };
+    const shares = this.#media.shares();
     const issues = frameIssues(
       step,
       chain,
@@ -242,6 +254,7 @@ class WebGLCompositor implements Compositor {
         shaders: { ...shaders, rendered: 0 },
         filters: { ...filters, executed: 0 },
         videos,
+        shares,
         issues,
       };
     this.#last = { document, outputId, width, height };
@@ -261,7 +274,7 @@ class WebGLCompositor implements Compositor {
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
     if (plan.blackout)
-      return { drew: true, layers, shaders, filters, videos, issues };
+      return { drew: true, layers, shaders, filters, videos, shares, issues };
 
     // With a Filter to run, the Layers accumulate in the chain's target
     // instead of the screen, each pass transforms what is there so far,
@@ -331,7 +344,7 @@ class WebGLCompositor implements Compositor {
     // Mask textures follow the plan, not the draw: a Surface whose Layer is
     // hidden or blank this frame keeps its Masks rasterized.
     resources.masks.retain(plannedSurfaces(plan));
-    return { drew: true, layers, shaders, filters, videos, issues };
+    return { drew: true, layers, shaders, filters, videos, shares, issues };
   }
 
   trigger(layerId: string, key: string): void {
@@ -352,7 +365,7 @@ class WebGLCompositor implements Compositor {
     resources.media.dispose();
     resources.program.dispose();
     this.#resources = undefined;
-    this.#loader.dispose();
+    this.#media.dispose();
   }
 
   #setup(): Resources {
@@ -379,7 +392,7 @@ class WebGLCompositor implements Compositor {
       program,
       calibration: new CalibrationDrawing(program),
       masks: new MaskTextures(gl),
-      players: new LayerPlayers(gl, this.#catalog, this.#loader, this.#text),
+      players: new LayerPlayers(gl, this.#catalog, this.#media, this.#text),
       filters: new FilterPlayers(this.#catalog),
       chain: new FilterChain(gl, program.quad),
       shaderPrograms: new ShaderVisualPrograms(

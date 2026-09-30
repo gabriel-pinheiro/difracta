@@ -145,6 +145,7 @@ describe("visual player", () => {
       get: (id) => (id === "pic" ? picture : undefined),
       video: () => undefined,
       beats: () => undefined,
+      live: () => undefined,
     };
     const events: string[] = [];
     const watcher = defineVisual({

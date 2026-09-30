@@ -196,6 +196,28 @@ export const settings = {
     interruptedForMs: 30_000,
     /** The largest signalling payload the runtime relays, as JSON characters. */
     maxSignalBytes: 64 * 1024,
+    /** What a Viewer does on its side: an Output page, or Studio. */
+    viewer: {
+      /**
+       * How long a Viewer keeps viewing a slot after the last Layer naming
+       * it left the active Scene, so that a Scene played again soon finds
+       * the picture there.
+       */
+      leaveAfterMs: 5_000,
+      /**
+       * How long a peer connection may stay `disconnected` before the
+       * Viewer asks the Sharer for a new offer; a `failed` one asks at once.
+       */
+      askAfterDisconnectedMs: 2_000,
+      /** The Viewer asks again this often until an offer arrives. */
+      askEveryMs: 3_000,
+      /** A refused Viewer asks to view again this often, since a place may have come free. */
+      retryRefusedMs: 10_000,
+      /** How long the Live Visual holds the last frame of a share it lost before going blank. */
+      holdSeconds: 5,
+      /** The least of the picture's width and height a crop leaves, as a fraction. */
+      minCropSide: 0.01,
+    },
   },
   client: {
     /** First reconnect delay; doubles on each failure up to the maximum. */

@@ -4,6 +4,7 @@ import {
   type LiveState,
   type OscLive,
   type OutputSessionLive,
+  type ShareViewCount,
 } from "@difracta/protocol";
 
 /**
@@ -35,6 +36,8 @@ export interface SessionStatus {
     /** How many of the playing ones are past the hardware decoders, and may decode on the CPU. */
     readonly pastHardware: number;
   } | null;
+  /** Screen Shares viewed and connected, and why this Viewer was refused; null until reported. */
+  readonly shares: ShareViewCount | null;
   readonly issues: readonly IssueStatus[];
 }
 
@@ -86,6 +89,7 @@ function sessionStatus(
             ...telemetry.workload.videos,
             pastHardware: videosPastHardware(telemetry.workload.videos),
           },
+    shares: telemetry?.workload.shares ?? null,
     // A report without the list means every Layer ran.
     issues: (telemetry?.issues ?? []).map((issue) => ({
       layerId: issue.layerId,
@@ -106,6 +110,14 @@ export function formatLiveStatus(status: LiveStatus): string[] {
       lines.push(
         `  ${session.sessionId}  ${session.connected ? "connected" : "stale"}  ${session.fps === null ? "—" : String(session.fps)} fps  ${session.renderMs === null ? "—" : `${String(session.renderMs)} ms`}  ${session.resolution ?? "—"}${session.videos === null ? "" : `  videos ${String(session.videos.playing)} playing / ${String(session.videos.players)} players / ${String(session.videos.layers)} Layers`}`,
       );
+      if (session.shares !== null && session.shares.viewed > 0)
+        lines.push(
+          `    Screen Shares: ${String(session.shares.connected)} connected / ${String(session.shares.viewed)} viewed`,
+        );
+      if (session.shares?.refused !== undefined)
+        lines.push(
+          `    warning: refused as a Viewer: ${session.shares.refused}`,
+        );
       if (session.videos !== null && session.videos.pastHardware > 0)
         lines.push(
           `    warning: more than ${String(settings.media.video.hardwareDecoders)} video players playing; the ${String(session.videos.pastHardware)} past that may decode on the CPU`,

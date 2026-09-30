@@ -37,7 +37,7 @@ export function registerStatus(program: Command, cli: Cli): void {
   program
     .command("outputs")
     .description(
-      "List the Outputs with their Output Sessions: connected or stale, fps, render time, resolution, video players (playing, held, Layers that take a video, with a warning when more play than hardware decoders work at once), Layers that failed.",
+      "List the Outputs with their Output Sessions: connected or stale, fps, render time, resolution, video players (playing, held, Layers that take a video, with a warning when more play than hardware decoders work at once), the Screen Shares it views and how many are connected (with a warning when it was refused as a Viewer), Layers that failed.",
     )
     .action(() =>
       cli.withDocument(async (client, summary) => {

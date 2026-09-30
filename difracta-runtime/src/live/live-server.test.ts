@@ -527,6 +527,7 @@ describe("live protocol", () => {
       "lightning-strikes",
       "liquid-chrome",
       "lissajous",
+      "live",
       "monolith",
       "moving-head-spot",
       "nebula",

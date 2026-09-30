@@ -221,6 +221,15 @@ export class Stage {
     return this;
   }
 
+  /** A Screen Share: a slot somebody shares a screen or a window into. */
+  share(id: string): this {
+    this.#document = run(this.#document, "media.create", {
+      id,
+      kind: "share",
+    });
+    return this;
+  }
+
   blackout(): this {
     this.#document = run(this.#document, "address.set", {
       address: "installation/blackout",

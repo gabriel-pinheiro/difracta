@@ -120,7 +120,7 @@ export function needsCrossOrigin(url: string, pageOrigin: string): boolean {
   }
 }
 
-export class MediaLoader implements MediaContext {
+export class MediaLoader implements Omit<MediaContext, "live"> {
   readonly #options: MediaLoaderOptions;
   readonly #elements: MediaElements;
   readonly #catalog: Catalog;

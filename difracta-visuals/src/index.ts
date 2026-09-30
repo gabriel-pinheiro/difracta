@@ -26,6 +26,7 @@ import { flashMatrix } from "./visuals/flash-matrix.ts";
 import { frameElectric } from "./visuals/frame-electric.ts";
 import { gradient } from "./visuals/gradient.ts";
 import { image } from "./visuals/image.ts";
+import { live } from "./visuals/live.ts";
 import { frameEmbers } from "./visuals/frame-embers.ts";
 import { frameGarland } from "./visuals/frame-garland.ts";
 import { frameIvy } from "./visuals/frame-ivy.ts";
@@ -109,6 +110,7 @@ export const builtInCatalog = new Catalog({
     solidColor,
     image,
     video,
+    live,
     text,
     counter,
     koiPond,
