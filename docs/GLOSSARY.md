@@ -283,7 +283,7 @@ not call it a stream, a feed or a capture.
 The Difracta Desktop sharing into a Screen Share, named as its Display Host is
 named. It captures on its own machine and sends the picture to each Viewer
 directly; only a share's signalling goes through the Runtime. A share starts
-only from the Sharer's own machine.
+only from the Sharer's own machine, in Desktop's share window.
 
 ### Viewer
 
@@ -627,6 +627,18 @@ The window a Display Host opens to show an Output on a Display: an Output page
 covering that Display, full screen, without a frame and above every other
 window. It is an Output Session like any other. Not the same as an Output page
 opened in an ordinary window of Desktop or in a browser tab.
+
+### Share window
+
+The window of Difracta Desktop a person shares this computer's screens and
+windows from, opened with File ▸ Share Screen...: it lists the shares this
+computer runs, each with its Screen Share, a small picture of what is captured,
+its Viewers and Stop, and starts another. Starting one means choosing the Screen
+Share, Sharp (text and slides) or Smooth (video), whether the cursor shows, and
+the screen or window. Closing it while it shares hides it; the shares go on. Its
+page is Desktop's own, not one a Runtime serves. Do not call it the share dialog
+or the picker: the picker is the part of it, or of the operating system, that
+asks which screen or window.
 
 ### Placement
 

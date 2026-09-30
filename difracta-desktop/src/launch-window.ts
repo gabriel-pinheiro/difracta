@@ -1,5 +1,5 @@
 import { settings } from "@difracta/core";
-import { BrowserWindow, net, protocol } from "electron";
+import { BrowserWindow, net, protocol, type Protocol } from "electron";
 import { pathToFileURL } from "node:url";
 
 import { launchSchemeFile } from "./launch-scheme-file.ts";
@@ -21,9 +21,17 @@ export function registerLaunchScheme(): void {
   ]);
 }
 
-/** Answers `app://` requests from the built Studio in `studioDist`; see `launchSchemeFile` for what is served. */
-export function serveLaunchScheme(studioDist: string): void {
-  protocol.handle(LAUNCH_SCHEME, (request) => {
+/**
+ * Answers `app://` requests from the built Studio in `studioDist`; see
+ * `launchSchemeFile` for what is served. A scheme is served per session:
+ * `served` is the default one's protocol unless another session's is given,
+ * as the share window's is.
+ */
+export function serveLaunchScheme(
+  studioDist: string,
+  served: Protocol = protocol,
+): void {
+  served.handle(LAUNCH_SCHEME, (request) => {
     const file = launchSchemeFile(request.url, studioDist);
     return file === undefined
       ? new Response("Not found", { status: 404 })

@@ -16,7 +16,9 @@
  *
  * `desktop-modes.ts` holds the moves between those; File ▸ Connect to... opens
  * the launch page again, over the session. `application-menu.ts` is the native
- * menu bar, which in Desktop shows Studio's own File and Edit items.
+ * menu bar, which in Desktop shows Studio's own File and Edit items. File ▸
+ * Share Screen... opens the share window (`screen-sharing.ts`), which shares
+ * this computer's screen into the session's runtime.
  */
 import { watchRuntimes } from "@difracta/client/discovery";
 import { app, nativeTheme } from "electron";
@@ -30,6 +32,7 @@ import { registerLaunchScheme, serveLaunchScheme } from "./launch-window.ts";
 import { x11Relaunch } from "./ozone-platform.ts";
 import { runtimeLocations, runtimePort } from "./runtime-launch.ts";
 import { RuntimeProcess } from "./runtime-process.ts";
+import { shareSession } from "./share-window.ts";
 import { documentFileFromArgv } from "./start-up-file.ts";
 import {
   ignoredNoStudio,
@@ -53,6 +56,7 @@ function openFromOs(file: string): void {
 async function start(): Promise<void> {
   const locations = runtimeLocations(distDir);
   serveLaunchScheme(locations.studioDist);
+  serveLaunchScheme(locations.studioDist, shareSession().protocol);
   const state = new DesktopStateStore(app.getPath("userData"));
   const runtime = new RuntimeProcess({
     port: runtimePort(process.env),

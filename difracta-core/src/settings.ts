@@ -218,6 +218,44 @@ export const settings = {
       /** The least of the picture's width and height a crop leaves, as a fraction. */
       minCropSide: 0.01,
     },
+    /** What a Sharer does on its side: Difracta Desktop's share window. */
+    sharer: {
+      /**
+       * The largest picture a Sharer sends. A larger screen or window is
+       * scaled down to fit, keeping its shape.
+       */
+      maxWidth: 1920,
+      maxHeight: 1080,
+      /**
+       * What a person picks when starting a share. Both send thirty frames
+       * a second while the sharing computer keeps up. `sharp` is for text
+       * and slides: when it cannot keep up it sends fewer frames and keeps
+       * every pixel, and it prefers VP9, which spends fewer bits on flat
+       * areas and hard edges. `smooth` is for video: it keeps the frames
+       * and softens the picture, and prefers VP8, the cheapest to encode
+       * once per Viewer. `codecs` is the order offered; the Viewer takes the
+       * first it can decode.
+       */
+      qualities: {
+        sharp: {
+          contentHint: "detail",
+          degradationPreference: "maintain-resolution",
+          frameRate: 30,
+          maxBitrate: 8_000_000,
+          codecs: ["video/VP9", "video/VP8", "video/H264", "video/AV1"],
+        },
+        smooth: {
+          contentHint: "motion",
+          degradationPreference: "maintain-framerate",
+          frameRate: 30,
+          maxBitrate: 6_000_000,
+          codecs: ["video/VP8", "video/H264", "video/VP9", "video/AV1"],
+        },
+      },
+      /** The pictures of screens and windows in Desktop's own picker. */
+      thumbnailWidth: 320,
+      thumbnailHeight: 180,
+    },
   },
   client: {
     /** First reconnect delay; doubles on each failure up to the maximum. */
@@ -272,5 +310,13 @@ export const settings = {
      * Output; the one placed longest ago drops off.
      */
     displayMappingsLimit: 64,
+    /** The share window's size on first show. */
+    shareWindowWidth: 560,
+    shareWindowHeight: 720,
+    /**
+     * How long the share window gets to stop its shares, so the runtime
+     * hears they ended, before Desktop closes it on quitting or leaving.
+     */
+    shareStopTimeoutMs: 1_000,
   },
 } as const;

@@ -12,6 +12,8 @@ export interface NativeMenuActions {
    */
   pageCommand(id: string, byKey: boolean): void;
   connectTo(): void;
+  /** Share Screen...: the share window. */
+  shareScreen(): void;
   setStartAtLogin(on: boolean): void;
   setStartWithoutStudio(on: boolean): void;
   /** Studio's zoom, in every Studio window whichever window is focused. */
@@ -105,7 +107,7 @@ function separated(...groups: Item[][]): Item[] {
  * items around the ones the page described. A native menu cannot be edited
  * once set, so this is built again whenever anything it shows changes.
  *
- *   File   [page's]  ─  Connect to..., Startup ▸  ─  Quit
+ *   File   [page's]  ─  Connect to..., Share Screen..., Startup ▸  ─  Quit
  *   Edit   [page's: Undo and Redo of the Installation]  ─  cut, copy, paste, select all
  *   View   zoom (Studio only)  ─  full screen
  *   Help   Reload Studio, Developer Tools, Show Runtime Log (local only)
@@ -116,6 +118,10 @@ function separated(...groups: Item[][]): Item[] {
  * keys still undo typing, which Chromium does without a menu on Windows and
  * Linux (for macOS see `pageCommand` in `application-menu.ts`). The launch
  * window has no page items, so it gets those roles for its address field.
+ *
+ * File ▸ Share Screen... opens the share window (`screen-sharing.ts`), from
+ * a Studio of the runtime on this computer and of one elsewhere alike. It
+ * has no shortcut: none is conventional, and Studio's keys are its own.
  *
  * File ▸ Startup holds what applies to the next start, which its name says
  * for both: Start at Login, and Start Without Studio Window, which only a
@@ -146,6 +152,11 @@ export function nativeMenuTemplate(options: NativeMenuOptions): Item[] {
             id: "desktop:connect-to",
             label: "Connect to...",
             click: () => actions.connectTo(),
+          },
+          {
+            id: "desktop:share-screen",
+            label: "Share Screen...",
+            click: () => actions.shareScreen(),
           },
           {
             id: "desktop:startup",

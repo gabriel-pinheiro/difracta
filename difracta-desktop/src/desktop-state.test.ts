@@ -9,6 +9,7 @@ import {
   DesktopStateStore,
   withDisplayMapping,
   withLastMode,
+  withSharerActor,
 } from "./desktop-state.ts";
 
 let dir: string;
@@ -73,6 +74,18 @@ describe("desktop state store", () => {
       remembered: [],
       startWithoutStudio: true,
     });
+  });
+
+  it("makes up the Sharer's actor once and keeps it", async () => {
+    const store = new DesktopStateStore(dir);
+    const first = await store.update((state) =>
+      withSharerActor(state, () => "desktop-one"),
+    );
+    expect(first.sharerActor).toBe("desktop-one");
+    const again = await new DesktopStateStore(dir).update((state) =>
+      withSharerActor(state, () => "desktop-two"),
+    );
+    expect(again.sharerActor).toBe("desktop-one");
   });
 
   it("keeps Studio's zoom, read as a level Desktop uses", async () => {

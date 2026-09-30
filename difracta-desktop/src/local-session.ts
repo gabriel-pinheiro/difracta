@@ -9,6 +9,8 @@ import { DisplayHost } from "./display-host.ts";
 import { addressLabel } from "./runtime-address.ts";
 import { checkRuntime } from "./runtime-health.ts";
 import { RuntimeLink } from "./runtime-link.ts";
+import type { ShareCapture } from "./share-capture.ts";
+import { ScreenSharing } from "./screen-sharing.ts";
 import type { RuntimeProcess } from "./runtime-process.ts";
 import { RuntimeRestarts } from "./runtime-restarts.ts";
 import type { SessionStart } from "./session.ts";
@@ -41,7 +43,8 @@ function sayRuntimeGaveUp(
 /**
  * Local mode: fork the runtime, wait for `/health`, connect as a client. The
  * Studio window it then gets has the document bridge and the menu bridge, and
- * Desktop becomes a Display Host of that runtime (`display-host.ts`).
+ * Desktop becomes a Display Host of that runtime (`display-host.ts`) and may
+ * share this computer's screen into it (`screen-sharing.ts`).
  * From here on the runtime is kept running (`runtime-restarts.ts`) until the
  * session ends.
  *
@@ -53,6 +56,9 @@ export async function startLocalSession(options: {
   readonly runtime: RuntimeProcess;
   readonly state: DesktopStateStore;
   readonly preload: string;
+  /** `share-preload.cjs`. */
+  readonly sharePreload: string;
+  readonly capture: ShareCapture;
   /** A file the OS asked for; undefined reopens the last one. */
   readonly file: string | undefined;
   /** False for `--no-studio` and its setting. */
@@ -121,6 +127,18 @@ export async function startLocalSession(options: {
   const displays = new DisplayHost({ link, state, origin });
   await displays.start();
 
+  const where =
+    devOrigin === undefined
+      ? "This computer"
+      : `Studio dev server (${addressLabel(devOrigin)})`;
+  const sharing = new ScreenSharing({
+    origin,
+    where,
+    preload: options.sharePreload,
+    state,
+    capture: options.capture,
+  });
+
   const restarts = new RuntimeRestarts({
     // The Installation that is open now; one never saved has no path.
     currentFile: () => link.document()?.path ?? undefined,
@@ -138,10 +156,7 @@ export async function startLocalSession(options: {
   return {
     ok: true,
     session: {
-      where:
-        devOrigin === undefined
-          ? "This computer"
-          : `Studio dev server (${addressLabel(devOrigin)})`,
+      where,
       origin,
       resume: devOrigin === undefined ? { kind: "local" } : undefined,
       withoutStudio: !options.studioWindow,
@@ -179,8 +194,11 @@ export async function startLocalSession(options: {
           leaving,
           attended: over !== undefined,
           showing: displays.showing,
+          sharing: sharing.sharing,
         }),
+      sharing,
       end: async () => {
+        await sharing.stop();
         displays.end();
         restarts.end();
         runtime.watchExit(undefined);

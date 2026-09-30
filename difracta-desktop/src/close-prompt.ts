@@ -9,6 +9,7 @@ import {
   type LeaveWarning,
 } from "./output-sessions.ts";
 import type { RuntimeLink } from "./runtime-link.ts";
+import { sharesWarning } from "./share-leaving.ts";
 
 /** A message box on `over` when there is such a window, else one of its own. */
 async function ask(
@@ -38,18 +39,36 @@ async function warn(
 }
 
 /**
- * The one question asked before a runtime elsewhere is left: nothing stops
- * over there, but the Displays of this computer that show its Outputs go
- * dark. With no window of Desktop's open nobody is there to answer, so
- * nothing is asked.
+ * Asked first, in either mode, while this computer shares its screen: the
+ * shares stop with Desktop, and the Surfaces showing them go blank. First,
+ * because going on changes nothing yet: the shares stop only once every
+ * question was answered.
+ */
+async function mayStopSharing(
+  over: BrowserWindow | undefined,
+  leaving: Leaving,
+  sharing: number,
+): Promise<boolean> {
+  if (over === undefined || sharing === 0) return true;
+  return warn(over, sharesWarning(sharing, leaving));
+}
+
+/**
+ * The questions asked before a runtime elsewhere is left. Nothing stops
+ * over there, but this computer's shares stop, and the Displays of this
+ * computer that show its Outputs go dark. With no window of Desktop's open
+ * nobody is there to answer, so nothing is asked.
  */
 export async function mayLeaveRemote(options: {
   readonly over: BrowserWindow | undefined;
   readonly leaving: Leaving;
   /** How many Display windows are open. */
   readonly showing: number;
+  /** How many shares this computer runs. */
+  readonly sharing: number;
 }): Promise<boolean> {
-  const { over, leaving, showing } = options;
+  const { over, leaving, showing, sharing } = options;
+  if (!(await mayStopSharing(over, leaving, sharing))) return false;
   if (over === undefined || showing === 0) return true;
   return warn(over, displaysWarning(showing, leaving));
 }
@@ -68,8 +87,9 @@ async function shown(act: () => Promise<boolean>): Promise<boolean> {
 }
 
 /**
- * The native questions asked before the runtime on this computer is left,
- * in the order `leave-checks.ts` gives them. With unsaved changes, the
+ * The native questions asked before the runtime on this computer is left:
+ * the one about this computer's shares, then the ones `leave-checks.ts`
+ * orders. With unsaved changes, the
  * question every document app asks: Save on an Installation that has no file
  * yet goes through the Save dialog, and cancelling that cancels the leaving;
  * Don't Save closes the document in the runtime as discarded, so its autosave
@@ -80,15 +100,20 @@ async function shown(act: () => Promise<boolean>): Promise<boolean> {
  * `over` is the window the questions belong to, none when Desktop has none
  * open, in which case `attended` is false and nothing is asked at all.
  */
-export function mayLeaveLocal(options: {
+export async function mayLeaveLocal(options: {
   readonly link: RuntimeLink;
   readonly over: BrowserWindow | undefined;
   readonly leaving: Leaving;
   readonly attended: boolean;
   /** How many Display windows are open; see `outputSessions` below. */
   readonly showing: number;
+  /** How many shares this computer runs. */
+  readonly sharing: number;
 }): Promise<boolean> {
   const { link, over, leaving } = options;
+  // A runtime that is gone has no share left to stop.
+  const sharing = link.connected() ? options.sharing : 0;
+  if (!(await mayStopSharing(over, leaving, sharing))) return false;
   // The document the questions are about, as it was when they began.
   const summary = link.document();
   return mayLeave({

@@ -24,6 +24,7 @@ import {
   type DisplayWindowState,
 } from "./display-plan.ts";
 import { openDisplayWindow, outputPageUrl } from "./display-window.ts";
+import { hostName } from "./host-name.ts";
 import type { RuntimeLink } from "./runtime-link.ts";
 import {
   offerDisplays,
@@ -273,8 +274,7 @@ export class DisplayHost {
   #report(): void {
     if (!this.#offering) return;
     this.#link.offerDisplays({
-      // The protocol's limits on a host's name.
-      name: hostname().trim().slice(0, 120) || "Difracta Desktop",
+      name: hostName(hostname()),
       displays: this.#offered.map((entry) => entry.display),
       showing: showingReport([...this.#windows.values()], this.#offered),
     });

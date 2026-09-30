@@ -13,6 +13,7 @@ type Item = MenuItemConstructorOptions;
 const actions = () => ({
   pageCommand: vi.fn<NativeMenuActions["pageCommand"]>(),
   connectTo: vi.fn(),
+  shareScreen: vi.fn(),
   setStartAtLogin: vi.fn(),
   setStartWithoutStudio: vi.fn(),
   zoom: vi.fn(),
@@ -85,6 +86,7 @@ describe("the native menu", () => {
       "Revert to Saved",
       "-",
       "Connect to...",
+      "Share Screen...",
       "Startup",
       "-",
       "quit",
@@ -192,8 +194,9 @@ describe("the native menu", () => {
       "help",
     ]);
     // Quit is in the application menu there.
-    expect(shape(menus, "file").slice(-4)).toEqual([
+    expect(shape(menus, "file").slice(-5)).toEqual([
       "Connect to...",
+      "Share Screen...",
       "Startup",
       "-",
       "close",
@@ -251,6 +254,7 @@ describe("the native menu", () => {
     const menus = template({ page: { file: [], edit: [] } });
     expect(shape(menus, "file")).toEqual([
       "Connect to...",
+      "Share Screen...",
       "Startup",
       "-",
       "quit",

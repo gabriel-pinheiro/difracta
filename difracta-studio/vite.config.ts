@@ -23,12 +23,14 @@ export default defineConfig(({ command }) => ({
     alias: { "@": path.resolve(import.meta.dirname, "src") },
   },
   build: {
-    // Two pages: Studio, and Difracta Desktop's launch page, which shares
-    // Studio's components and none of its application code.
+    // Three pages: Studio, and Difracta Desktop's launch page and share
+    // window, which share Studio's components and none of its application
+    // code.
     rollupOptions: {
       input: {
         index: path.resolve(import.meta.dirname, "index.html"),
         launch: path.resolve(import.meta.dirname, "launch.html"),
+        share: path.resolve(import.meta.dirname, "share.html"),
       },
     },
   },

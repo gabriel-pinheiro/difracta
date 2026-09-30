@@ -21,6 +21,7 @@ export interface MenuStudio extends MenuWindow {
 export interface ApplicationMenuOptions {
   readonly runtimeLog: string;
   readonly onConnectTo: () => void;
+  readonly onShareScreen: () => void;
   /** File ▸ Startup's two checkboxes, and what changes them. */
   readonly startup: StartupSettings;
   /** View's zoom items, and what they change: every Studio window's zoom. */
@@ -144,6 +145,7 @@ export class ApplicationMenu {
       else if (id === "redo") window.webContents.redo();
     },
     connectTo: () => this.#options.onConnectTo(),
+    shareScreen: () => this.#options.onShareScreen(),
     setStartAtLogin: (on) => void this.#options.startup.setStartAtLogin(on),
     setStartWithoutStudio: (on) =>
       void this.#options.startup.setStartWithoutStudio(on),

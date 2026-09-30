@@ -1220,8 +1220,9 @@ no app shell and no Visuals, so its script is a few kilobytes on top of React.
 No runtime serves it to Desktop; main serves it from the copy of the built
 Studio in `dist/` over a scheme of its own, `app://desktop/studio/launch.html`,
 registered as standard and secure before the app is ready. The handler answers
-the launch page and `assets/` only, and resolves every path inside that folder
-whatever the URL spells. The page talks to main through a bridge of its own,
+Desktop's own pages (the launch page and the share window's, below) and
+`assets/` only, and resolves every path inside that folder whatever the URL
+spells. The page talks to main through a bridge of its own,
 `window.difractaLaunch` (`launch-contract.ts`, from a separate preload given
 only to the launch window): `runLocal()`, `connect(address)`, `runtimes()` with
 `onRuntimesChanged`, `remembered()`, `forget(address)`, `problem()` and
@@ -1349,29 +1350,29 @@ has.
 The native menu bar is always visible and dark (`nativeTheme` is forced dark, as
 Studio is), and one builder (`native-menu.ts`, a pure template;
 `application-menu.ts` sets it) merges Desktop's items with the page's. **File**:
-the page's items, Connect to..., the Startup submenu with its two checkboxes
-(Start Without Studio Window greyed out in remote mode), Quit. **Edit**: the
-page's Undo and Redo, which are the Installation's, then the cut, copy, paste
-and select-all roles; the `undo` and `redo` roles are left out beside them, and
-the keys still undo typing inside a text field. **View**: Actual Size, Zoom In
-(with a hidden `Ctrl+=` twin), Zoom Out, Toggle Full Screen; the launch window's
-View has Toggle Full Screen alone. **Help**: Reload Studio, Toggle Developer
-Tools, and Show Runtime Log in local mode. Windows and Linux have no Window menu
-and no Close Window: closing the Studio window quits Desktop and stops the local
-runtime, too much for a casual Ctrl+W; Quit keeps its accelerator and goes
-through the questions above. macOS keeps its conventions (the application menu
-with Quit, Close Window in File, a Window menu). Items have stable ids
-(`page:save`, `desktop:connect-to`, `help:reload-studio`), which is how the e2e
-suite clicks them from the main process. A native menu cannot be edited once
-set, so it is built again when the page's model, the session, the Studio or
-launch window or a Startup checkbox changes, after
-`settings.desktop.menuRebuildDelayMs` so a burst makes one rebuild. The launch
-window has a smaller menu of its own (Quit, the text roles with undo and redo
-for its address field, Developer Tools). An Output window has none
-(`removeMenu`), and so none of the menu's shortcuts; F11 alone is handled in the
-window itself, since an Output has to go full screen. A Display window has none
-either, in a session without a Studio window too. On macOS, where one menu
-serves every window, Developer Tools acts only when the focused window is
+the page's items, Connect to..., Share Screen..., the Startup submenu with its
+two checkboxes (Start Without Studio Window greyed out in remote mode), Quit.
+**Edit**: the page's Undo and Redo, which are the Installation's, then the cut,
+copy, paste and select-all roles; the `undo` and `redo` roles are left out
+beside them, and the keys still undo typing inside a text field. **View**:
+Actual Size, Zoom In (with a hidden `Ctrl+=` twin), Zoom Out, Toggle Full
+Screen; the launch window's View has Toggle Full Screen alone. **Help**: Reload
+Studio, Toggle Developer Tools, and Show Runtime Log in local mode. Windows and
+Linux have no Window menu and no Close Window: closing the Studio window quits
+Desktop and stops the local runtime, too much for a casual Ctrl+W; Quit keeps
+its accelerator and goes through the questions above. macOS keeps its
+conventions (the application menu with Quit, Close Window in File, a Window
+menu). Items have stable ids (`page:save`, `desktop:connect-to`,
+`help:reload-studio`), which is how the e2e suite clicks them from the main
+process. A native menu cannot be edited once set, so it is built again when the
+page's model, the session, the Studio or launch window or a Startup checkbox
+changes, after `settings.desktop.menuRebuildDelayMs` so a burst makes one
+rebuild. The launch window has a smaller menu of its own (Quit, the text roles
+with undo and redo for its address field, Developer Tools). An Output window has
+none (`removeMenu`), and so none of the menu's shortcuts; F11 alone is handled
+in the window itself, since an Output has to go full screen. A Display window
+has none either, in a session without a Studio window too. On macOS, where one
+menu serves every window, Developer Tools acts only when the focused window is
 Studio's or the launch page's.
 
 Studio's zoom is one setting of Desktop's, not a page's. Zoom In and Zoom Out
@@ -1459,6 +1460,111 @@ that finds nothing waits: an unplugged projector's Output must not land on the
 laptop's own Display, which often takes over its place on the desktop. A
 placement that matched is described again as its Display is now.
 
+In both modes Desktop can be a **Sharer** of the session's runtime
+(`screen-sharing.ts`). File ▸ Share Screen... opens the **share window**, whose
+page is the third entry of `difracta-studio` (`share.html`, `src/share/`),
+served like the launch page over `app://desktop/studio/share.html` and never by
+a runtime. The page is the Sharer itself: it holds a connection of its own to
+the runtime, of kind `desktop`, the captures and one peer connection per Viewer
+of each share. Over that connection it follows the open Installation and its
+live state (`share-installation.ts`), lists the Screen Shares with who shares
+into each (`share-slots.ts`), adds one with the ordinary `media.create` when the
+Installation has none, declares its shares and exchanges the signalling
+(`client.sharing`, `sharer.ts`). Its actor is made up once and kept in
+`desktop-state.json` (`sharerActor`), so the runtime recognises the same Sharer
+after a reconnect, and its name is the computer's hostname, as the Display
+Host's is (`host-name.ts`). A runtime that was started again finds the page
+declaring its shares again by itself, each a new share of the capture that never
+stopped.
+
+Starting a share is choosing the slot, a slot somebody shares into included,
+since a second Sharer takes the first one's place; Sharp or Smooth; whether the
+cursor shows; then the screen or window. The list then shows each share with its
+slot, a small picture of what is captured, what it is (a screen or a window, the
+quality, the cursor), how many Viewers a connection was made for and how many
+are connected, and Stop. Shares are keyed by slot and one Desktop runs several
+at once. A share ends when Stop is pressed, when the capture ends (the shared
+window closed), and when the runtime says so (`share-ended`: replaced, stopped
+by another client, the slot removed, refused), which leaves a line with the
+runtime's words until it is dismissed.
+
+`share-sending.ts` is one share's connections: send only, no ICE servers, a
+connection from scratch under a new id every time the runtime announces a
+Viewer, the first time or again, and an answer or a candidate taken only under
+the id of the connection in hand. The encoding comes from
+`core/shares/share-quality.ts` and `settings.shares.sharer`: the quality's
+bitrate and frame rate from the first frame (`sendEncodings`), its codecs first
+in its order (`setCodecPreferences`), what gives way under load once the answer
+is in (`degradationPreference`), and the track's content hint. The capture is
+asked for a picture no larger than `maxWidth` by `maxHeight`, which Chromium
+honours by scaling a larger source down in its shape (a 2560 by 1440 screen was
+captured at 1920 by 1080); `scaleResolutionDownBy` does the same for a capturer
+that would not. A connection that failed is dropped: a Viewer that is still
+there asks for a new offer, and one that went with a runtime that was started
+again never says it left.
+
+Which screen or window a capture gets is main's to say (`share-capture.ts`, with
+the rules in `share-sources.ts`, pure). The page asks the browser
+(`getDisplayMedia`), and main answers through `setDisplayMediaRequestHandler`,
+set on the share window's own session (a partition in memory that no other page
+is ever in) and answering only a request whose frame is the share page. On a
+Wayland session, known by its environment since Desktop's own windows run on X11
+there, the operating system asks: listing the sources raises its dialog, and the
+one source it returns is granted with no second question; a dialog closed
+without a choice is a capture refused, which the page takes for a change of
+mind. Everywhere else the share window has its own picker (`source-picker.tsx`):
+the page asks the bridge for this computer's windows and for its screens, apart,
+so the screens do not wait for the windows, the person chooses one, the page
+tells main which (`choose`), and the capture that follows gets that one, which
+has to be one main listed. The share window itself is left out of the list. On a
+Mac whose Screen Recording permission is off the start flow says where to turn
+it on. The cursor is asked for or not as the person chose (`cursor` in the
+capture's constraints), but Chromium's screen capture draws it into every
+picture and says so in the track's settings (`cursor: "always"`, under X11 in
+Electron 44), so the list shows the cursor as the capture has it and a line says
+when it is there unasked.
+
+The share window's bridge is `window.difractaShare` (`share-contract.ts`, from
+`share-preload.ts`, given to that window only and only to that page):
+`context()` (the runtime's live socket, how Desktop names the runtime, the
+Sharer's name and actor, who asks for the source, the Mac's permission),
+`sources(kind)`, `choose(id)`, `report(sharing)`, how many shares the page runs,
+and `onStopAll(callback)`. Main checks that each message comes from the share
+page in the share window of the session Desktop is in (`share-bridge.ts`).
+
+Closing the share window hides it while it shares and closes it when it does
+not, and File ▸ Share Screen... shows it again. The window is never throttled,
+so it goes on capturing and encoding while hidden. Quitting, and leaving the
+runtime for another, ask first while something is shared ("This computer is
+sharing its screen into 1 Screen Share. Quitting stops it.", before the
+questions about unsaved changes and Outputs, since going on changes nothing
+until every question was answered), then stop the shares: main asks the page to
+stop (`onStopAll`), the page stops each share and reports none once the
+runtime's live state says none is this computer's any more, and main closes the
+window, after `settings.desktop.shareStopTimeoutMs` at the latest
+(`share-stopping.ts`, `ScreenSharing.stop`).
+
+**Why a page of Desktop's own and not Studio's page:** a page may capture a
+screen only in a secure context, and a runtime serves plain HTTP, so the Studio
+of a runtime elsewhere, which is the main case, has no `getDisplayMedia` at all;
+`app://desktop` is secure. And handing out this computer's screen is not
+something a page from another machine, possibly another version, gets a bridge
+for. **Why the page holds the connection, not main:** the captures and the peer
+connections can only live in a page, so with the connection there too the
+signalling makes no hop through main, the page reads the slots and the live
+state as any client does, and main mirrors nothing of a show it never draws.
+**Why a connection of its own, apart from main's link:** closing the share
+window then ends nothing of Desktop's as a Display Host. **Why a session of its
+own:** the answer to a capture is set per session, and in that one there is only
+the share page to ask. **Why the picker's titles never leave the machine:** a
+title is a document's name or a mail's subject; the person choosing needs it and
+nobody else does, so the declaration carries the Sharer's name and whether it is
+a screen or a window, and the operator sees the picture. **Why closing hides:**
+a share runs through a show in a window nobody looks at, and a stray click on
+its close button must not take the picture off the wall; Stop is what stops.
+**Why a share starts only here:** the person at the machine chooses what of
+their screen others see.
+
 **Why ids by position:** `difracta displays show stage-pc 2 wall` has to be
 typed, and has to mean the same Display tomorrow. **Why answer on window
 creation:** the page attaches seconds later on a slow GPU and not at all without
@@ -1494,41 +1600,41 @@ hears which of its own items was clicked; it cannot read anything, open anything
 or choose where Desktop goes, so the worst a hostile page can do is label its
 own menu badly. **Why the launch page has a bridge of its own:** choosing where
 Desktop goes and starting runtimes is something Studio must never be able to do,
-and the launch page has no use for file pickers; three bridges keep each page to
-its own few functions. **Why Studio's menu is in the native bar:** one menu bar
-instead of two stacked ones, in the place the platform puts it, and the title
-bar carries what the in-page bar's middle did. **Why shortcuts are only shown
-there:** two handlers for Ctrl+S would save twice the day their conditions drift
-apart; the page's handler exists anyway, for the browser. **Why an Output window
-has no menu:** it sits on a projector in front of an audience, where a stray
-Ctrl+R, Ctrl+Minus or Ctrl+Shift+I must do nothing. **Why Connect to... keeps
-the session until a target is chosen:** leaving local mode stops the runtime and
-turns every Output dark, which looking at a list, a change of mind or a mistyped
-address must never cost; checking the target first keeps a failure from costing
-it either. **Why Desktop can run without a window:** a venue's mini-PC is an
-appliance that shows Outputs and is operated from a laptop; a Studio nobody
-looks at costs a renderer and invites a stray click. **Why a second launch
-brings Studio back, and no tray icon:** starting the app is what a person does
-anyway when they cannot see it, and it works the same on every desktop, where
-tray icons do not. **Why the quit is gated at `before-quit`:** it is the one
-event every way of quitting passes before any window closes, so the questions
-exist once, and a session without a window (where a window's `close` never
-fires) needs no case of its own. **Why the Outputs warning never refuses:** the
-person at the machine knows whether the show is over; Desktop only knows that
-screens are attached. **Why the runtime is restarted with the current path:**
-the file Desktop started with may be hours stale, and the autosave that holds
-the unsaved work sits next to the file that was open. **Why restarts give up:**
-a runtime that dies on the Installation it reopens would restart for ever,
-hiding the problem and filling the log. **Why Linux needs its own autostart
-file:** Electron's login items exist for macOS and Windows only, and the XDG
-autostart directory is what Linux desktops read. **Why the login setting is not
-stored:** two copies of one fact drift, and the operating system's is the one
-that acts. **Why main writes the title:** only main knows where Studio comes
-from, and a page from another machine does not get to name the window. **Why the
-document bridge is four functions:** anything a page can call in main is attack
-surface and is out of the CLI's reach; a file dialog is the one thing that needs
-the OS, and what each returns is only a path, for a request or a command the CLI
-can send too.
+and the launch page has no use for file pickers; a bridge per kind of page keeps
+each page to its own few functions. **Why Studio's menu is in the native bar:**
+one menu bar instead of two stacked ones, in the place the platform puts it, and
+the title bar carries what the in-page bar's middle did. **Why shortcuts are
+only shown there:** two handlers for Ctrl+S would save twice the day their
+conditions drift apart; the page's handler exists anyway, for the browser. **Why
+an Output window has no menu:** it sits on a projector in front of an audience,
+where a stray Ctrl+R, Ctrl+Minus or Ctrl+Shift+I must do nothing. **Why Connect
+to... keeps the session until a target is chosen:** leaving local mode stops the
+runtime and turns every Output dark, which looking at a list, a change of mind
+or a mistyped address must never cost; checking the target first keeps a failure
+from costing it either. **Why Desktop can run without a window:** a venue's
+mini-PC is an appliance that shows Outputs and is operated from a laptop; a
+Studio nobody looks at costs a renderer and invites a stray click. **Why a
+second launch brings Studio back, and no tray icon:** starting the app is what a
+person does anyway when they cannot see it, and it works the same on every
+desktop, where tray icons do not. **Why the quit is gated at `before-quit`:** it
+is the one event every way of quitting passes before any window closes, so the
+questions exist once, and a session without a window (where a window's `close`
+never fires) needs no case of its own. **Why the Outputs warning never
+refuses:** the person at the machine knows whether the show is over; Desktop
+only knows that screens are attached. **Why the runtime is restarted with the
+current path:** the file Desktop started with may be hours stale, and the
+autosave that holds the unsaved work sits next to the file that was open. **Why
+restarts give up:** a runtime that dies on the Installation it reopens would
+restart for ever, hiding the problem and filling the log. **Why Linux needs its
+own autostart file:** Electron's login items exist for macOS and Windows only,
+and the XDG autostart directory is what Linux desktops read. **Why the login
+setting is not stored:** two copies of one fact drift, and the operating
+system's is the one that acts. **Why main writes the title:** only main knows
+where Studio comes from, and a page from another machine does not get to name
+the window. **Why the document bridge is four functions:** anything a page can
+call in main is attack surface and is out of the CLI's reach; a file dialog is
+the one thing that needs the OS, and what each returns is only a path, for a
+request or a command the CLI can send too.
 
 **Why Desktop re-executes itself on Linux** (`ozone-platform.ts`, the first
 thing `main.ts` does): a Display window has to land on the Display it was asked
@@ -1579,10 +1685,13 @@ Display Host gets to answer, the Viewers a Screen Share takes, how long an
 interrupted share waits for its Sharer, how large a relayed signalling payload
 may be and a Viewer's waits (before leaving a slot, before asking for a new
 offer, between asks), how long Live holds a lost frame and the least a crop
-leaves, client reconnect backoff, CLI connect timeout, Desktop's waits for its
-runtime to start and stop and for a runtime elsewhere to answer, its window
-sizes and how many runtimes it remembers. Packages import from there instead of
-carrying their own literals.
+leaves, the largest picture a Sharer sends and what Sharp and Smooth each mean
+(content hint, what gives way under load, frame rate, bitrate, codec order), the
+size of the pictures in Desktop's own picker, client reconnect backoff, CLI
+connect timeout, Desktop's waits for its runtime to start and stop, for a
+runtime elsewhere to answer and for the share window to stop its shares, its
+window sizes and how many runtimes it remembers. Packages import from there
+instead of carrying their own literals.
 
 ## Rendering
 

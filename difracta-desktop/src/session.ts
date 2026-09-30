@@ -2,6 +2,7 @@ import type { BrowserWindow } from "electron";
 
 import type { LastMode } from "./desktop-state.ts";
 import type { Leaving } from "./output-sessions.ts";
+import type { ScreenSharing } from "./screen-sharing.ts";
 import type { MayClose } from "./studio-window.ts";
 
 /**
@@ -47,6 +48,8 @@ export interface Session {
    * nobody is there to ask.
    */
   mayLeave(over: BrowserWindow | undefined, leaving: Leaving): Promise<boolean>;
+  /** This computer as a Sharer of the session's runtime: the share window. */
+  readonly sharing: ScreenSharing;
   /** Drops the link and stops what the session started. Its windows are closed by then. */
   end(): Promise<void>;
 }

@@ -20,6 +20,9 @@ import { QuitGate } from "./quit-gate.ts";
 import { startRemoteSession } from "./remote-session.ts";
 import { parseRuntimeAddress } from "./runtime-address.ts";
 import type { RuntimeProcess } from "./runtime-process.ts";
+import { registerShareBridge } from "./share-bridge.ts";
+import { ShareCapture } from "./share-capture.ts";
+import { shareSession } from "./share-window.ts";
 import type { Session, SessionStart } from "./session.ts";
 import type { StartUpMode } from "./start-up-mode.ts";
 import { StartupSettings } from "./startup-settings.ts";
@@ -61,6 +64,8 @@ export class DesktopModes {
   #busy = false;
   readonly #files: FilesFromOs;
   readonly #quit = new QuitGate(() => this.#mayQuit());
+  /** What the share window may capture, in whichever session it is opened. */
+  readonly #capture = new ShareCapture(shareSession());
 
   constructor(options: DesktopModesOptions) {
     this.#options = options;
@@ -77,9 +82,11 @@ export class DesktopModes {
     this.#menu = new ApplicationMenu({
       runtimeLog: options.runtime.logFile,
       onConnectTo: () => this.connectTo(),
+      onShareScreen: () => this.shareScreen(),
       startup: new StartupSettings(options.state),
       zoom: new StudioZoom(options.state),
     });
+    registerShareBridge(() => this.#session?.sharing);
     this.#files = new FilesFromOs({
       busy: () => this.#busy,
       session: () => this.#session,
@@ -120,8 +127,12 @@ export class DesktopModes {
 
   /** The app's `before-quit`: every quit passes the gate, whatever asked for it. */
   beforeQuit(event: { preventDefault(): void }): void {
-    // `setImmediate`: Electron ignores a quit asked for inside the one being cancelled.
-    this.#quit.beforeQuit(event, () => setImmediate(() => app.quit()));
+    this.#quit.beforeQuit(event, () => {
+      // A quit closes every window, and the share window would hide instead.
+      this.#session?.sharing.release();
+      // `setImmediate`: Electron ignores a quit asked for inside the one being cancelled.
+      setImmediate(() => app.quit());
+    });
   }
 
   /** File ▸ Connect to...: the launch page, over the session, which goes on. */
@@ -129,6 +140,12 @@ export class DesktopModes {
     if (this.#busy || this.#session === undefined) return;
     this.#showLaunchPage(null);
     this.focus();
+  }
+
+  /** File ▸ Share Screen...: the share window of the session's runtime. */
+  shareScreen(): void {
+    if (this.#busy) return;
+    this.#session?.sharing.show();
   }
 
   /** The last thing before exit: the link closed, the runtime stopped and waited for. */
@@ -155,6 +172,8 @@ export class DesktopModes {
         file,
         studioWindow: how.studioWindow ?? true,
         preload: path.join(distDir, "preload.cjs"),
+        sharePreload: path.join(distDir, "share-preload.cjs"),
+        capture: this.#capture,
         ...(dev === undefined ? {} : { devOrigin: dev.origin }),
       }),
     );
@@ -174,9 +193,15 @@ export class DesktopModes {
     readonly origin: string;
     readonly name: string | null;
   }): () => Promise<SessionStart> {
-    const preload = path.join(this.#options.distDir, "menu-preload.cjs");
-    const { state } = this.#options;
-    return () => startRemoteSession({ ...target, preload, state });
+    const { state, distDir } = this.#options;
+    return () =>
+      startRemoteSession({
+        ...target,
+        preload: path.join(distDir, "menu-preload.cjs"),
+        sharePreload: path.join(distDir, "share-preload.cjs"),
+        capture: this.#capture,
+        state,
+      });
   }
 
   /**
@@ -267,7 +292,11 @@ export class DesktopModes {
     const session = this.#session;
     // Mid-switch the questions were asked already, or there is nothing yet to ask about.
     if (session === undefined || this.#busy) return true;
-    return session.mayLeave(this.#launchPage.window ?? session.window, "quit");
+    const over = this.#launchPage.window ?? session.window;
+    if (!(await session.mayLeave(over, "quit"))) return false;
+    // While its page can still say so: the runtime hears the shares ended.
+    await session.sharing.stop();
+    return true;
   }
 
   /** False when the person chose to stay (Cancel on either question). */
@@ -277,6 +306,7 @@ export class DesktopModes {
     // The questions belong to the window in front.
     const over = this.#launchPage.window ?? session.window;
     if (!(await session.mayLeave(over, "switch"))) return false;
+    await session.sharing.stop();
     this.#session = undefined;
     // The launch page outlives the Studio window it was opened over.
     this.#launchPage.window?.setParentWindow(null);

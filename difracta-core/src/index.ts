@@ -30,4 +30,5 @@ export * from "./command/execute.ts";
 export * from "./command/random.ts";
 export * from "./commands/index.ts";
 export * from "./history/history.ts";
+export * from "./shares/share-quality.ts";
 export * from "./shares/share-signal.ts";

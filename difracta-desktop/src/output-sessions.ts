@@ -28,7 +28,7 @@ export interface LeaveWarning {
  * Output Session of that runtime.
  */
 export function outputsWarning(count: number, leaving: Leaving): LeaveWarning {
-  return warning(
+  return leaveWarning(
     count === 1
       ? "1 Output is showing from this computer."
       : `${String(count)} Outputs are showing from this computer.`,
@@ -43,7 +43,7 @@ export function outputsWarning(count: number, leaving: Leaving): LeaveWarning {
  * Displays go dark.
  */
 export function displaysWarning(count: number, leaving: Leaving): LeaveWarning {
-  return warning(
+  return leaveWarning(
     count === 1
       ? "1 Display of this computer is showing an Output."
       : `${String(count)} Displays of this computer are showing Outputs.`,
@@ -52,7 +52,8 @@ export function displaysWarning(count: number, leaving: Leaving): LeaveWarning {
   );
 }
 
-function warning(
+/** A warning about `count` things that leaving stops, with the words for a quit or a switch. */
+export function leaveWarning(
   message: string,
   count: number,
   leaving: Leaving,

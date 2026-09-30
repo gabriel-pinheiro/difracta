@@ -39,6 +39,11 @@ const StateSchema = z.object({
    * or past the limits is read as the nearest one Desktop uses.
    */
   zoomLevel: z.number().transform(zoomLevel).optional(),
+  /**
+   * What a runtime recognises this Desktop by as a Sharer across reconnects
+   * (the share window's connection says it as its actor), made up once.
+   */
+  sharerActor: z.string().min(1).max(120).optional(),
 });
 
 export type DesktopState = z.infer<typeof StateSchema>;
@@ -86,6 +91,16 @@ export function withDisplayMapping(
           entries.slice(-settings.desktop.displayMappingsLimit),
         ),
       };
+}
+
+/** The state with a Sharer's actor: the one it has, else what `make` makes. */
+export function withSharerActor(
+  state: DesktopState,
+  make: () => string,
+): DesktopState {
+  return state.sharerActor === undefined
+    ? { ...state, sharerActor: make() }
+    : state;
 }
 
 const EMPTY: DesktopState = { remembered: [] };
