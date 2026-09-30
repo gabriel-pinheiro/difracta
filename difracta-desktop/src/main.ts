@@ -30,7 +30,11 @@ import { DesktopStateStore } from "./desktop-state.ts";
 import { LaunchRuntimes } from "./launch-runtimes.ts";
 import { registerLaunchScheme, serveLaunchScheme } from "./launch-window.ts";
 import { x11Relaunch } from "./ozone-platform.ts";
-import { runtimeLocations, runtimePort } from "./runtime-launch.ts";
+import {
+  mediaAnywhereFromArgv,
+  runtimeLocations,
+  runtimePort,
+} from "./runtime-launch.ts";
 import { RuntimeProcess } from "./runtime-process.ts";
 import { shareSession } from "./share-window.ts";
 import { documentFileFromArgv } from "./start-up-file.ts";
@@ -61,6 +65,7 @@ async function start(): Promise<void> {
   const runtime = new RuntimeProcess({
     port: runtimePort(process.env),
     locations,
+    mediaAnywhere: mediaAnywhereFromArgv(process.argv),
   });
   const runtimes = new LaunchRuntimes({
     // `DIFRACTA_NO_DISCOVERY` keeps Desktop off multicast as it does the runtime.

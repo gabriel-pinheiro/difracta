@@ -33,14 +33,23 @@ export function runtimePort(env: NodeJS.ProcessEnv): number {
     : settings.runtime.port;
 }
 
+const MEDIA_ANYWHERE_SWITCH = "--media-anywhere";
+
+/** `--media-anywhere` on Desktop's command line: its runtime serves Media outside the Installation's folder. */
+export function mediaAnywhereFromArgv(argv: readonly string[]): boolean {
+  return argv.includes(MEDIA_ANYWHERE_SWITCH);
+}
+
 /**
  * The runtime's command line. `free` lets this machine's Studio create, open
  * and save Installations anywhere. Every interface, not loopback: Output pages
- * on TVs and other machines attach to this runtime too.
+ * on TVs and other machines attach to this runtime too. `mediaAnywhere`
+ * passes `--media-anywhere` on.
  */
 export function runtimeArguments(options: {
   readonly port: number;
   readonly file: string | undefined;
+  readonly mediaAnywhere?: boolean;
 }): string[] {
   return [
     "--documents",
@@ -49,6 +58,7 @@ export function runtimeArguments(options: {
     settings.runtime.host,
     "--port",
     String(options.port),
+    ...(options.mediaAnywhere === true ? [MEDIA_ANYWHERE_SWITCH] : []),
     ...(options.file === undefined ? [] : [options.file]),
   ];
 }

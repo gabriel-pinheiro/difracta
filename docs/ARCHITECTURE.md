@@ -1116,11 +1116,11 @@ requests honoured (206, `Content-Range`, 416), which video seeking needs. 404
 for an unknown id, a Media Group, a bundled item whose entry the Catalog lacks,
 a missing file or a document without a path (a bundled item needs none; see
 Bundled Media); 403 when the resolved path leaves the folder, unless the runtime
-was started with `--media-anywhere` (or `DIFRACTA_MEDIA_ANYWHERE=1`), which
-turns `settings.media.allowOutsideShowFolder` on for that runtime alone: a
-machine setting, never in the file. In a container the show folder is mounted
-for the file already, so media beside it is reachable and `scp` puts files
-there.
+was started with `--media-anywhere` (or `DIFRACTA_MEDIA_ANYWHERE=1`; Desktop
+passes its own `--media-anywhere` on to its runtime), which turns
+`settings.media.allowOutsideShowFolder` on for that runtime alone: a machine
+setting, never in the file. In a container the show folder is mounted for the
+file already, so media beside it is reachable and `scp` puts files there.
 
 **Why by id and not by path:** the URL then says nothing about the runtime's
 disk, and renaming or moving the file is one `media.path` with every Output

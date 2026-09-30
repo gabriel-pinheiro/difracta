@@ -62,6 +62,7 @@ mini-PC and the projector's browser can sit on one LAN.
 npm run desktop                      # the launch page first, then whatever was chosen last time
 npm run desktop -- show.difracta     # opens that file on this computer
 npm run desktop -- --no-studio       # the runtime on this computer, with nothing on screen
+npm run desktop -- --media-anywhere  # its runtime serves Media outside the Installation's folder
 ```
 
 Difracta Desktop is the Electron application (`difracta-desktop`). Its launch
