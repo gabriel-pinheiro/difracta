@@ -5,23 +5,31 @@ import { FilterChain } from "./filter-chain.ts";
 import {
   FilterPlayers,
   passesWithInput,
-  type FilterPass,
+  type RootFilterPass,
 } from "./filter-players.ts";
-import { frameIssues, type RenderIssue } from "./issues.ts";
-import { LayerPlayers, type LayerFrame } from "./layer-players.ts";
+import { FilterPrograms } from "./filter-programs.ts";
+import {
+  NO_FILTERS,
+  NO_ISSUES,
+  NO_LAYERS,
+  type FrameReport,
+} from "./frame-report.ts";
+import { frameIssues } from "./issues.ts";
+import { drawShader, drawTexture, plannedMedia } from "./layer-composite.ts";
+import { LayerChain, targetBufferSize } from "./layer-chain.ts";
+import { LayerPlayers } from "./layer-players.ts";
 import { MaskTextures } from "./masks.ts";
 import { FontLoader } from "./font-loader.ts";
 import { EngineMedia } from "./engine-media.ts";
 import type { ShareSignalling } from "./live-peer.ts";
-import type { ShareCount } from "./live-viewer.ts";
 import type { LiveSource } from "./shared-viewer.ts";
 import { MediaTextures } from "./media-textures.ts";
 import { TextRasters } from "./text-rasters.ts";
-import { planFrame, plannedSurfaces, type LayerDraw } from "./plan.ts";
+import { planFrame, plannedSurfaces } from "./plan.ts";
 import { MAX_FRAME_SECONDS } from "./sdk/visual.ts";
 import { ShaderVisualPrograms } from "./shader-visuals.ts";
 import { SurfaceGeometries } from "./surface-geometry.ts";
-import { MODE, SurfaceProgram, WHOLE, type Rect } from "./surface-program.ts";
+import { SurfaceProgram } from "./surface-program.ts";
 
 export interface Compositor {
   /**
@@ -68,48 +76,6 @@ export interface CompositorOptions {
   readonly viewer?: LiveSource;
 }
 
-export interface FrameReport {
-  /** The canvas holds a new frame. */
-  readonly drew: boolean;
-  /** Canvas Layers in the plan (hidden ones included), with a running instance, and that drew this frame. */
-  readonly layers: {
-    readonly planned: number;
-    readonly running: number;
-    readonly rendered: number;
-  };
-  /** The same for shader Layers; rendered counts the ones drawn. */
-  readonly shaders: {
-    readonly planned: number;
-    readonly running: number;
-    readonly rendered: number;
-  };
-  /** Filters in the plan, with a running instance, and whose pass ran this frame. */
-  readonly filters: {
-    readonly planned: number;
-    readonly running: number;
-    readonly executed: number;
-  };
-  /**
-   * Video: planned Layers whose Visual takes a video, the video elements
-   * the Output holds (one kept ready per video Media item, one per
-   * playback a Layer holds), each of which holds a decoder, and the ones
-   * playing.
-   */
-  readonly videos: {
-    readonly layers: number;
-    readonly players: number;
-    readonly playing: number;
-  };
-  /** Screen Shares: the slots viewed, the ones connected, and why a Viewer was refused. */
-  readonly shares: ShareCount;
-  /** Planned Layers drawing nothing because their Visual or Filter cannot run. */
-  readonly issues: readonly RenderIssue[];
-}
-
-const NO_LAYERS = { planned: 0, running: 0, rendered: 0 } as const;
-const NO_FILTERS = { planned: 0, running: 0, executed: 0 } as const;
-const NO_ISSUES: readonly RenderIssue[] = [];
-
 interface Resources {
   readonly gl: WebGL2RenderingContext;
   readonly program: SurfaceProgram;
@@ -117,8 +83,11 @@ interface Resources {
   readonly masks: MaskTextures;
   readonly players: LayerPlayers;
   readonly filters: FilterPlayers;
+  readonly filterPrograms: FilterPrograms;
   readonly chain: FilterChain;
+  readonly layerChain: LayerChain;
   readonly shaderPrograms: ShaderVisualPrograms;
+  readonly maxDimension: number;
   readonly media: MediaTextures;
   readonly geometries: SurfaceGeometries;
 }
@@ -228,7 +197,14 @@ class WebGLCompositor implements Compositor {
     const step = resources.players.step(plan.layers, dt, width, height);
     resources.media.retain(step.textures);
     this.#text.retain(step.textures);
-    const chain = resources.filters.step(plan.filters, dt, width, height);
+    const chain = resources.filters.step(
+      plan.filters,
+      plan.layers,
+      dt,
+      width,
+      height,
+      (draw) => targetBufferSize(draw, width, height, resources.maxDimension),
+    );
     // A pass over Layers that all drew nothing this frame would transform
     // a blank frame at full-frame cost, so only passes with input run.
     const passes = passesWithInput(chain.passes, step.frames);
@@ -245,7 +221,7 @@ class WebGLCompositor implements Compositor {
       step,
       chain,
       (id) => resources.shaderPrograms.failure(id),
-      (id) => resources.chain.failure(id),
+      (id) => resources.filterPrograms.failure(id),
     );
     const last = this.#last;
     if (
@@ -293,15 +269,37 @@ class WebGLCompositor implements Compositor {
     let next = 0;
     const passesBelow = (count: number): void => {
       for (;;) {
-        const pass: FilterPass | undefined = passes[next];
+        const pass: RootFilterPass | undefined = passes[next];
         if (pass === undefined || pass.draw.below > count) return;
         resources.chain.apply(pass);
         program.use();
         next += 1;
       }
     };
+    let executed = passes.length;
     for (const frame of step.frames) {
       passesBelow(frame.index);
+      // A Layer with Filters of its own runs them over its picture first,
+      // in its Target, and composites the result like a canvas; then the
+      // frame's target is bound again, since the chain drew elsewhere.
+      const nested = chain.nested.get(frame.draw.layer.id);
+      let treated: WebGLTexture | undefined;
+      if (nested !== undefined && nested.passes.length > 0) {
+        const result = resources.layerChain.run(
+          frame,
+          nested,
+          targetBufferSize(frame.draw, width, height, resources.maxDimension),
+          frame.fresh,
+        );
+        treated = result.texture;
+        executed += result.executed;
+        if (filtered) resources.chain.resume();
+        else {
+          gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+          gl.viewport(0, 0, width, height);
+        }
+        program.use();
+      }
       const geometry = resources.geometries.get(
         frame.draw.target,
         frame.draw.corners,
@@ -315,16 +313,13 @@ class WebGLCompositor implements Compositor {
         width,
         height,
       );
-      if (frame.kind === "canvas")
-        this.#drawTexture(resources, frame.draw, frame.texture, maskTexture);
+      if (treated !== undefined)
+        drawTexture(resources, frame.draw, treated, maskTexture, true);
+      else if (frame.kind === "canvas")
+        drawTexture(resources, frame.draw, frame.texture, maskTexture);
       else if (frame.buffer !== undefined)
-        this.#drawTexture(
-          resources,
-          frame.draw,
-          frame.buffer.texture,
-          maskTexture,
-        );
-      else this.#drawShader(resources, frame, geometry.matrix, maskTexture);
+        drawTexture(resources, frame.draw, frame.buffer.texture, maskTexture);
+      else drawShader(resources, frame, geometry.matrix, maskTexture);
     }
     passesBelow(plan.layers.length);
     if (filtered) {
@@ -350,9 +345,25 @@ class WebGLCompositor implements Compositor {
       );
     }
     // Mask textures follow the plan, not the draw: a Surface whose Layer is
-    // hidden or blank this frame keeps its Masks rasterized.
+    // hidden or blank this frame keeps its Masks rasterized, and a filtered
+    // Layer keeps its result while it is planned, hidden or blank too.
     resources.masks.retain(plannedSurfaces(plan));
-    return { drew: true, layers, shaders, filters, videos, shares, issues };
+    resources.layerChain.retain(
+      new Set(
+        plan.layers
+          .filter((draw) => draw.filters.length > 0)
+          .map((draw) => draw.layer.id),
+      ),
+    );
+    return {
+      drew: true,
+      layers,
+      shaders,
+      filters: { ...filters, executed },
+      videos,
+      shares,
+      issues,
+    };
   }
 
   trigger(layerId: string, key: string): void {
@@ -368,7 +379,9 @@ class WebGLCompositor implements Compositor {
     resources.calibration.dispose();
     resources.players.dispose();
     resources.filters.dispose();
+    resources.layerChain.dispose();
     resources.chain.dispose();
+    resources.filterPrograms.dispose();
     resources.shaderPrograms.dispose();
     resources.media.dispose();
     resources.program.dispose();
@@ -395,6 +408,13 @@ class WebGLCompositor implements Compositor {
     gl.enableVertexAttribArray(0);
     const program = new SurfaceProgram(gl);
     const media = new MediaTextures(gl);
+    const filterPrograms = new FilterPrograms(gl, program.quad);
+    const shaderPrograms = new ShaderVisualPrograms(
+      gl,
+      program.surface,
+      program.quad,
+      media,
+    );
     return {
       gl,
       program,
@@ -402,88 +422,13 @@ class WebGLCompositor implements Compositor {
       masks: new MaskTextures(gl),
       players: new LayerPlayers(gl, this.#catalog, this.#media, this.#text),
       filters: new FilterPlayers(this.#catalog),
-      chain: new FilterChain(gl, program.quad),
-      shaderPrograms: new ShaderVisualPrograms(
-        gl,
-        program.surface,
-        program.quad,
-        media,
-      ),
+      filterPrograms,
+      chain: new FilterChain(gl, filterPrograms),
+      layerChain: new LayerChain(gl, filterPrograms, shaderPrograms),
+      shaderPrograms,
       media,
       geometries: new SurfaceGeometries(),
+      maxDimension: gl.getParameter(gl.MAX_TEXTURE_SIZE) as number,
     };
   }
-
-  /** A shader Layer run over its Surface, with opacity, blend mode and the Surface's Masks. */
-  #drawShader(
-    resources: Resources,
-    frame: LayerFrame & { kind: "shader" },
-    homography: Float32Array,
-    maskTexture: WebGLTexture | undefined,
-  ): void {
-    const { gl } = resources;
-    const { layer } = frame.draw;
-    if (layer.blendMode === "additive") gl.blendFunc(gl.ONE, gl.ONE);
-    resources.shaderPrograms.draw({
-      visual: frame.visual,
-      params: frame.params,
-      uniforms: frame.uniforms,
-      textures: frame.textures,
-      paths: frame.draw.paths,
-      width: frame.width,
-      height: frame.height,
-      opacity: layer.opacity,
-      homography,
-      maskTexture,
-      maskRect: maskRectOf(frame.draw),
-    });
-    if (layer.blendMode === "additive")
-      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    resources.program.use();
-  }
-
-  /** A Layer's canvas or shader buffer over its Surface, with opacity, blend mode and the Surface's Masks. */
-  #drawTexture(
-    resources: Resources,
-    draw: LayerDraw,
-    texture: WebGLTexture,
-    maskTexture: WebGLTexture | undefined,
-  ): void {
-    const { gl, program } = resources;
-    const { uniforms } = program;
-    const { layer } = draw;
-    program.setMask(maskTexture, maskRectOf(draw));
-    gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.uniform1i(uniforms.mode, MODE.layer);
-    gl.uniform4f(uniforms.color, 1, 1, 1, layer.opacity);
-    gl.uniform4f(uniforms.rect, ...WHOLE);
-    if (layer.blendMode === "additive") gl.blendFunc(gl.ONE, gl.ONE);
-    program.drawSurface();
-    if (layer.blendMode === "additive")
-      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-  }
-}
-
-/** The Media items the planned Layers name in a Parameter that takes one. */
-function plannedMedia(
-  layers: readonly LayerDraw[],
-  catalog: Catalog,
-): ReadonlySet<string> {
-  const ids = new Set<string>();
-  for (const { layer, visual } of layers) {
-    const parameters = catalog.visual(visual)?.parameters ?? {};
-    for (const [name, parameter] of Object.entries(parameters)) {
-      const value = layer.parameters[name];
-      if (parameter.kind === "media" && typeof value === "string" && value)
-        ids.add(value);
-    }
-  }
-  return ids;
-}
-
-/** The Target's rectangle as the shaders take it: x, y, width, height. */
-function maskRectOf(draw: LayerDraw): Rect {
-  const { rect } = draw;
-  return [rect.x, rect.y, rect.width, rect.height];
 }

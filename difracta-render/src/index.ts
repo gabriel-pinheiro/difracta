@@ -2,8 +2,8 @@ export {
   createCompositor,
   type Compositor,
   type CompositorOptions,
-  type FrameReport,
 } from "./compositor.ts";
+export type { FrameReport } from "./frame-report.ts";
 export {
   FontLoader,
   fontFamily,
@@ -37,6 +37,7 @@ export {
   type FilterDraw,
   type FramePlan,
   type LayerDraw,
+  type NestedFilterDraw,
   type SurfaceDraw,
 } from "./plan.ts";
 export * from "./sdk/index.ts";

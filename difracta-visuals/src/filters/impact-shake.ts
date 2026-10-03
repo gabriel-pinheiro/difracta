@@ -20,7 +20,7 @@ export const impactShake = defineFilter({
   description:
     "Throws the whole frame to a new spot on every beat of Rate, holding still between hits, with its colors untouched.",
   notes:
-    "A mechanical camera shake for hits and drops: the frame holds, then snaps to a new random position in the last third of each tick, so it reads as impacts rather than jitter. Amount is how far it can travel, as a fraction of the frame; around a third is a firm knock, full is violent. Rate is in hits per second and changes live without a skip. The frame is mirrored at the edges, so nothing black is exposed and every Surface keeps its pixels, only moved; overlapping Surfaces shake as one. Costs one full-frame pass, and nothing is redrawn while the frame holds still.",
+    "A mechanical camera shake for hits and drops: the frame holds, then snaps to a new random position in the last third of each tick, so it reads as impacts rather than jitter. Amount is how far it can travel, as a fraction of the frame; around a third is a firm knock, full is violent. Rate is in hits per second and changes live without a skip. The frame is mirrored at the edges, so nothing black is exposed and every Surface keeps its pixels, only moved; overlapping Surfaces shake as one. Costs one full-frame pass, and nothing is redrawn while the frame holds still. Inside a Visual Layer it shakes one clip on its own wall, the throw measured across the clip and the clip pulled past its edge clamping there, so the clip smears its own border rather than showing what lies beside it or black; two clips with their own Impact Shake rattle out of step, which reads as two things hit.",
   parameters: {
     amount: {
       kind: "number",

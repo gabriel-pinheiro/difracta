@@ -3,14 +3,15 @@ import { z } from "zod";
 import { linksOfLayer } from "../address/links.ts";
 import { accepted, defineCommand, rejected } from "../command/command.ts";
 import type { Document, Layer, Link } from "../document/document.ts";
-import { childLayers } from "../document/layers.ts";
+import { childLayers, layerHoldsChildren } from "../document/layers.ts";
 import { uniqueName } from "../document/names.ts";
 import { orderKeysAfter, orderKeysForMove } from "../document/order.ts";
 import type { Patch } from "../document/patch.ts";
 import { generateId, id } from "../ids.ts";
 
 /**
- * Patches that copy `layers` (siblings, in order) with their contents under
+ * Patches that copy `layers` (siblings, in order) with their contents, a
+ * Group's Layers and a Visual Layer's Filter Layers, under
  * `sceneId`/`parentId`, with fresh ids. `after` places the copies after that
  * sibling; undefined appends them to an otherwise empty destination, keeping
  * their keys. Links to the originals are copied onto the copies, so a
@@ -55,7 +56,7 @@ export function copyLayers(
       };
       patches.push({ op: "set", path: ["links", linkId], value: copied });
     }
-    if (source.kind === "group")
+    if (layerHoldsChildren(source))
       patches.push(
         ...copyLayers(
           document,
@@ -69,11 +70,11 @@ export function copyLayers(
   return patches;
 }
 
-/** A copy of the Layer, and of everything inside a Group, right after the original. */
+/** A copy of the Layer, and of everything inside it (a Group's Layers, a Visual Layer's Filter Layers), right after the original. */
 export const layerDuplicate = defineCommand({
   name: "layer.duplicate",
   kind: "authoring",
-  description: "Duplicate a Layer below itself.",
+  description: "Duplicate a Layer, with its contents, below itself.",
   payload: z
     .object({
       layerId: z.string().min(1),
@@ -131,7 +132,7 @@ export const layerDuplicate = defineCommand({
         value: order,
       });
     }
-    if (source.kind === "group")
+    if (layerHoldsChildren(source))
       patches.push(
         ...copyLayers(
           document,

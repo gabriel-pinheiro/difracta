@@ -6,23 +6,30 @@ import { isBoolean, useStoredState } from "@/lib/storage";
 /**
  * A collapsible group of inspector rows. The open state is remembered per
  * section name, not per entity, so collapsing Parameters on one Layer
- * collapses them on every Layer until reopened.
+ * collapses them on every Layer until reopened. A section listing things
+ * says how many while it is collapsed ("Filters · 2").
  */
 export function InspectorSection({
   storageKey,
   label,
+  count,
+  defaultExpanded = true,
   actions,
   children,
 }: {
   readonly storageKey: string;
   readonly label: string;
+  /** How many things the section lists; shown after the label while collapsed, when above zero. */
+  readonly count?: number | undefined;
+  /** How the section starts before anyone toggles it. */
+  readonly defaultExpanded?: boolean;
   /** Shown at the right of the header, such as a reset button. */
   readonly actions?: ReactNode;
   readonly children: ReactNode;
 }) {
   const [expanded, setExpanded] = useStoredState(
     `difracta.inspector.${storageKey}`,
-    true,
+    defaultExpanded,
     isBoolean,
   );
   return (
@@ -39,7 +46,12 @@ export function InspectorSection({
           ) : (
             <ChevronRight className="size-3" />
           )}
-          <span className="truncate">{label}</span>
+          <span className="truncate">
+            {label}
+            {!expanded && count !== undefined && count > 0 && (
+              <span className="text-muted-foreground/60"> · {count}</span>
+            )}
+          </span>
         </button>
         {expanded && actions}
       </div>

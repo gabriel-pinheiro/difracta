@@ -6,9 +6,11 @@ import type { Uniforms } from "./uniforms.ts";
 
 /**
  * The Filter SDK. A Filter is a definition (what the Catalog lists) plus a
- * GLSL fragment that turns the frame accumulated below it into a new one,
- * and optionally `create`, which makes one instance per Filter Layer per
- * Output. The instance is the JavaScript half of an animated Filter: it
+ * GLSL fragment that turns its input into a new picture, the frame
+ * accumulated below its Filter Layer, or, when the Filter Layer sits
+ * inside a Visual Layer, that Layer's picture alone in its Target's
+ * space, and optionally `create`, which makes one instance per Filter
+ * Layer per Output. The instance is the JavaScript half of an animated Filter: it
  * integrates its clocks and counters from the frame's `dt`, exactly as a
  * Visual does, and hands the shader the uniforms for this frame. The
  * shader only samples; nothing in it derives from absolute time.
@@ -18,9 +20,13 @@ import type { Uniforms } from "./uniforms.ts";
  * for the shapes); a choice Parameter is an int option index and a color a
  * vec4. The fragment defines
  * `vec4 filter_image(vec2 uv)` over a prelude that provides `u_resolution`
- * and `u_texel`, `sample_input` (clamped at the edges), `sample_mirrored`
- * (reflected, so displaced pixels never show the frame border), `hash` and
- * `hash2`. Mix is applied by the engine after the fragment runs.
+ * and `u_texel` (the input's size: the frame's, or the Target's on this
+ * Output), `sample_input` (clamped at the edges), `sample_mirrored`
+ * (reflected, so displaced pixels never show the input's border), `hash`
+ * and `hash2`. The input is premultiplied: a Filter that changes colour
+ * reads `sample_straight` (or `unpremultiply`), works in straight alpha
+ * and returns `premultiply(color)`; a transparent input must stay
+ * transparent. Mix is applied by the engine after the fragment runs.
  */
 export interface FilterContext<S extends ParameterSchema> {
   /** The frame size in pixels; it may change later, see the frame. */
@@ -44,7 +50,9 @@ export interface FilterFrame<S extends ParameterSchema> {
  * What an update reports. Not `changed` means the pass would produce the
  * same picture from the same input as last frame, so a still Scene under a
  * still Filter is not recomposited. `identity` means the pass would return
- * its input unchanged (an Amount at zero), so it is skipped altogether.
+ * its input unchanged (an Amount at zero), so it is skipped altogether; a
+ * Filter without `create` is never identity, so one with a neutral setting
+ * gets a `create` that reports it.
  * `uniforms` are kept from one frame to the next until returned again.
  * Everything defaults to the safe answer: changed, not identity.
  */

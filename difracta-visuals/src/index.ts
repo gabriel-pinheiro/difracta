@@ -3,7 +3,18 @@ import { Catalog } from "@difracta/core";
 import { bundledMedia, bundledRoot } from "./bundled/manifest.ts";
 import { bundledFonts, fontsRoot } from "./fonts/fonts.ts";
 
+import { adjust } from "./filters/adjust.ts";
 import { blockGlitch } from "./filters/block-glitch.ts";
+import { colorKey } from "./filters/color-key.ts";
+import { colorize } from "./filters/colorize.ts";
+import { crop } from "./filters/crop.ts";
+import { edgeFade } from "./filters/edge-fade.ts";
+import { hueShift } from "./filters/hue-shift.ts";
+import { invert } from "./filters/invert.ts";
+import { kaleido } from "./filters/kaleido.ts";
+import { mirror } from "./filters/mirror.ts";
+import { threshold } from "./filters/threshold.ts";
+import { transform } from "./filters/transform.ts";
 import { chromaticAberration } from "./filters/chromatic-aberration.ts";
 import { dither } from "./filters/dither.ts";
 import { impactShake } from "./filters/impact-shake.ts";
@@ -203,6 +214,17 @@ export const builtInCatalog = new Catalog({
     punchZoom,
     pixelCrush,
     sliceShift,
+    colorize,
+    hueShift,
+    colorKey,
+    adjust,
+    invert,
+    threshold,
+    mirror,
+    kaleido,
+    crop,
+    transform,
+    edgeFade,
   ],
   media: bundledMedia,
   fonts: bundledFonts,

@@ -32,6 +32,7 @@ export class SurfaceProgram {
     | "maskEnabled"
     | "maskRect"
     | "edge"
+    | "flip"
     | "divisions"
     | "corner"
     | "emphasis",
@@ -53,6 +54,7 @@ export class SurfaceProgram {
       maskEnabled: uniform(gl, program, "u_mask_enabled"),
       maskRect: uniform(gl, program, "u_mask_rect"),
       edge: uniform(gl, program, "u_edge"),
+      flip: uniform(gl, program, "u_flip"),
       divisions: uniform(gl, program, "u_divisions"),
       corner: uniform(gl, program, "u_corner"),
       emphasis: uniform(gl, program, "u_emphasis"),

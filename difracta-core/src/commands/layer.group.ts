@@ -10,7 +10,11 @@ import type { Patch } from "../document/patch.ts";
 import { generateId, id } from "../ids.ts";
 import { removeLinksOfLayers } from "./layer.remove.ts";
 
-/** Wraps a Layer in a new Group that takes the Layer's place. */
+/**
+ * Wraps a Layer in a new Group that takes the Layer's place. A Filter
+ * Layer inside a Visual Layer stays there: a Group cannot go inside a
+ * Visual Layer, so it is refused.
+ */
 export const layerGroup = defineCommand({
   name: "layer.group",
   kind: "authoring",
@@ -26,6 +30,12 @@ export const layerGroup = defineCommand({
     const layer = document.layers[payload.layerId];
     if (layer === undefined)
       return rejected(`Layer “${payload.layerId}” does not exist.`);
+    const parent =
+      layer.parentId === null ? undefined : document.layers[layer.parentId];
+    if (parent?.kind === "visual")
+      return rejected(
+        `“${layer.name}” is inside the Visual Layer “${parent.name}”, which holds no Group; move it out first.`,
+      );
     const groupId =
       payload.id === undefined ? generateId("layer") : id("layer", payload.id);
     if (groupId in document.layers)

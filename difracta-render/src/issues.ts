@@ -41,7 +41,7 @@ export function reportIssue(
  */
 export function frameIssues(
   step: Pick<StepReport, "frames" | "issues">,
-  chain: Pick<FilterStepReport, "passes" | "issues">,
+  chain: Pick<FilterStepReport, "passes" | "nested" | "issues">,
   visualFailure: (id: string) => string | undefined,
   filterFailure: (id: string) => string | undefined,
 ): readonly RenderIssue[] {
@@ -56,11 +56,15 @@ export function frameIssues(
         message,
       });
   }
-  for (const pass of chain.passes) {
+  const passes = [
+    ...chain.passes,
+    ...[...chain.nested.values()].flatMap((nested) => nested.passes),
+  ];
+  for (const pass of passes) {
     const message = filterFailure(pass.filter.id);
     if (message !== undefined)
       issues.push({
-        layerId: pass.draw.layer.id,
+        layerId: pass.layer.id,
         definition: pass.filter.id,
         message,
       });

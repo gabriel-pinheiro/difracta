@@ -354,21 +354,29 @@ file names is the same on every machine that runs the same Difracta version.
 A Scene is an ordered stack of Layers, and everything in the stack is a Layer: a
 Visual Layer (a Visual on a Target, with opacity and blend mode), a Filter Layer
 (a Filter with a mix) or a Group (a container). One `layers` table holds all
-three with a `kind`, a `sceneId`, a `parentId` (null at the Scene root, a Group
-otherwise) and an `order` key; document order is navigator order, top first, and
-rendering will walk it bottom up. Siblings are the Layers sharing `sceneId` and
-`parentId` (`PARENT_FIELDS`), so names and order keys are scoped to one parent.
-`layer.move` places a Layer under any root or Group of any Scene, carrying a
-Group's contents along and refusing cycles; `entity.move` still covers
-reordering among siblings. `layer.group` wraps a Layer in a new Group at its
-position and `layer.ungroup` dissolves one; duplicating a Scene or a Group
-copies everything inside with fresh ids. A Visual Layer starts without a Visual,
-a Filter Layer without a Filter: both are picked afterwards from the Catalog. A
-new Visual Layer takes the Target of the sibling it lands next to when that is a
-Visual Layer with one, otherwise the first Surface, unless `layer.create` names
-a Target or null. Removing a Surface clears the Target of Layers using it. The
-first Scene created becomes `installation.activeScene`; the active Scene cannot
-be removed.
+three with a `kind`, a `sceneId`, a `parentId` (null at the Scene root, a Group,
+or, for a Filter Layer, a Visual Layer) and an `order` key; document order is
+navigator order, top first, and rendering will walk it bottom up. Siblings are
+the Layers sharing `sceneId` and `parentId` (`PARENT_FIELDS`), so names and
+order keys are scoped to one parent. The nesting rule (`layerNestingProblem`,
+`document/layers.ts`) is that a Group holds any kind, a Visual Layer holds only
+Filter Layers, which then transform its picture alone (see Rendering), and a
+Filter Layer holds nothing, so nesting under a Visual Layer is one level deep;
+the parent is always in the same Scene. `layer.move` places a Layer under any
+root or Group of any Scene, or a Filter Layer in or out of a Visual Layer,
+carrying a Group's contents and a Visual Layer's Filter Layers along
+(`descendantLayers`) and refusing cycles; `entity.move` still covers reordering
+among siblings. `layer.group` wraps a Layer in a new Group at its position and
+refuses a Filter Layer inside a Visual Layer, since a Group cannot go there;
+`layer.ungroup` dissolves a Group, and Filter Layers inside its Visual Layers
+stay where they are. Removing a Visual Layer removes its Filter Layers with it;
+duplicating a Scene, a Group or a Visual Layer copies everything inside with
+fresh ids. A Visual Layer starts without a Visual, a Filter Layer without a
+Filter: both are picked afterwards from the Catalog. A new Visual Layer takes
+the Target of the sibling it lands next to when that is a Visual Layer with one,
+otherwise the first Surface, unless `layer.create` names a Target or null.
+Removing a Surface clears the Target of Layers using it. The first Scene created
+becomes `installation.activeScene`; the active Scene cannot be removed.
 
 **Why one table for three kinds:** the stack is one ordering across kinds, and
 the words followed the data. Having "Layer" mean only "Visual instance" left
@@ -377,7 +385,14 @@ with every entry a Layer, adding a Visual and adding a Filter are the same
 gesture, and Filters and Groups reorder, group and hide through the same
 commands. **Why a nullable Visual:** a Layer's place in the stack, its name, its
 Group and its enabled state are worth authoring before any pixels exist, and the
-choice of Visual is a separate gesture with its own picker.
+choice of Visual is a separate gesture with its own picker. **Why a Visual
+Layer's Filters are Filter Layers with a `parentId`, not a list on the Layer:**
+a Filter Layer already has an id, Addresses (`layer/<id>/mix`, its Parameters),
+a row, an inspector, Links and Macro actions; nesting it reuses all of that, and
+the same catalog serves both places, where a list on the Visual Layer would have
+needed new Addresses, Link targets and selection paths. Position decides what a
+Filter affects, and there is no per-Filter switch: dragging it in or out is the
+whole gesture.
 
 ### Controllers and Parameter Links
 
@@ -1761,7 +1776,7 @@ Layer's picture changed, or any Filter reports that its picture would; a Scene
 of Layers and Filters that report no change costs the Output only the instances'
 updates, and a hidden Layer not even that.
 
-The plan also places the Scene's Filter Layers: each one enabled with its
+The plan also places the Scene's root Filter Layers: each one enabled with its
 Groups, holding a Filter, with a mix above zero and at least one planned Layer
 that is not hidden below it on this Output, is listed with its position in the
 stack (`below`), and a Group only gates, so a Filter inside a Group still
@@ -1775,16 +1790,54 @@ Layers accumulate into one of two frame-sized textures instead of the screen,
 each pass in plan order reads the current one and writes the other with the
 Filter's fragment, the Layer's mix applied as a blend between input and result,
 then the last texture is presented; with no pass, Layers draw straight to the
-screen as before and the textures are never touched. Programs are compiled once
-per Filter and kept.
+screen as before and the textures are never touched. The passes themselves are
+one program per Filter (`filter-programs.ts`), compiled once and kept, which run
+from any source texture into whatever framebuffer is bound at whatever size.
+
+A Filter Layer inside a Visual Layer is planned on that Layer's draw instead,
+bottom first, and never among the root Filters: it transforms that Layer's
+picture alone, in its Target's space, before the picture is drawn onto the
+Surface (`layer-chain.ts`). Its instance lives like a root one, keyed by the
+Filter Layer, is told the Target's size on this Output (the Layer canvas size at
+Render Scale 1, capped like any canvas) rather than the frame's, and idles with
+the Layer while it is hidden. On a frame where the Visual drew something new, a
+pass reports a change, the set of Filters changed or the Target's size did, the
+Layer's picture (its canvas texture, its reduced-resolution shader buffer, or a
+full-resolution shader Visual rendered into a buffer) goes through its passes at
+the Target's full size, scaled up by the first pass when the Visual renders
+below it, alternating between a result buffer the Layer keeps and a scratch
+buffer of that size every filtered Layer shares, so the last pass lands in the
+result; on any other frame the kept result is composited again, so a still Image
+under a still Colorize renders once. The chain holds the picture the way the
+frame chain does, rows bottom first, so a Filter's top is the top on the wall
+whichever chain runs it: a canvas texture or shader buffer, rows top first, is
+copied in turned over, a full-resolution shader Visual is rendered in bottom
+first, and the result is sampled turned back when composited. It is then drawn
+like a canvas Layer's texture: the Target's homography, the Surface's Masks, the
+feathered edge, the Layer's opacity and its blend mode all apply after the
+Filters, so fading a mirrored clip fades the mirrored picture and nothing a
+nested Filter does leaks outside its Surface. The fragments run unchanged:
+`u_input`, `u_resolution` and `u_texel` describe the Target buffer, and
+`sample_input` clamps at the Target's edge. A Layer with no nested pass to run
+(none planned, all identity, or mix zero) keeps the plain path at no added cost,
+and the result buffer is dropped once the Layer has no planned Filter.
 
 **Why Layers draw straight into the frame rather than into a Surface buffer:**
 one draw per Layer is the whole pipeline, blend modes read naturally as what is
-already on the wall, and Filters, which transform the accumulated frame below
-them, get to bleed across Surfaces, which is wanted. **Why a Filter with nothing
-under it is not planned, and an identity pass or one over blank Layers is
-dropped:** each pass is a full-frame draw, the most expensive thing an Output
-does, and all would produce exactly their input.
+already on the wall, and root Filters, which transform the accumulated frame
+below them, get to bleed across Surfaces, which is wanted (an LED panel split
+into Surfaces, distorted as one). **Why a Visual Layer's own Filters run in
+Target space instead:** a Mirror, a Kaleido or a Crop of one clip has to mean
+the clip on its wall, following the Surface's mapping and cut by its Masks, and
+it must not reach the Surfaces next to it; running them on the frame would
+ignore the mapping. The buffer costs the Layer a texture its Target's size and
+one pass per Filter, usually less than a frame-wide pass, and a full-resolution
+shader Visual that used to be evaluated per Output pixel through the homography
+is resampled from that buffer instead, which softens a strongly keystoned
+Surface a touch, as a canvas Layer already is. **Why a Filter with nothing under
+it is not planned, and an identity pass or one over blank Layers is dropped:**
+each pass is a full-frame draw, the most expensive thing an Output does, and all
+would produce exactly their input.
 
 Geometry: every vertex is a Surface Space position pushed through the Surface's
 homography in the vertex shader, with clip-space `w` carrying the projective

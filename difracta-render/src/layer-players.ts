@@ -26,8 +26,14 @@ import {
 /** A Layer with something to composite this frame: a canvas texture or a shader to run. */
 export type LayerFrame = {
   readonly draw: LayerDraw;
-  /** Position in the plan, which is where Filter passes are placed. */
+  /** Position in the plan, which is where root Filter passes are placed. */
   readonly index: number;
+  /**
+   * The picture is new this frame: the canvas was drawn and uploaded, the
+   * shader reported a change, or its instance or buffer was replaced. The
+   * Layer's own Filters rerun on it; otherwise their kept result stands.
+   */
+  readonly fresh: boolean;
 } & (
   | { readonly kind: "canvas"; readonly texture: WebGLTexture }
   | {
@@ -201,10 +207,18 @@ export class LayerPlayers {
         if (result.blank !== entry.blank) changed = true;
         entry.blank = result.blank;
         if (!result.blank)
-          frames.push({ kind: "canvas", draw, index, texture: entry.texture });
+          frames.push({
+            kind: "canvas",
+            draw,
+            index,
+            fresh: result.rendered,
+            texture: entry.texture,
+          });
       } else if (isShaderVisual(definition)) {
         seen.add(draw.layer.id);
+        const previous = this.#entries.get(draw.layer.id);
         const entry = this.#shaderEntry(draw, definition);
+        const replaced = entry !== previous;
         if (entry.issue !== undefined) {
           issues.push(entry.issue);
           return;
@@ -237,6 +251,7 @@ export class LayerPlayers {
           kind: "shader",
           draw,
           index,
+          fresh: fresh || replaced || result.changed,
           visual: definition,
           params: resolveParameters(
             definition.parameters,

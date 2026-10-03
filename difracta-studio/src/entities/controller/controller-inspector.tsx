@@ -25,6 +25,7 @@ import { AddressRow } from "@/inspector/fields/address-row";
 import { InspectorHeading } from "@/inspector/fields/inspector-heading";
 import { InspectorSection } from "@/inspector/fields/inspector-section";
 import { NameField } from "@/inspector/fields/name-field";
+import { layerOwnerName } from "@/entities/layer/layer-owner";
 import { catalog } from "@/lib/catalog";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useSelection } from "@/selection/selection";
@@ -199,7 +200,11 @@ interface Target {
   readonly range?: NumberRange | undefined;
 }
 
-/** What a Link points at, in words: the Layer, the property, the Scene. A Link whose target is gone shows its Address. */
+/**
+ * What a Link points at, in words: the Layer (a Filter inside a Visual
+ * Layer named after it), the property, the Scene. A Link whose target is
+ * gone shows its Address.
+ */
 function describeTarget(
   link: Link,
   layers: Table<Layer>,
@@ -214,9 +219,10 @@ function describeTarget(
   const layer = layerId === undefined ? undefined : layers[layerId];
   if (resolved === undefined || layer === undefined)
     return { text: link.address, layer: link.address, label: "" };
+  const owner = layerOwnerName(layers, layer);
   return {
-    text: `${layer.name} · ${resolved.label}`,
-    layer: layer.name,
+    text: `${owner} · ${resolved.label}`,
+    layer: owner,
     label: resolved.label,
     scene: scenes[layer.sceneId]?.name,
     layerId: layer.id,

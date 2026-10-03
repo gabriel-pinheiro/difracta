@@ -51,11 +51,12 @@ export function removalWarnings(
   return warnings;
 }
 
-/** Removing a Group removes everything inside it, every Link to what goes, and every Macro action on it. */
+/** Removing a Group or a Visual Layer removes everything inside it, every Link to what goes, and every Macro action on it. */
 export const layerRemove = defineCommand({
   name: "layer.remove",
   kind: "authoring",
-  description: "Remove a Layer; a Group goes with its contents.",
+  description:
+    "Remove a Layer; a Group goes with its contents, a Visual Layer with its Filter Layers.",
   payload: z.object({ layerId: z.string().min(1) }).strict(),
   label: () => "Remove Layer",
   apply({ document, payload }) {

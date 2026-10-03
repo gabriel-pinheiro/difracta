@@ -231,14 +231,19 @@ WebGL2 to map and combine Layer results even when a Visual uses Canvas 2D.
 ### Filter
 
 One configured instance of one registered, code-defined image transformation
-inside a Scene. A Filter transforms the Projection Frame accumulated globally
-below its position and has an enabled value, universal mix, and complete
-Parameter Values. It has no Visual, Target, opacity or blend mode.
+inside a Scene. Where its Filter Layer sits decides what it transforms: at a
+Scene's root or in a Group, the Projection Frame accumulated globally below its
+position, across Surfaces; inside a Visual Layer, only that Layer's picture, in
+the space of its Target, before the Layer's opacity, blend mode and Masks apply.
+A Filter has an enabled value, universal mix, and complete Parameter Values. It
+has no Visual, Target, opacity or blend mode. Both places use the same Catalog;
+a Filter's notes say how it reads in each.
 
 A Filter nested in a Group still affects globally lower content outside that
-Group. It is disabled when its Layer or any Group above it is disabled. At mix
-zero it preserves the accumulated image without a Filter pass. A completely
-transparent input must produce a completely transparent output.
+Group. A Filter inside a Visual Layer never reaches outside that Layer's Surface
+and Masks. It is disabled when its Layer, or any Group or Visual Layer above it,
+is disabled. At mix zero it preserves its input without a Filter pass. A
+completely transparent input must produce a completely transparent output.
 
 Do not call a Filter an Effect. Effect remains a broader unresolved term for a
 future behavior that is neither a Visual nor a Filter.
@@ -510,33 +515,43 @@ change drops the bindings that no longer fit rather than being refused.
 ### Layer
 
 One entry in a Scene's stack. Every Layer has a name, an enabled state and a
-position among its siblings, under the Scene's root or inside a Group. A Layer
-is one of three kinds: a Visual Layer, a Filter Layer or a Group. Adding a
-Visual, a Filter or a Group is the same gesture with a different kind, and all
-three reorder, move, duplicate and hide the same way.
+position among its siblings, under the Scene's root, inside a Group or, for a
+Filter Layer, inside a Visual Layer. A Layer is one of three kinds: a Visual
+Layer, a Filter Layer or a Group. Adding a Visual, a Filter or a Group is the
+same gesture with a different kind, and all three reorder, move, duplicate and
+hide the same way.
 
 ### Visual Layer
 
 A Layer that renders one Visual into a Target, with Parameter Values, an opacity
 and a blend mode. It renders RGBA content over a transparent background; the
 order of Layers controls composition where pixels overlap. A Visual Layer may
-exist without a Visual or a Target yet, or with a Path its Visual declares
-unbound, in which case it renders nothing.
+contain Filter Layers, which transform its picture alone, the bottom one first;
+its opacity, blend mode and the Target's Masks apply after them, so fading a
+mirrored clip fades the mirrored picture. It holds nothing else: no Group and no
+Visual Layer goes inside it. A Visual Layer may exist without a Visual or a
+Target yet, or with a Path its Visual declares unbound, in which case it renders
+nothing, and neither do its Filter Layers.
 
 ### Filter Layer
 
-A Layer that holds one Filter and transforms the Projection Frame accumulated
-below its position, with a mix from zero through one. It has no Target, opacity
-or blend mode. A Filter Layer inside a Group still affects content below that
-Group. A Filter Layer may exist without a Filter yet, in which case the frame
-passes through it unchanged.
+A Layer that holds one Filter, with a mix from zero through one. At a Scene's
+root or inside a Group it transforms the Projection Frame accumulated below its
+position, and a Filter Layer inside a Group still affects content below that
+Group. It may sit inside a Visual Layer instead, where it transforms only that
+Layer's picture in its Target; the Visual Layer's Filter Layers apply bottom
+first, in stack order. Moving a Filter Layer in or out keeps its id, so its
+Links and Macro actions stay. It has no Target, opacity or blend mode. A Filter
+Layer may exist without a Filter yet, in which case its input passes through it
+unchanged.
 
 ### Group
 
 A Layer that contains an ordered stack of Layers, Groups included. A Group has
 no Visual, Target, opacity or blend mode, and is not a compositing boundary: its
 contents draw as if they sat at its position in the Scene. Disabling a Group
-hides everything inside it without changing what those Layers have authored.
+hides everything inside it without changing what those Layers have authored. A
+Group never goes inside a Visual Layer.
 
 ### Target
 
@@ -748,9 +763,11 @@ Output, Surface or Layer, the closest one allowed. Output shows the Output the
 selection is on as its projector gets it. Surface shows the selection's Surface
 flat: filling the frame, undistorted, alone, under the Scene's Filter Layers.
 Layer shows a selected Layer with only what it draws with: a Visual Layer alone
-on the flat Surface of its Target, with no Filter Layer applied; a Filter Layer
-with the stack below it on the Output shown; a Group with only what is in it on
-the Output shown.
+on the flat Surface of its Target, with its own Filter Layers applied and no
+other; a Filter Layer inside a Visual Layer as that Layer on its Target, with
+the Filter Layers from the bottom up to and including itself; a root Filter
+Layer with the stack below it on the Output shown; a Group with only what is in
+it on the Output shown.
 
 ### Control
 

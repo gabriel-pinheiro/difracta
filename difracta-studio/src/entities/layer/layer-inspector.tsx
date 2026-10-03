@@ -18,7 +18,7 @@ import {
   type Surface,
   type Table,
 } from "@difracta/core";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -37,7 +37,10 @@ import { catalog, definitionOf } from "@/lib/catalog";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useSelection } from "@/selection/selection";
 
+import { CueButton } from "./cue-button";
 import { DefinitionBlock } from "./definition-block";
+import { LayerFiltersSection } from "./layer-filters-section";
+import { LayerHolderRow } from "./layer-holder-row";
 import { PathRows } from "./path-rows";
 import { visualPanels } from "./visual-panels";
 
@@ -56,7 +59,9 @@ function valueAt(layer: Layer, resolved: ResolvedAddress): AddressValue {
  * edited through the same command and a Cue fires through the same Address
  * a Macro or OSC would. A row a Controller drives shows the Controller
  * instead of a control; the row menu links and unlinks. A Visual that
- * follows Paths gets one row per Path it declares, below the Target.
+ * follows Paths gets one row per Path it declares, below the Target. A
+ * Visual Layer lists the Filter Layers inside it in a fourth section; a
+ * Filter Layer inside one names it under its own name.
  */
 export function LayerInspector({
   view,
@@ -184,6 +189,9 @@ export function LayerInspector({
             void command("layer.rename", { layerId: id, name })
           }
         />
+        {layer.kind === "filter" && layer.parentId !== null && (
+          <LayerHolderRow view={view} parentId={layer.parentId} />
+        )}
       </div>
       <InspectorSection storageKey="layer" label="Layer">
         {settings.flatMap((resolved) =>
@@ -248,6 +256,9 @@ export function LayerInspector({
           )}
         </InspectorSection>
       )}
+      {layer.kind === "visual" && (
+        <LayerFiltersSection view={view} layer={layer} />
+      )}
       {cues.length > 0 && (
         <InspectorSection storageKey="cues" label="Cues">
           <div className="flex flex-wrap gap-1.5">
@@ -264,32 +275,6 @@ export function LayerInspector({
         </InspectorSection>
       )}
     </>
-  );
-}
-
-/** Fires a Cue; lit for a moment afterwards so a press is seen without an Output. */
-function CueButton({
-  label,
-  onFire,
-}: {
-  readonly label: string;
-  readonly onFire: () => Promise<unknown>;
-}) {
-  const [lit, setLit] = useState(false);
-  return (
-    <Button
-      variant="outline"
-      size="xs"
-      data-lit={lit || undefined}
-      className="data-lit:border-selection data-lit:bg-selection/20"
-      onClick={() => {
-        setLit(true);
-        window.setTimeout(() => setLit(false), 150);
-        void onFire();
-      }}
-    >
-      {label}
-    </Button>
   );
 }
 

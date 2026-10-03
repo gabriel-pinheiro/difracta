@@ -55,7 +55,9 @@ float edgeCoverage(vec2 uv) {
  * derivatives, so its lines stay about one pixel wide at any projection and
  * cost no geometry. `u_edge` is 1 for a draw of the whole Surface, whose
  * fill then fades out across the edge like the Masks cut it; lines, labels
- * and markers keep every fragment.
+ * and markers keep every fragment. `u_flip` is 1 for a Layer texture whose
+ * rows are bottom first, as the Filter chains keep them, so it lands
+ * upright.
  */
 export const FRAGMENT_SOURCE = `#version 300 es
 precision highp float;
@@ -67,6 +69,7 @@ uniform sampler2D u_mask;
 uniform int u_mask_enabled;
 uniform vec4 u_mask_rect;
 uniform int u_edge;
+uniform int u_flip;
 uniform sampler2D u_texture;
 uniform float u_divisions;
 uniform int u_corner;
@@ -119,7 +122,8 @@ void main() {
   } else if (u_mode == 2) {
     o_color = texture(u_texture, v_local) * u_color.a;
   } else if (u_mode == 4) {
-    o_color = texture(u_texture, v_uv) * u_color.a * mask;
+    vec2 at = u_flip == 1 ? vec2(v_uv.x, 1.0 - v_uv.y) : v_uv;
+    o_color = texture(u_texture, at) * u_color.a * mask;
   } else {
     float r = length(v_local - 0.5);
     float px = abs(r - 0.36) / max(length(fwidth(v_local)), 1e-6);

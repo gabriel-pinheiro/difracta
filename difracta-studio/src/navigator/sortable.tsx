@@ -15,6 +15,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -22,25 +23,13 @@ import {
 
 import { cn } from "@/lib/utils";
 
+import { dragData, takesVariant } from "./sortable-data";
+
 interface SortableContext {
   readonly kind: string;
   readonly listId: string;
-}
-
-/** What a dragged row carries; drop targets add `listId` and an edge or `inside`. */
-interface DragData {
-  readonly kind: string;
-  readonly id: string;
-  readonly listId: string;
-}
-
-function dragData(data: Record<string, unknown>): DragData | undefined {
-  const { kind, id, listId } = data;
-  return typeof kind === "string" &&
-    typeof id === "string" &&
-    typeof listId === "string"
-    ? { kind, id, listId }
-    : undefined;
+  /** The variants the list's rows may be; undefined takes any. */
+  readonly variants: readonly string[] | undefined;
 }
 
 const Context = createContext<SortableContext | undefined>(undefined);
@@ -55,6 +44,7 @@ const Context = createContext<SortableContext | undefined>(undefined);
 export function SortableList({
   kind,
   listId = kind,
+  variants,
   ids,
   selectedId,
   onMove,
@@ -64,6 +54,8 @@ export function SortableList({
   readonly kind: string;
   /** Tells lists of one kind apart; defaults to the kind for a single list. */
   readonly listId?: string;
+  /** Row variants this list takes, such as only Filter Layers inside a Visual Layer; undefined takes any. */
+  readonly variants?: readonly string[] | undefined;
   /** Ids in current display order. */
   readonly ids: readonly string[];
   readonly selectedId: string | undefined;
@@ -75,6 +67,7 @@ export function SortableList({
   useEffect(() => {
     latest.current = { ids, selectedId, onMove };
   });
+  const variantsKey = variants?.join(" ");
 
   useEffect(() => {
     const move = (id: string, after: string | null): void => {
@@ -142,15 +135,23 @@ export function SortableList({
     };
   }, [kind, listId]);
 
-  return (
-    <Context.Provider value={{ kind, listId }}>{children}</Context.Provider>
+  const context = useMemo(
+    () => ({
+      kind,
+      listId,
+      variants: variantsKey === undefined ? undefined : variantsKey.split(" "),
+    }),
+    [kind, listId, variantsKey],
   );
+  return <Context.Provider value={context}>{children}</Context.Provider>;
 }
 
-/** Rows that take a dropped row into themselves: a Group, a Scene. */
+/** Rows that take a dropped row into themselves: a Group, a Scene, a Visual Layer. */
 export interface DropInside {
   /** Source kinds accepted, such as "layer" on a Scene row. */
   readonly kinds: readonly string[];
+  /** Among rows of the list's own kind, only these variants; undefined takes any. */
+  readonly variants?: readonly string[] | undefined;
   readonly onDrop: (sourceId: string) => void;
 }
 
@@ -161,10 +162,13 @@ export interface DropInside {
  */
 export function SortableItem({
   id,
+  variant,
   inside,
   children,
 }: {
   readonly id: string;
+  /** The row's variant within the list's kind, such as a Layer's kind; what lists and rows may limit. */
+  readonly variant?: string | undefined;
   /** Accepts drops onto the row's middle, shown as an outline. */
   readonly inside?: DropInside | undefined;
   readonly children: ReactNode;
@@ -172,7 +176,7 @@ export function SortableItem({
   const context = useContext(Context);
   if (context === undefined)
     throw new Error("SortableItem needs a SortableList.");
-  const { kind, listId } = context;
+  const { kind, listId, variants } = context;
   const ref = useRef<HTMLDivElement>(null);
   const [edge, setEdge] = useState<Edge | "inside" | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -181,19 +185,28 @@ export function SortableItem({
     latestInside.current = inside;
   });
   const insideKinds = inside?.kinds.join(" ") ?? "";
+  const insideVariants = inside?.variants?.join(" ");
+  const listVariants = variants?.join(" ");
 
   useEffect(() => {
     const element = ref.current;
     if (element === null) return;
-    const acceptsInside = (sourceKind: unknown): boolean =>
-      typeof sourceKind === "string" &&
-      insideKinds.split(" ").includes(sourceKind);
+    const split = (joined: string | undefined) => joined?.split(" ");
+    const acceptsInside = (source: Record<string, unknown>): boolean =>
+      typeof source.kind === "string" &&
+      insideKinds.split(" ").includes(source.kind) &&
+      (source.kind !== kind ||
+        takesVariant(split(insideVariants), source.variant));
+    // A row of the list's own kind lands before or after this one only when
+    // the list takes its variant; a Group over a Visual Layer's Filters does not.
+    const acceptsBeside = (source: Record<string, unknown>): boolean =>
+      source.kind === kind && takesVariant(split(listVariants), source.variant);
     const handle = element.querySelector<HTMLElement>("[data-drag-handle]");
     return combine(
       draggable({
         element,
         ...(handle === null ? {} : { dragHandle: handle }),
-        getInitialData: () => ({ kind, id, listId }),
+        getInitialData: () => ({ kind, id, listId, variant }),
         // A translucent copy of the row follows the pointer, so the drop line
         // underneath stays readable.
         onGenerateDragPreview: ({ nativeSetDragImage, location }) => {
@@ -220,14 +233,14 @@ export function SortableItem({
         element,
         canDrop: ({ source }) =>
           source.data.id !== id &&
-          (source.data.kind === kind || acceptsInside(source.data.kind)),
+          (acceptsBeside(source.data) || acceptsInside(source.data)),
         getData: ({ input, element: self, source }) => {
-          const sameKind = source.data.kind === kind;
-          const data = { kind, id, listId };
+          const sameKind = acceptsBeside(source.data);
+          const data = { kind, id, listId, variant };
           // The row is the first child; an open Group's wrapper also holds
           // its children's rows, which must not count as the row.
           const row = self.firstElementChild ?? self;
-          if (!acceptsInside(source.data.kind)) {
+          if (!acceptsInside(source.data)) {
             return attachClosestEdge(data, {
               input,
               element: row,
@@ -267,7 +280,7 @@ export function SortableItem({
         },
       }),
     );
-  }, [kind, id, listId, insideKinds]);
+  }, [kind, id, listId, variant, insideKinds, insideVariants, listVariants]);
 
   return (
     <div

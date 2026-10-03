@@ -350,7 +350,10 @@ const LayerBase = {
   id: z.string().min(1),
   name: EntityName,
   sceneId: z.string().min(1),
-  /** The Group containing the Layer, or null at the Scene's root. */
+  /**
+   * The Group containing the Layer, or, for a Filter Layer, the Visual
+   * Layer it treats; null at the Scene's root.
+   */
   parentId: z.string().min(1).nullable(),
   enabled: z.boolean(),
   /** Position among the Layers of the same parent; first is topmost. */
@@ -370,8 +373,9 @@ export type LayerKind = (typeof LAYER_KINDS)[number];
 
 /**
  * Everything in a Scene's stack is a Layer: a Visual Layer renders one
- * Visual on a Target, a Filter Layer transforms everything below it, a
- * Group contains Layers. One table, one ordering, one move.
+ * Visual on a Target, a Filter Layer transforms everything below it, or,
+ * inside a Visual Layer, that Layer's picture alone, a Group contains
+ * Layers. One table, one ordering, one move.
  */
 export const LayerSchema = z.discriminatedUnion("kind", [
   z

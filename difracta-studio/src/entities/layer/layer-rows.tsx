@@ -3,6 +3,7 @@ import {
   childLayers,
   effectiveDocument,
   layerEffectivelyEnabled,
+  layerHoldsChildren,
   linkAt,
   type Controller,
   type Layer,
@@ -11,23 +12,10 @@ import {
   type Region,
   type Table,
 } from "@difracta/core";
-import {
-  Copy,
-  Eye,
-  EyeOff,
-  FolderPlus,
-  Link2,
-  Trash2,
-  Ungroup,
-} from "lucide-react";
+import { Eye, EyeOff, Link2 } from "lucide-react";
+import { useEffect, useRef } from "react";
 
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { catalog } from "@/lib/catalog";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useBrowser } from "@/library/browser-state";
@@ -42,17 +30,23 @@ import { SortableItem, SortableList } from "@/navigator/sortable";
 import { useRemoveEntity } from "@/selection/remove-selection";
 import { isSelected, useSelection } from "@/selection/selection";
 
-import { layerIcons, layerKindLabels } from "./layer-icons";
+import { LayerContextMenu } from "./layer-context-menu";
+import { layerIcons } from "./layer-icons";
 import { layerWarning } from "./layer-warning";
 import { layerWarningContext } from "./layer-warning-context";
 import { useLayerActions } from "./use-layer-actions";
 
+/** Only a Filter Layer may be dropped inside a Visual Layer. */
+const FILTERS_ONLY = ["filter"] as const;
+
 /**
- * The Layers under one Scene root or Group as rows, topmost first, Groups
- * opening to their own rows. Rows can be dragged among siblings, into a
- * Group (its middle) and to other Scenes. Layers disabled by themselves or
- * by a Group above show faded; a Layer whose Enabled a Controller drives
- * shows a link glyph in place of the eye, since the eye would not obey.
+ * The Layers under one Scene root, Group or Visual Layer as rows, topmost
+ * first, Groups opening to their own rows and Visual Layers to the Filter
+ * Layers they hold. Rows can be dragged among siblings, into a Group (its
+ * middle), into a Visual Layer when they are Filter Layers, and to other
+ * Scenes. Layers disabled by themselves or by a Group or Visual Layer
+ * above show faded; a Layer whose Enabled a Controller drives shows a link
+ * glyph in place of the eye, since the eye would not obey.
  */
 export function LayerRows({
   view,
@@ -86,6 +80,13 @@ export function LayerRows({
       : effectiveDocument(document, catalog).layers;
   const warningContext = layerWarningContext(paths, regions);
   const rows = childLayers(layers, sceneId, parentId);
+  const parent = parentId === null ? undefined : layers[parentId];
+  const nested = parent?.kind === "visual";
+  const childCount = (layer: Layer): number =>
+    layerHoldsChildren(layer)
+      ? childLayers(layers, sceneId, layer.id).length
+      : 0;
+  useUnfoldOnGain(rows, childCount, (id) => setExpanded("layer", id, true));
   const moveInto = (layerId: string, target: Layer): void =>
     void command("layer.move", {
       layerId,
@@ -104,6 +105,7 @@ export function LayerRows({
     <SortableList
       kind="layer"
       listId={`layer:${sceneId}:${parentId ?? ""}`}
+      variants={nested ? FILTERS_ONLY : undefined}
       ids={rows.map((layer) => layer.id)}
       selectedId={selection?.kind === "layer" ? selection.id : undefined}
       onMove={(layerId, after) =>
@@ -113,7 +115,9 @@ export function LayerRows({
       {rows.map((layer) => {
         const Icon = layerIcons[layer.kind];
         const group = layer.kind === "group";
-        const expanded = group && isExpanded("layer", layer.id);
+        // A Group always opens; a Visual Layer only while it holds Filters.
+        const openable = group || childCount(layer) > 0;
+        const expanded = openable && isExpanded("layer", layer.id);
         const shown = effective[layer.id] ?? layer;
         const enabledLink =
           document === undefined
@@ -128,10 +132,17 @@ export function LayerRows({
           <SortableItem
             key={layer.id}
             id={layer.id}
+            variant={layer.kind}
             inside={
               group
                 ? { kinds: ["layer"], onDrop: (id) => moveInto(id, layer) }
-                : undefined
+                : layer.kind === "visual"
+                  ? {
+                      kinds: ["layer"],
+                      variants: FILTERS_ONLY,
+                      onDrop: (id) => moveInto(id, layer),
+                    }
+                  : undefined
             }
           >
             <ContextMenu>
@@ -145,7 +156,7 @@ export function LayerRows({
                   dimmed={!layerEffectivelyEnabled(effective, shown)}
                   expanded={expanded}
                   onToggle={
-                    group
+                    openable
                       ? (next) => setExpanded("layer", layer.id, next)
                       : undefined
                   }
@@ -202,49 +213,13 @@ export function LayerRows({
                   )}
                 </NavigatorRow>
               </ContextMenuTrigger>
-              <ContextMenuContent>
-                {group ? (
-                  <>
-                    {createItems(sceneId, layer.id).map((item) => (
-                      <ContextMenuItem key={item.label} onClick={item.onSelect}>
-                        <item.icon /> Add {item.label}
-                      </ContextMenuItem>
-                    ))}
-                    <ContextMenuSeparator />
-                  </>
-                ) : (
-                  <ContextMenuItem
-                    onClick={() =>
-                      void command("layer.group", { layerId: layer.id })
-                    }
-                  >
-                    <FolderPlus /> New Group with {layerKindLabels[layer.kind]}
-                  </ContextMenuItem>
-                )}
-                <ContextMenuItem
-                  onClick={() =>
-                    void command("layer.duplicate", { layerId: layer.id })
-                  }
-                >
-                  <Copy /> Duplicate
-                </ContextMenuItem>
-                {group && (
-                  <ContextMenuItem
-                    onClick={() =>
-                      void command("layer.ungroup", { layerId: layer.id })
-                    }
-                  >
-                    <Ungroup /> Ungroup
-                  </ContextMenuItem>
-                )}
-                <ContextMenuSeparator />
-                <ContextMenuItem
-                  variant="destructive"
-                  onClick={() => removeEntity("layer", layer.id)}
-                >
-                  <Trash2 /> Remove
-                </ContextMenuItem>
-              </ContextMenuContent>
+              <LayerContextMenu
+                layer={layer}
+                nested={nested}
+                createItems={group ? createItems(sceneId, layer.id) : []}
+                onCommand={(name, payload) => void command(name, payload)}
+                onRemove={() => removeEntity("layer", layer.id)}
+              />
             </ContextMenu>
             {expanded && (
               <LayerRows
@@ -259,4 +234,28 @@ export function LayerRows({
       })}
     </SortableList>
   );
+}
+
+/**
+ * Opens a row the moment it gains a child, the first or any later one: a
+ * Visual Layer given a Filter from its inspector or by a drop unfolds to
+ * show it. Rows start collapsed, so nothing opens on the first render or
+ * when the rows come back after their Scene was folded away.
+ */
+function useUnfoldOnGain(
+  rows: readonly Layer[],
+  count: (layer: Layer) => number,
+  unfold: (id: string) => void,
+): void {
+  const counts = useRef<ReadonlyMap<string, number> | undefined>(undefined);
+  const current = new Map(rows.map((layer) => [layer.id, count(layer)]));
+  useEffect(() => {
+    const previous = counts.current;
+    counts.current = current;
+    if (previous === undefined) return;
+    for (const [id, now] of current) {
+      const before = previous.get(id);
+      if (before !== undefined && now > before) unfold(id);
+    }
+  });
 }

@@ -6,7 +6,11 @@ import {
   type Document,
   type Layer,
 } from "../document/document.ts";
-import { childLayers, LAYER_LABELS } from "../document/layers.ts";
+import {
+  childLayers,
+  LAYER_LABELS,
+  layerNestingProblem,
+} from "../document/layers.ts";
 import { uniqueName } from "../document/names.ts";
 import { orderedEntries } from "../document/order.ts";
 import { orderKeyForNew } from "../document/tree.ts";
@@ -39,13 +43,17 @@ function defaultTarget(
 export const layerCreate = defineCommand({
   name: "layer.create",
   kind: "authoring",
-  description: "Add a Visual Layer, Filter Layer or Group to a Scene.",
+  description:
+    "Add a Visual Layer, Filter Layer or Group to a Scene, at its root, in a Group, or, for a Filter Layer, inside a Visual Layer.",
   payload: z
     .object({
       id: z.string().min(1).optional(),
       kind: z.enum(LAYER_KINDS),
       sceneId: z.string().min(1),
-      /** Group to add into; null for the Scene's root. */
+      /**
+       * Group to add into, or, for a Filter Layer, the Visual Layer whose
+       * picture it treats; null for the Scene's root.
+       */
       parentId: z.string().min(1).nullable().default(null),
       name: z.string().trim().min(1).max(120).optional(),
       /** Sibling to land below; null or absent for the top. */
@@ -68,10 +76,12 @@ export const layerCreate = defineCommand({
       return rejected(`Scene “${payload.sceneId}” does not exist.`);
     if (payload.parentId !== null) {
       const parent = document.layers[payload.parentId];
-      if (parent?.kind !== "group" || parent.sceneId !== payload.sceneId)
+      if (parent?.sceneId !== payload.sceneId)
         return rejected(
-          `Group “${payload.parentId}” is not in Scene “${payload.sceneId}”.`,
+          `Layer “${payload.parentId}” is not in Scene “${payload.sceneId}”.`,
         );
+      const problem = layerNestingProblem({ kind: payload.kind }, parent);
+      if (problem !== undefined) return rejected(problem);
     }
     const siblings = childLayers(
       document.layers,

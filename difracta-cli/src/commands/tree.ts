@@ -91,7 +91,7 @@ export function registerTree(program: Command, cli: Cli): void {
   program
     .command("scene <scene>")
     .description(
-      "Show a Scene's Layers as a tree, top first: kind, name, id, enabled (gated by its Group), Visual or Filter, opacity or mix with its Controller, Target (a Surface, or Surface/Region), and any Path its Visual follows that is unbound or not on the Target.",
+      "Show a Scene's Layers as a tree, top first, a Group's Layers and a Visual Layer's Filter Layers indented under it: kind, name, id, enabled (gated by its Group or Layer), Visual or Filter, opacity or mix with its Controller, Target (a Surface, or Surface/Region), and any Path its Visual follows that is unbound or not on the Target.",
     )
     .action((reference: string) =>
       cli.withDocument(async (client, summary) => {

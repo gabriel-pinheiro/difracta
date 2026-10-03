@@ -43,9 +43,9 @@ function run(document: Document, name: string, payload: unknown): Document {
 }
 
 /**
- * Scene One plays, top to bottom: A on the wall, Group G of Filter J, B on
- * the floor and C without a Target, Filter F, E on the TV. Scene Two, not
- * playing, has X on the wall.
+ * Scene One plays, top to bottom: A on the wall holding Filters L over K,
+ * Group G of Filter J, B on the floor and C without a Target, Filter F, E
+ * on the TV. Scene Two, not playing, has X on the wall.
  */
 function staged(): Document {
   let document = emptyDocument("Living");
@@ -92,6 +92,8 @@ function staged(): Document {
   add("B", "visual", { parentId: "G", target: "sur_floor" });
   add("J", "filter", { parentId: "G" });
   add("A", "visual", { target: "sur_wall" });
+  add("K", "filter", { parentId: "A" });
+  add("L", "filter", { parentId: "A" });
   return run(document, "scene.play", { sceneId: "s1" });
 }
 
@@ -129,6 +131,18 @@ function drawn(document: Document, target: LayerTarget) {
   };
 }
 
+/** The Filters inside each drawn Layer, bottom first, by the Layer's id. */
+function nested(document: Document, target: LayerTarget) {
+  const frame = previewFrame(document, target);
+  const plan = planFrame(frame.document, frame.outputId, catalog);
+  return Object.fromEntries(
+    plan.layers.map((draw) => [
+      draw.layer.id,
+      draw.filters.map((filter) => filter.layer.id),
+    ]),
+  );
+}
+
 describe("previewFrame of a Layer", () => {
   it("draws a Visual Layer alone, out of its Group and under no Filter", () => {
     expect(drawn(staged(), onFloor("B"))).toEqual({
@@ -143,6 +157,41 @@ describe("previewFrame of a Layer", () => {
     expect(drawn(document, onFloor("B")).layers).toEqual([]);
     expect(framedLayerDisabled(document.layers, "B")).toBe(true);
     expect(framedLayerDisabled(off(staged(), "G").layers, "B")).toBe(false);
+  });
+
+  it("draws a Visual Layer with the Filters inside it, under no root Filter", () => {
+    expect(drawn(staged(), onOutput("A"))).toEqual({
+      layers: ["A"],
+      filters: [],
+    });
+    expect(nested(staged(), onOutput("A"))).toEqual({ A: ["K", "L"] });
+  });
+
+  it("draws a Filter inside a Visual Layer as that Layer with its Filters up to it", () => {
+    expect(drawn(staged(), onOutput("K"))).toEqual({
+      layers: ["A"],
+      filters: [],
+    });
+    expect(nested(staged(), onOutput("K"))).toEqual({ A: ["K"] });
+    expect(nested(staged(), onOutput("L"))).toEqual({ A: ["K", "L"] });
+  });
+
+  it("says a Filter inside a Visual Layer is disabled when it or the Layer is", () => {
+    expect(framedLayerDisabled(off(staged(), "K").layers, "K")).toBe(true);
+    expect(framedLayerDisabled(off(staged(), "A").layers, "K")).toBe(true);
+    expect(framedLayerDisabled(staged().layers, "K")).toBe(false);
+    expect(nested(off(staged(), "A"), onOutput("K"))).toEqual({});
+  });
+
+  it("keeps a Visual Layer's Filters when a root Filter's stack includes it", () => {
+    expect(nested(staged(), onOutput("F", "out_b"))).toEqual({ E: [] });
+    const document = run(staged(), "layer.move", {
+      layerId: "F",
+      sceneId: "s1",
+      parentId: null,
+      after: null,
+    });
+    expect(nested(document, onOutput("F"))).toEqual({ B: [], A: ["K", "L"] });
   });
 
   it("draws a Filter Layer's stack up to and including it", () => {
@@ -193,6 +242,11 @@ describe("framedLayers", () => {
     const document = staged();
     const kept = framedLayers(document.layers, "J");
     expect(Object.keys(kept).sort()).toEqual(["B", "C", "E", "F", "G", "J"]);
+    expect(Object.keys(framedLayers(document.layers, "K")).sort()).toEqual([
+      "A",
+      "K",
+    ]);
+    expect(framedLayers(document.layers, "K").K).toBe(document.layers.K);
     for (const layer of Object.values(kept))
       expect(layer).toBe(document.layers[layer.id]);
   });

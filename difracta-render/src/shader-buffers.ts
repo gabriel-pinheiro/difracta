@@ -38,6 +38,16 @@ export function shaderBufferSize(
 export function fitShaderBuffer(
   gl: WebGL2RenderingContext,
   current: ShaderBuffer | undefined,
+  size: { readonly width: number; readonly height: number },
+): ShaderBuffer;
+export function fitShaderBuffer(
+  gl: WebGL2RenderingContext,
+  current: ShaderBuffer | undefined,
+  size: { readonly width: number; readonly height: number } | undefined,
+): ShaderBuffer | undefined;
+export function fitShaderBuffer(
+  gl: WebGL2RenderingContext,
+  current: ShaderBuffer | undefined,
   size: { readonly width: number; readonly height: number } | undefined,
 ): ShaderBuffer | undefined {
   if (size === undefined) {

@@ -158,6 +158,25 @@ export class Stage {
     return this;
   }
 
+  /** A Filter Layer inside a Visual Layer, above the ones already there, so the first added runs first. */
+  nested(id: string, layerId: string, filter: string, mix = 1): this {
+    this.#document = run(this.#document, "layer.create", {
+      id,
+      kind: "filter",
+      sceneId: SCENE,
+      parentId: layerId,
+    });
+    this.#document = run(this.#document, "layer.filter", {
+      layerId: id,
+      filter,
+    });
+    this.#document = run(this.#document, "layer.update", {
+      layerId: id,
+      mix,
+    });
+    return this;
+  }
+
   /** A four-point Mask on a Surface, its points in Surface Space. */
   mask(
     id: string,

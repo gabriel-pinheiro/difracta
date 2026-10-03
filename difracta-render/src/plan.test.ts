@@ -301,6 +301,75 @@ describe("planFrame", () => {
     ]);
   });
 
+  it("plans a Visual Layer's Filter Layers on its draw, bottom first, never among the root Filters", () => {
+    // A holds, top first, M (mix 0), K and L; K lands above L in the stack.
+    let document = staged();
+    for (const id of ["L", "K", "M"]) {
+      document = run(document, "layer.create", {
+        id,
+        kind: "filter",
+        sceneId: "s1",
+        parentId: "A",
+      });
+      document = run(document, "layer.filter", {
+        layerId: id,
+        filter: "glitch",
+      });
+    }
+    document = run(document, "address.set", {
+      address: "layer/M/mix",
+      value: 0,
+    });
+    const nestedOf = (plan: ReturnType<typeof planFrame>) =>
+      plan.layers.map((draw) => [
+        draw.layer.id,
+        draw.filters.map((nested) => nested.layer.id),
+      ]);
+    expect(nestedOf(planFrame(document, "out_a", catalog))).toEqual([
+      ["B", []],
+      ["A", ["L", "K"]],
+    ]);
+    // Root Filters are placed as if the nested ones were not there.
+    expect(filtersOf(planFrame(document, "out_a", catalog))).toEqual([
+      ["J", 1],
+    ]);
+    const kOff = run(document, "address.set", {
+      address: "layer/K/enabled",
+      value: false,
+    });
+    expect(nestedOf(planFrame(kOff, "out_a", catalog))).toEqual([
+      ["B", []],
+      ["A", ["L"]],
+    ]);
+    const noFilter = run(document, "layer.filter", {
+      layerId: "L",
+      filter: null,
+    });
+    expect(nestedOf(planFrame(noFilter, "out_a", catalog))).toEqual([
+      ["B", []],
+      ["A", ["K"]],
+    ]);
+    // A hidden Layer keeps its Filters planned, idle with it; an unplanned
+    // Layer (no Target here) plans none.
+    const faded = run(document, "address.set", {
+      address: "layer/A/opacity",
+      value: 0,
+    });
+    const fadedPlan = planFrame(faded, "out_a", catalog);
+    expect(nestedOf(fadedPlan)).toEqual([
+      ["B", []],
+      ["A", ["L", "K"]],
+    ]);
+    expect(fadedPlan.layers[1]?.hidden).toBe(true);
+    const untargeted = run(document, "layer.update", {
+      layerId: "A",
+      target: null,
+    });
+    expect(nestedOf(planFrame(untargeted, "out_a", catalog))).toEqual([
+      ["B", []],
+    ]);
+  });
+
   it("plans a Layer at opacity zero as hidden, which gives no Filter its input", () => {
     const topmost = run(
       run(staged(), "layer.create", { id: "H", kind: "filter", sceneId: "s1" }),

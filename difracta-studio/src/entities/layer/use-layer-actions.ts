@@ -10,10 +10,12 @@ import { layerIcons, layerKindLabels } from "./layer-icons";
 
 /**
  * Creating Layers from a Scene row or a Group row: one entry per kind for
- * the "+" menu and the context menu. The new Layer is selected, which
- * brings its row into view; a Visual or Filter Layer also opens the
- * Library, since picking is the next thing to do, marked as opened by
- * creation so Escape there removes the untouched Layer again.
+ * the "+" menu and the context menu; `create` alone also adds a Filter
+ * Layer inside a Visual Layer from its inspector. The new Layer is
+ * selected, which brings its row into view (unfolding the Layer it is in);
+ * a Visual or Filter Layer also opens the Library, since picking is the
+ * next thing to do, marked as opened by creation so Escape there removes
+ * the untouched Layer again.
  */
 export function useLayerActions(view: DocumentView) {
   const command = useCommand(view);

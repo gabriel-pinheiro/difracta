@@ -20,8 +20,10 @@ import { THUMBNAIL_VIDEO_ENTRY, thumbnailSetups } from "./thumbnail-setups.ts";
  * way an Output would. A Visual gets a Layer over a full-frame Surface in
  * a fresh Installation and runs for a few seconds so its motion settles;
  * a Filter gets the same with a gray checkerboard under it, so every
- * Filter is shown over the same picture. The checkerboard carries a ring,
- * since a displaced checkerboard would look like the checkerboard itself.
+ * Filter is shown over the same picture, or over colour bars when its
+ * setup asks, since a gray picture hides colour work. The checkerboard
+ * carries a ring, since a displaced checkerboard would look like the
+ * checkerboard itself.
  * A Visual with a Media Parameter gets a picture or a clip of the Bundled
  * Media as a Media item, served from the data URL the script passes, and
  * its frames are paced by the browser's own, since the file loads and a
@@ -83,8 +85,31 @@ const checkerboard = defineVisual({
   }),
 });
 
+/** Every hue left to right over most of the height, a grey ramp along the top: what colour Filters are shown over. */
+const colorBars = defineVisual({
+  id: "thumbnail-colors",
+  name: "Colour Bars",
+  description: "The reference picture colour Filters are shown over.",
+  parameters: {},
+  create: () => ({
+    update: ({ changed }) => ({ changed }),
+    render({ context, width, height }) {
+      const ramp = height / 4;
+      const bars = 24;
+      for (let i = 0; i < bars; i += 1) {
+        const x = (i / bars) * width;
+        context.fillStyle = `hsl(${(i / bars) * 360} 100% 50%)`;
+        context.fillRect(x, ramp, width / bars + 1, height - ramp);
+        const grey = Math.round((i / (bars - 1)) * 255);
+        context.fillStyle = `rgb(${grey} ${grey} ${grey})`;
+        context.fillRect(x, 0, width / bars + 1, ramp);
+      }
+    },
+  }),
+});
+
 const catalog = new Catalog({
-  visuals: [...builtInCatalog.visuals(), checkerboard],
+  visuals: [...builtInCatalog.visuals(), checkerboard, colorBars],
   filters: builtInCatalog.filters(),
   media: builtInCatalog.media(),
   fonts: builtInCatalog.fonts(),
@@ -161,7 +186,12 @@ function installation(kind: ThumbnailKind, id: string): Document {
   };
   if (kind === "visual") visual("thumbnail", id);
   else {
-    visual("reference", checkerboard.id);
+    visual(
+      "reference",
+      thumbnailSetups[id]?.reference === "colors"
+        ? colorBars.id
+        : checkerboard.id,
+    );
     document = run(document, "layer.create", {
       id: "thumbnail",
       kind: "filter",
@@ -171,6 +201,13 @@ function installation(kind: ThumbnailKind, id: string): Document {
       layerId: "thumbnail",
       filter: id,
     });
+    for (const [name, value] of Object.entries(
+      thumbnailSetups[id]?.parameters ?? {},
+    ))
+      document = run(document, "address.set", {
+        address: `layer/thumbnail/param/${name}`,
+        value,
+      });
   }
   return run(document, "scene.play", { sceneId: "scene" });
 }

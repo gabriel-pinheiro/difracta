@@ -117,6 +117,32 @@ export const halve = defineFilter({
 }`,
 });
 
+/**
+ * Keeps the bottom half of its input (uv.y below one half, as the chains
+ * hold a picture) and mirrors it onto the top, so a nested one shows both
+ * where the Target's middle is and which way up the Filter sees it.
+ */
+export const mirrorUp = defineFilter({
+  id: "test-mirror-up",
+  name: "Mirror up",
+  description: "The bottom half, reflected onto the top.",
+  parameters: {},
+  fragment: `vec4 filter_image(vec2 uv) {
+  return sample_input(vec2(uv.x, uv.y < 0.5 ? uv.y : 1.0 - uv.y));
+}`,
+});
+
+/** Slides the picture right by half its width; the left half repeats the left edge. */
+export const shiftRight = defineFilter({
+  id: "test-shift-right",
+  name: "Shift right",
+  description: "The picture moved right by half of itself.",
+  parameters: {},
+  fragment: `vec4 filter_image(vec2 uv) {
+  return sample_input(uv - vec2(0.5, 0.0));
+}`,
+});
+
 export const testCatalog = new Catalog({
   visuals: [
     ...builtInCatalog.visuals(),
@@ -125,6 +151,13 @@ export const testCatalog = new Catalog({
     alwaysRedraws,
     throwsOnSecondFrame,
   ],
-  filters: [...builtInCatalog.filters(), passthrough, invert, halve],
+  filters: [
+    ...builtInCatalog.filters(),
+    passthrough,
+    invert,
+    halve,
+    mirrorUp,
+    shiftRight,
+  ],
   fonts: builtInCatalog.fonts(),
 });

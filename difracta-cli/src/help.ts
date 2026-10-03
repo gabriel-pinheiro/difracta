@@ -79,7 +79,11 @@ Working from a shell
   Order      A create lands first in its Group (a Layer: on top; a Media
              item: last). Pass "after": <sibling id|name> to place it below
              that sibling, or null for first; entity.move, layer.move and the
-             others rearrange.
+             others rearrange. A Layer's "parentId" is a Group, or, for a
+             Filter Layer, a Visual Layer: nested there, the Filter treats
+             only that Layer's picture on its Target; at the root or in a
+             Group it treats the whole frame below it. layer.move takes a
+             Filter Layer in and out; scene <scene> shows the nesting.
 
   Names      Wherever an Address or a payload field takes an entity id, its
              name works too: layer/Wash/opacity, '{"sceneId":"Live"}'. Names
@@ -123,6 +127,9 @@ Working from a shell
                  "parameters":{"color":[1,0.5,0,1]}}'  (the rest: defaults)
              run layer.update '{"layerId":"Wash","target":"Wall"}'
              edit layer/Wash/param/color '[1,0.5,0,1]'
+             run layer.create '{"kind":"filter","sceneId":"Live",
+                 "parentId":"Wash","name":"Warm"}'  (treats Wash alone)
+             run layer.filter '{"layerId":"Warm","filter":"colorize"}'
              (catalog <id> lists a Visual's Parameters, their ranges and
              steps, which a value must sit on, and its Cues.)
 

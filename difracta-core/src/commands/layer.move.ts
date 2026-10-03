@@ -1,19 +1,25 @@
 import { z } from "zod";
 
 import { accepted, defineCommand, rejected } from "../command/command.ts";
-import { childLayers, descendantLayers } from "../document/layers.ts";
+import {
+  childLayers,
+  descendantLayers,
+  layerNestingProblem,
+} from "../document/layers.ts";
 import { orderKeysForMove } from "../document/order.ts";
 import type { Patch } from "../document/patch.ts";
 
 /**
  * Places a Layer after a sibling (or first) under any Scene root or Group,
- * in its own Scene or another. A Group carries its contents along; it
- * cannot be moved into itself or its descendants.
+ * or a Filter Layer inside a Visual Layer, in its own Scene or another. A
+ * Group carries its contents along and a Visual Layer its Filter Layers; a
+ * Layer cannot be moved into itself or its descendants.
  */
 export const layerMove = defineCommand({
   name: "layer.move",
   kind: "authoring",
-  description: "Move a Layer within or across Scenes and Groups.",
+  description:
+    "Move a Layer within or across Scenes and Groups, or a Filter Layer into or out of a Visual Layer.",
   payload: z
     .object({
       layerId: z.string().min(1),
@@ -21,6 +27,7 @@ export const layerMove = defineCommand({
       parentId: z.string().min(1).nullable(),
       /** Sibling to land after in the destination; null for the top. */
       after: z.string().min(1).nullable(),
+      // parentId: a Group, or a Visual Layer for a Filter Layer; null for the root.
     })
     .strict(),
   label: () => "Move Layer",
@@ -33,16 +40,18 @@ export const layerMove = defineCommand({
       return rejected(`Scene “${payload.sceneId}” does not exist.`);
     if (payload.parentId !== null) {
       const parent = document.layers[payload.parentId];
-      if (parent?.kind !== "group" || parent.sceneId !== payload.sceneId)
+      if (parent?.sceneId !== payload.sceneId)
         return rejected(
-          `Group “${payload.parentId}” is not in Scene “${payload.sceneId}”.`,
+          `Layer “${payload.parentId}” is not in Scene “${payload.sceneId}”.`,
         );
+      const problem = layerNestingProblem(layer, parent);
+      if (problem !== undefined) return rejected(problem);
       const descendants = descendantLayers(document.layers, layer.id);
       if (
         payload.parentId === layer.id ||
         descendants.some((child) => child.id === payload.parentId)
       )
-        return rejected("A Group cannot be moved into itself.");
+        return rejected("A Layer cannot be moved into itself.");
     }
     if (payload.after === layer.id)
       return rejected("A Layer cannot be placed after itself.");

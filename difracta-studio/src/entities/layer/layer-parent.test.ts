@@ -7,14 +7,19 @@ const document = {
   layers: {
     group: { sceneId: "s1", parentId: null },
     visual: { sceneId: "s1", parentId: "group" },
+    filter: { sceneId: "s1", parentId: "visual" },
   },
 } as unknown as Document;
 
 describe("layerParent", () => {
-  it("is the Group a Layer is in, else its Scene", () => {
+  it("is the Group or Visual Layer a Layer is in, else its Scene", () => {
     expect(layerParent(document, "visual")).toEqual({
       kind: "layer",
       id: "group",
+    });
+    expect(layerParent(document, "filter")).toEqual({
+      kind: "layer",
+      id: "visual",
     });
     expect(layerParent(document, "group")).toEqual({ kind: "scene", id: "s1" });
     expect(layerParent(document, "gone")).toBeUndefined();

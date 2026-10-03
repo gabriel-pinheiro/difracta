@@ -15,6 +15,7 @@ import {
   AddressPicker,
   type PickerCandidate,
 } from "@/inspector/fields/address-picker";
+import { layerOwnerName } from "@/entities/layer/layer-owner";
 import { catalog, definitionOf } from "@/lib/catalog";
 import { useCommand, useSignal } from "@/lib/client";
 
@@ -57,7 +58,7 @@ export function LinkPicker({
   );
 }
 
-/** Every Address the Controller could drive, in Scene then Layer order. */
+/** Every Address the Controller could drive, in Scene then Layer order; a Filter inside a Visual Layer is owned by "Layer › Filter". */
 function collect(
   document: Document,
   controller: ValueController,
@@ -74,6 +75,7 @@ function collect(
     const layer = document.layers[resolved.path[1] ?? ""];
     if (layer === undefined || layer.kind === "group") continue;
     const scene = document.scenes[layer.sceneId];
+    const owner = layerOwnerName(document.layers, layer);
     const detail = definitionOf(layer).definition?.name ?? "";
     const existing = linkAt(document, resolved.address);
     const elsewhere =
@@ -83,11 +85,11 @@ function collect(
     result.push({
       key: resolved.address,
       group: scene?.name ?? "",
-      owner: layer.name,
+      owner,
       label: resolved.label,
       detail,
       haystack:
-        `${scene?.name ?? ""} ${layer.name} ${detail} ${resolved.label}`.toLowerCase(),
+        `${scene?.name ?? ""} ${owner} ${detail} ${resolved.label}`.toLowerCase(),
       taken: existing?.controllerId === controller.id ? "linked" : undefined,
       note:
         elsewhere === undefined

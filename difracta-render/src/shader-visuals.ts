@@ -48,6 +48,10 @@ export type BufferDrawInput = Pick<
  * texture does.
  */
 const BUFFER_HOMOGRAPHY = new Float32Array([1, 0, 0, 0, -1, 0, 0, 1, 1]);
+/** The same with rows bottom first, the way the Filter chains hold a picture. */
+const BUFFER_HOMOGRAPHY_BOTTOM_FIRST = new Float32Array([
+  1, 0, 0, 0, 1, 0, 0, 0, 1,
+]);
 
 interface ProgramEntry {
   readonly program: WebGLProgram;
@@ -143,9 +147,14 @@ export class ShaderVisualPrograms {
   /**
    * Renders into a Layer's buffer at the buffer's size, unmasked and at full
    * opacity, and leaves it bound; the compositor then draws the buffer over
-   * the Surface with the Layer's opacity, blend mode and Masks.
+   * the Surface with the Layer's opacity, blend mode and Masks. Rows are top
+   * first like a canvas, or bottom first for a Layer chain's input.
    */
-  render(buffer: ShaderBuffer, input: BufferDrawInput): void {
+  render(
+    buffer: ShaderBuffer,
+    input: BufferDrawInput,
+    rows: "top-first" | "bottom-first" = "top-first",
+  ): void {
     const gl = this.#gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, buffer.framebuffer);
     gl.viewport(0, 0, buffer.width, buffer.height);
@@ -157,7 +166,10 @@ export class ShaderVisualPrograms {
         width: buffer.width,
         height: buffer.height,
         opacity: 1,
-        homography: BUFFER_HOMOGRAPHY,
+        homography:
+          rows === "top-first"
+            ? BUFFER_HOMOGRAPHY
+            : BUFFER_HOMOGRAPHY_BOTTOM_FIRST,
         maskTexture: undefined,
         maskRect: WHOLE,
       },

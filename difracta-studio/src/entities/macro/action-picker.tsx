@@ -15,12 +15,14 @@ import {
   AddressPicker,
   type PickerCandidate,
 } from "@/inspector/fields/address-picker";
+import { layerOwnerName } from "@/entities/layer/layer-owner";
 import { catalog, definitionOf } from "@/lib/catalog";
 import { useCommand, useSignal } from "@/lib/client";
 
 /**
  * Picks the Addresses a Macro will act on: every one in the Installation,
- * grouped by Scene for a Layer's, under their own headings for the rest.
+ * grouped by Scene for a Layer's (a Filter inside a Visual Layer owned by
+ * "Layer › Filter"), under their own headings for the rest.
  * Each pick captures what the Address holds now, so ticking fifteen
  * opacities writes the state the wall is in; a trigger Address becomes a
  * trigger action.
@@ -162,7 +164,7 @@ function place(
       if (layer === undefined) return undefined;
       return {
         group: document.scenes[layer.sceneId]?.name ?? "",
-        owner: layer.name,
+        owner: layerOwnerName(document.layers, layer),
         detail:
           layer.kind === "group"
             ? undefined

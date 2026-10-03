@@ -3,10 +3,13 @@ import type { ParameterDefinition, ParameterSchema } from "@difracta/core";
 import type { ShaderFilter } from "./sdk/filter.ts";
 
 /**
- * The GLSL around a Filter's fragment. A pass draws one full-frame quad;
- * the fragment reads the accumulated frame as `u_input` and defines
- * `filter_image`, and the wrapper applies the Layer's mix and keeps the
- * result premultiplied, so a Filter never has to think about either.
+ * The GLSL around a Filter's fragment. A pass draws one quad over its
+ * input, the accumulated frame for a root Filter Layer or a Visual Layer's
+ * picture in its Target for a nested one; the fragment reads it as
+ * `u_input`, premultiplied, and defines `filter_image`, and the wrapper
+ * applies the Layer's mix and keeps the result premultiplied. A Filter
+ * that changes colour works in straight alpha (`sample_straight`,
+ * `unpremultiply`) and returns `premultiply(...)`.
  */
 export const FILTER_VERTEX_SOURCE = `#version 300 es
 in vec2 a_uv;
@@ -18,15 +21,16 @@ void main() {
 }
 `;
 
-/** Copies the last frame target to the screen. */
+/** Copies a texture whole: the last frame target to the screen, or a Layer's picture into its chain, turned over when `u_flip` is 1. */
 export const PRESENT_FRAGMENT_SOURCE = `#version 300 es
 precision highp float;
 uniform sampler2D u_input;
+uniform int u_flip;
 in vec2 v_uv;
 out vec4 o_color;
 
 void main() {
-  o_color = texture(u_input, v_uv);
+  o_color = texture(u_input, u_flip == 1 ? vec2(v_uv.x, 1.0 - v_uv.y) : v_uv);
 }
 `;
 
@@ -50,6 +54,18 @@ vec2 mirror_uv(vec2 uv) {
 
 vec4 sample_mirrored(vec2 uv) {
   return texture(u_input, mirror_uv(uv));
+}
+
+vec4 unpremultiply(vec4 c) {
+  return c.a > 0.0 ? vec4(c.rgb / c.a, c.a) : vec4(0.0);
+}
+
+vec4 premultiply(vec4 c) {
+  return vec4(c.rgb * c.a, c.a);
+}
+
+vec4 sample_straight(vec2 uv) {
+  return unpremultiply(sample_input(uv));
 }
 
 float hash(float value) {

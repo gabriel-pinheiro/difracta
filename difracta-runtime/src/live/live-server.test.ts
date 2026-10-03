@@ -574,17 +574,28 @@ describe("live protocol", () => {
       "zoom-rush",
     ]);
     expect(catalog.filters.map((filter) => filter.id)).toEqual([
+      "adjust",
       "block-glitch",
       "chromatic-aberration",
+      "color-key",
+      "colorize",
+      "crop",
       "dither",
+      "edge-fade",
+      "hue-shift",
       "impact-shake",
+      "invert",
+      "kaleido",
+      "mirror",
       "pixel-crush",
       "punch-zoom",
       "rolling-tv-tear",
       "scanlines",
       "signal-distortion",
       "slice-shift",
+      "threshold",
       "tile-scramble",
+      "transform",
       "wave-distortion",
     ]);
     // The Bundled Fonts come in the Catalog's order, the fallback first.

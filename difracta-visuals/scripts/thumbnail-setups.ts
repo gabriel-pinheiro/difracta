@@ -10,6 +10,12 @@ export interface ThumbnailSetup {
   readonly seconds?: number;
   /** False keeps the first Cue from firing, for a Visual that shows best at rest. */
   readonly cue?: boolean;
+  /**
+   * Filters only: the picture under the Filter. The gray checkerboard with
+   * a ring shows displacement; the colour bars show colour work, which a
+   * gray picture would hide.
+   */
+  readonly reference?: "checkerboard" | "colors";
 }
 
 /**
@@ -27,4 +33,24 @@ export const thumbnailSetups: Readonly<Record<string, ThumbnailSetup>> = {
     parameters: { font: "dseg7-classic", start: 42, size: 0.6 },
     cue: false,
   },
+  // Colour work over the bars, which carry every hue and a grey ramp.
+  colorize: { reference: "colors" },
+  "hue-shift": { reference: "colors" },
+  // Red is in the bars; black would key only the ground, which is black anyway.
+  "color-key": {
+    reference: "colors",
+    parameters: { color: [1, 0, 0, 1], tolerance: 0.25, softness: 0.15 },
+  },
+  adjust: {
+    reference: "colors",
+    parameters: { contrast: 1.6, saturation: 1.5, gamma: 0.8 },
+  },
+  invert: { reference: "colors" },
+  threshold: { reference: "colors", parameters: { level: 0.45 } },
+  // The bars run left to right, so a fold shows as a reversed run.
+  mirror: { reference: "colors", parameters: { axis: "horizontal" } },
+  kaleido: { reference: "colors", parameters: { segments: 8, rotation: 15 } },
+  crop: { parameters: { left: 0.15, top: 0.2, right: 0.15, bottom: 0.2 } },
+  transform: { parameters: { rotation: 20, scale: 0.75, offsetX: 0.1 } },
+  "edge-fade": { parameters: { width: 0.25, shape: "oval" } },
 };

@@ -57,9 +57,22 @@ export interface SurfaceDraw {
 }
 
 /**
+ * One Filter Layer inside a Visual Layer: a pass over that Layer's picture
+ * alone, in its Target's space, before the picture is drawn onto the
+ * Surface.
+ */
+export interface NestedFilterDraw {
+  readonly layer: FilterLayer;
+  /** The Filter's definition id; a Layer without one is not planned. */
+  readonly filter: string;
+}
+
+/**
  * One Visual Layer of the active Scene landing on this Output through its
  * Target: a Surface, or a Region of one, which inherits the Surface's
- * mapping and Masks and presents its rectangle as the unit square.
+ * mapping and Masks and presents its rectangle as the unit square. Its
+ * Filter Layers come with it, and run over its picture before it is
+ * composited; its opacity, blend mode and Masks apply after them.
  */
 export interface LayerDraw {
   readonly layer: VisualLayer;
@@ -84,10 +97,17 @@ export interface LayerDraw {
   /** The Paths the Visual declares, bound and on this Surface, by key, in the Target's space. */
   readonly paths: Readonly<Record<string, Path>>;
   /**
-   * Opacity at zero: the Layer keeps its place and its instance, which
-   * idles, but it is not stepped, not drawn and gives no Filter its input.
+   * Opacity at zero: the Layer keeps its place and its instances, the
+   * Visual's and its Filters', which idle, but it is not stepped, not
+   * drawn and gives no root Filter its input.
    */
   readonly hidden: boolean;
+  /**
+   * The Layer's Filter Layers that run over its picture: enabled, with a
+   * Filter and a mix above zero, bottom first, the order they run in.
+   * Empty for a Layer on the plain path.
+   */
+  readonly filters: readonly NestedFilterDraw[];
 }
 
 /** One Filter Layer of the active Scene with something under it on this Output. */
@@ -213,10 +233,13 @@ function isRegionCorner(
  * The active Scene's stack as it lands on this Output: Visual Layers that
  * are enabled with every Group above them enabled, have a Visual with every
  * Path it declares bound, and target a Surface here with a mapping, the
- * ones at opacity zero marked hidden; and Filter Layers enabled the same
- * way, with a Filter and a mix above zero, that have at least one such
- * Layer, not hidden, below them, since a Filter transforms what is already
- * drawn and a Group only gates. Bottom first, so drawing in order stacks
+ * ones at opacity zero marked hidden, each carrying its own Filter Layers
+ * (enabled, with a Filter and a mix above zero, bottom first); and root
+ * Filter Layers enabled the same way, with a Filter and a mix above zero,
+ * that have at least one such Layer, not hidden, below them, since a root
+ * Filter transforms what is already drawn and a Group only gates. A Visual
+ * Layer's own Filters never join the root list: they transform its picture
+ * in its Target, not the frame. Bottom first, so drawing in order stacks
  * them as the navigator shows.
  */
 function planStack(
@@ -242,8 +265,12 @@ function planStack(
       if (layer.kind === "group") visit(layer.id);
       else if (layer.kind === "visual") {
         const draw = layerDraw(document, outputId, catalog, layer, masksOf);
-        if (draw !== undefined) items.push({ kind: "layer", draw });
-      } else if (layer.filter !== null && layer.mix > 0)
+        if (draw !== undefined)
+          items.push({
+            kind: "layer",
+            draw: { ...draw, filters: nestedFilters(document, layer) },
+          });
+      } else if (runs(layer))
         items.push({ kind: "filter", layer, filter: layer.filter });
     }
   };
@@ -266,13 +293,32 @@ function planStack(
   return { layers, filters };
 }
 
+/** A Filter Layer that would run: enabled, with a Filter, with a mix above zero. */
+function runs(
+  layer: FilterLayer,
+): layer is FilterLayer & { readonly filter: string } {
+  return layer.enabled && layer.filter !== null && layer.mix > 0;
+}
+
+/** The Visual Layer's Filter Layers that run, bottom first. */
+function nestedFilters(
+  document: Document,
+  layer: VisualLayer,
+): readonly NestedFilterDraw[] {
+  const draws: NestedFilterDraw[] = [];
+  for (const child of childLayers(document.layers, layer.sceneId, layer.id))
+    if (child.kind === "filter" && runs(child))
+      draws.push({ layer: child, filter: child.filter });
+  return draws.reverse();
+}
+
 function layerDraw(
   document: Document,
   outputId: string,
   catalog: Catalog,
   layer: Layer & { kind: "visual" },
   masksOf: (surface: Surface) => readonly Mask[],
-): LayerDraw | undefined {
+): Omit<LayerDraw, "filters"> | undefined {
   if (layer.visual === null || layer.target === null) return undefined;
   const resolved = resolveTarget(document, layer.target);
   if (resolved === undefined) return undefined;

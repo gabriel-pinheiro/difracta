@@ -3,6 +3,7 @@ import {
   childrenOf,
   LAYER_LABELS,
   layerEffectivelyEnabled,
+  layerHoldsChildren,
   linkAt,
   orderedEntries,
   resolveTarget,
@@ -19,8 +20,10 @@ import {
 /**
  * The shapes the CLI shows a Scene and the grouped tables in: a Scene's
  * Layers as the tree the navigator draws, top first, each with what it
- * renders and how loud; Controllers and Macros as their Groups' trees. The
- * builders read the document, the formatters turn a tree into lines.
+ * renders and how loud, a Group's contents and a Visual Layer's Filter
+ * Layers under their parent; Controllers and Macros as their Groups'
+ * trees. The builders read the document, the formatters turn a tree into
+ * lines.
  */
 export interface LayerLevel {
   readonly field: "opacity" | "mix";
@@ -34,8 +37,10 @@ export interface LayerNode {
   readonly name: string;
   readonly kind: LayerKind;
   readonly enabled: boolean;
-  /** Enabled and inside no disabled Group, so it renders. */
+  /** Enabled and inside no disabled Group or Visual Layer, so it renders. */
   readonly effectivelyEnabled: boolean;
+  /** Enabled but inside a disabled parent: which kind, for the wording. */
+  readonly gatedBy?: "group" | "visual";
   /** The Visual or Filter id, null while none is picked; a Group has none. */
   readonly definition?: string | null;
   readonly level?: LayerLevel;
@@ -43,6 +48,7 @@ export interface LayerNode {
   readonly target?: { readonly id: string; readonly name?: string } | null;
   /** Paths the Visual follows that it cannot use yet, by the Visual's key; absent when none. */
   readonly missingPaths?: readonly MissingPath[];
+  /** A Group's Layers, or a Visual Layer's Filter Layers, top first. */
   readonly children: readonly LayerNode[];
 }
 
@@ -71,13 +77,18 @@ function layerNode(
   build: (parentId: string) => LayerNode[],
   catalog: Catalog | undefined,
 ): LayerNode {
+  const effectivelyEnabled = layerEffectivelyEnabled(document.layers, layer);
+  const gatedBy = gatingParent(document, layer);
   const base = {
     id: layer.id,
     name: layer.name,
     kind: layer.kind,
     enabled: layer.enabled,
-    effectivelyEnabled: layerEffectivelyEnabled(document.layers, layer),
-    children: layer.kind === "group" ? build(layer.id) : [],
+    effectivelyEnabled,
+    ...(layer.enabled && !effectivelyEnabled && gatedBy !== undefined
+      ? { gatedBy }
+      : {}),
+    children: layerHoldsChildren(layer) ? build(layer.id) : [],
   };
   if (layer.kind === "group") return base;
   const field = layer.kind === "visual" ? "opacity" : "mix";
@@ -127,6 +138,21 @@ function layerNode(
   };
 }
 
+/** The kind of the nearest disabled parent above an enabled Layer, undefined when every parent is on. */
+function gatingParent(
+  document: Document,
+  layer: Layer,
+): "group" | "visual" | undefined {
+  let parentId = layer.parentId;
+  while (parentId !== null) {
+    const parent = document.layers[parentId];
+    if (parent === undefined) return undefined;
+    if (!parent.enabled) return parent.kind === "visual" ? "visual" : "group";
+    parentId = parent.parentId;
+  }
+  return undefined;
+}
+
 export function formatSceneTree(
   nodes: readonly LayerNode[],
   depth = 0,
@@ -141,7 +167,11 @@ function describeLayer(node: LayerNode): string {
   const parts = [
     `${LAYER_LABELS[node.kind]} “${node.name}”`,
     node.id,
-    node.enabled ? (node.effectivelyEnabled ? "on" : "on (Group off)") : "off",
+    node.enabled
+      ? node.effectivelyEnabled
+        ? "on"
+        : `on (${node.gatedBy === "visual" ? "Layer" : "Group"} off)`
+      : "off",
   ];
   if (node.kind !== "group")
     parts.push(

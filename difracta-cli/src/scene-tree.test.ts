@@ -121,6 +121,7 @@ describe("sceneTree", () => {
             kind: "filter",
             enabled: true,
             effectivelyEnabled: false,
+            gatedBy: "group",
             definition: null,
             level: { field: "mix", value: 0.25 },
             children: [],
@@ -146,6 +147,46 @@ describe("sceneTree", () => {
       "Group “Looks”  looks  off",
       "  Filter “Blur”  blur  on (Group off)  (no Filter)  mix 25%",
       "Layer “Wash”  wash  on  solid  opacity 50% ← Energy  → Wall",
+    ]);
+  });
+
+  it("shows a Visual Layer's Filter Layers under it, gated by the Layer", () => {
+    let document = stage();
+    const steps: readonly (readonly [string, unknown])[] = [
+      [
+        "layer.create",
+        {
+          id: "warm",
+          sceneId: "sc",
+          kind: "filter",
+          name: "Warm",
+          parentId: "wash",
+        },
+      ],
+      ["layer.update", { layerId: "wash", enabled: false }],
+    ];
+    for (const [name, payload] of steps) {
+      const result = executeCommand(registry, document, name, payload);
+      if (!result.ok) throw new Error(`${name}: ${result.error}`);
+      document = result.document;
+    }
+    const wash = sceneTree(document, "sc").find((n) => n.id === "wash");
+    expect(wash?.children).toEqual([
+      {
+        id: "warm",
+        name: "Warm",
+        kind: "filter",
+        enabled: true,
+        effectivelyEnabled: false,
+        gatedBy: "visual",
+        definition: null,
+        level: { field: "mix", value: 1 },
+        children: [],
+      },
+    ]);
+    expect(formatSceneTree([wash!])).toEqual([
+      "Layer “Wash”  wash  off  solid  opacity 50% ← Energy  → Wall",
+      "  Filter “Warm”  warm  on (Layer off)  (no Filter)  mix 100%",
     ]);
   });
 

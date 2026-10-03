@@ -173,7 +173,7 @@ describe("layers", () => {
         sceneId: "scene_a",
         parentId: "stars",
       }),
-    ).toMatch(/not in Scene/);
+    ).toMatch(/Only a Filter Layer/);
   });
 
   it("updates fields according to kind", () => {
