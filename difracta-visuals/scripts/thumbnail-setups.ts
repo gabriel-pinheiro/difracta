@@ -19,11 +19,15 @@ export interface ThumbnailSetup {
 }
 
 /**
- * The Bundled Media entries the Image and Video thumbnails show. The bundle
- * has clips only, so Image shows the thumbnail of one as its picture.
+ * The Bundled Pack entries the Image and Video thumbnails show. The Pack
+ * has clips only, so Image shows the baked thumbnail of one as its picture.
  */
 export const THUMBNAIL_IMAGE_ENTRY = "laser-fan-sweep-loop";
 export const THUMBNAIL_VIDEO_ENTRY = "wire-polyhedron-loop";
+
+/** The Media references the thumbnail Layers name: entries of a Pack made up for the page, each served from a data URL. */
+export const THUMBNAIL_IMAGE = "thumbnail/image";
+export const THUMBNAIL_VIDEO = "thumbnail/video";
 
 export const thumbnailSetups: Readonly<Record<string, ThumbnailSetup>> = {
   video: { seconds: 4.5 },

@@ -1,8 +1,9 @@
+import { settings, SLUG_PATTERN } from "@difracta/core";
 import { z } from "zod";
 
 /**
- * Runtime-scoped requests: the document, the Catalog, the Display Hosts and
- * the Screen Shares.
+ * Runtime-scoped requests: the document, the Catalog, the Display Hosts,
+ * the Screen Shares and the Packs.
  * These are not Document commands; they manage which Document the runtime
  * has open, read what the runtime is built with, or reach another
  * connection. Names and payload schemas live here so the runtime, Studio and
@@ -10,7 +11,8 @@ import { z } from "zod";
  *
  * A connection whose `welcome` said `documents: "pinned"` is refused
  * `documents.new`, `documents.open`, `documents.close` and a
- * `documents.save` to another path.
+ * `documents.save` to another path, as well as `packs.add` and
+ * `packs.locate`, which name folders on the runtime's disk.
  */
 export const RuntimeRequestSchemas = {
   /**
@@ -51,7 +53,7 @@ export const RuntimeRequestSchemas = {
   "documents.close": z
     .object({ documentId: z.string().min(1), discard: z.boolean().optional() })
     .strict(),
-  /** The Visual and Filter definitions this runtime renders, its Bundled Media and its Bundled Fonts, metadata only. */
+  /** The Visual and Filter definitions this runtime renders and its Bundled Fonts, metadata only. */
   "catalog.list": z.object({}).strict(),
   /** The connected Display Hosts, as in the live state, oldest connection first. */
   "displays.list": z.object({}).strict(),
@@ -74,11 +76,61 @@ export const RuntimeRequestSchemas = {
     .object({ host: z.string().min(1), display: z.string().min(1) })
     .strict(),
   /**
-   * Stop the share of a Screen Share of the open Installation, by Media id,
+   * Stop the share of a Screen Share of the open Installation, by its id,
    * whoever shares into it. Its Sharer hears that it was stopped. Fails when
    * nobody shares into it.
    */
   "shares.stop": z.object({ mediaId: z.string().min(1) }).strict(),
+  /**
+   * Make a folder on the runtime's machine a Pack: scan it, write its
+   * manifest, record it in the Registry and attach it to the open
+   * Installation. Resolves with `{ packId, name }`. Loopback only.
+   */
+  "packs.add": z.object({ folder: z.string().min(1) }).strict(),
+  /** The Packs the runtime's machine knows: `KnownPack[]`, by name. */
+  "packs.known": z.object({}).strict(),
+  /**
+   * Say where a Pack the Installation attaches is on this machine: the
+   * folder's manifest must carry `packId`. Writes the Registry and loads the
+   * Pack. Loopback only.
+   */
+  "packs.locate": z
+    .object({ packId: z.string().min(1), folder: z.string().min(1) })
+    .strict(),
+  /** Walk a loaded Pack's folder again: new files get entries, renamed ones re-attach, gone ones read missing. */
+  "packs.rescan": z.object({ packId: z.string().min(1) }).strict(),
+  /** Rename a Pack in its manifest and, when attached, in the Installation. Refused on a read-only Pack. */
+  "packs.rename": z
+    .object({
+      packId: z.string().min(1),
+      name: z.string().trim().min(1).max(120),
+    })
+    .strict(),
+  /**
+   * Change an entry's metadata in its Pack's manifest: name, tags, Beats
+   * (null removes them and the first beat), first beat, the time of the
+   * thumbnail's frame (re-baked), and the size and duration a browser
+   * measured. Refused on a read-only Pack.
+   */
+  "media.update": z
+    .object({
+      packId: z.string().min(1),
+      entryId: z.string().regex(SLUG_PATTERN),
+      name: z.string().trim().min(1).max(120).optional(),
+      tags: z.array(z.string().trim().min(1)).optional(),
+      beats: z
+        .number()
+        .positive()
+        .max(settings.media.maxBeats)
+        .nullable()
+        .optional(),
+      firstBeat: z.number().nonnegative().optional(),
+      thumbnailAt: z.number().nonnegative().optional(),
+      width: z.number().int().positive().optional(),
+      height: z.number().int().positive().optional(),
+      duration: z.number().positive().optional(),
+    })
+    .strict(),
 } as const;
 
 export type RuntimeRequestName = keyof typeof RuntimeRequestSchemas;

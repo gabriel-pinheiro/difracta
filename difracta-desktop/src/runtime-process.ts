@@ -70,7 +70,6 @@ export class RuntimeProcess {
   readonly origin: string;
   readonly logFile: string;
   readonly #locations: RuntimeLocations;
-  readonly #mediaAnywhere: boolean;
   #child: UtilityProcess | undefined;
   #exit: Promise<void> = Promise.resolve();
   #exitCode: number | undefined;
@@ -81,13 +80,10 @@ export class RuntimeProcess {
   constructor(options: {
     readonly port: number;
     readonly locations: RuntimeLocations;
-    /** `--media-anywhere`: the runtime serves Media outside the Installation's folder. */
-    readonly mediaAnywhere: boolean;
   }) {
     this.port = options.port;
     this.origin = localOrigin(options.port);
     this.#locations = options.locations;
-    this.#mediaAnywhere = options.mediaAnywhere;
     this.logFile = path.join(app.getPath("logs"), "runtime.log");
   }
 
@@ -138,11 +134,7 @@ export class RuntimeProcess {
     const log = await this.#openLog(options.keepLog === true);
     const child = utilityProcess.fork(
       this.#locations.script,
-      runtimeArguments({
-        port: this.port,
-        file,
-        mediaAnywhere: this.#mediaAnywhere,
-      }),
+      runtimeArguments({ port: this.port, file }),
       {
         serviceName: "Difracta Runtime",
         // Piped, so what the runtime prints lands in the log file.

@@ -33,7 +33,9 @@ beforeEach(async () => {
     autosaveIntervalMs: 60_000,
     oscPort: undefined,
     discovery: false,
-    mediaAnywhere: false,
+    packs: [],
+    packsFile: undefined,
+    packsCacheDir: undefined,
   });
   const address = await runtime.listen();
   url = `${address.replace("http", "ws")}/live`;

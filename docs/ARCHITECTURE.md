@@ -40,7 +40,7 @@ consistent.
 | Package             | Role                                                                                                                                                                                              | Depends on                       |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
 | `difracta-core`     | Document model (normalized tables), patches, Addresses, Catalog and Parameter types, command registry, pure command reducers, undo history, settings, the payloads a Sharer and a Viewer exchange | zod                              |
-| `difracta-visuals`  | The built-in Catalog: Visual and Filter definitions, their implementations and thumbnails, and the fetched Bundled Media                                                                          | core, render                     |
+| `difracta-visuals`  | The built-in Catalog: Visual and Filter definitions, their implementations and thumbnails, and the fetched Bundled Pack                                                                           | core, render                     |
 | `difracta-protocol` | Wire schemas for the live socket and runtime requests                                                                                                                                             | core                             |
 | `difracta-client`   | Connection, snapshot plus delta replica (`DocumentView`), acknowledged commands, coalesced inputs; Zeroconf browsing under `/discovery` (Node only)                                               | core, protocol, bonjour-service  |
 | `difracta-runtime`  | Node host: document sessions, files and autosave, live server, static serving                                                                                                                     | core, protocol, visuals, fastify |
@@ -67,8 +67,8 @@ Document
 ├── regions { [id]: Region }          surfaceId, bounds (topLeft, bottomRight)
 ├── masks { [id]: Mask }              surfaceId, mode, points, feather
 ├── paths { [id]: Path }              surfaceId, points, closed
-├── media { [id]: Media }             kind, parentId, order; file: path (relative to the folder);
-│                                     bundled: bundled (entry id); share: nothing more
+├── packs { [packId]: PackAttachment } name (a copy), relativePath? (a hint); never the Bundled Pack
+├── shares { [id]: Share }            name, order: a Screen Share
 ├── scenes { [id]: Scene }            name, order
 ├── layers { [id]: Layer }            kind, sceneId, parentId, enabled, order, + per kind
 │                                     visual: visual, parameters, target, paths, opacity, blendMode
@@ -229,116 +229,124 @@ lose steps, whereas deltas apply in full in any order.
 
 ### Media
 
-A Media item is one image or video the Installation shows, a Screen Share, or a
-Media Group arranging items in the navigator. The `media` table has the
-Controllers' and Macros' tree shape (`kind` of `file`, `bundled`, `share` or
-`group`, `parentId`, `order`; `document/tree.ts`), and a name is unique among
-its siblings. A bundled item names a Bundled Media entry in `bundled` (see
-Bundled Media below). A Screen Share holds nothing beyond name and place (see
-Screen Shares below). A file has a `path` relative to the Installation file's
-folder, POSIX separators, `..` allowed. Its type, image or video, is read from
-the extension (`settings.media` lists them; `document/media.ts` derives it) and
-never stored; a path with any other extension is refused. A Screen Share's type
-is always `live` (`MEDIA_TYPES` is image, video, live; `FILE_MEDIA_TYPES`, what
-a file or a Bundled Media entry can be, image and video). An item written before
-Groups existed, with no `kind` or `parentId`, reads as a file at the root.
+Media is an image or video entry of a Pack, or a Screen Share. Neither is an
+item of the Installation: a Pack is a folder on the runtime's machine, and the
+Installation records which Packs it attaches and names entries through Media
+references.
 
-`media.create` adds a file (kind `file`, the default, with a path), a bundled
-item (kind `bundled`, with an entry id the Catalog has), a Screen Share (kind
-`share`, neither) or a Group (kind `group`, neither) last in its parent unless
-`after` places it, naming a file after its file, a bundled item after its entry
-and a Screen Share "Screen Share" unless told otherwise. `media.move` places an
-item in another Group or at the root, carrying a Group's contents and refusing
-cycles; `entity.move` reorders among siblings; `media.ungroup` dissolves a
-Group; `media.rename`; `media.path` for a file only, refusing a bundled item, a
-Screen Share and a Group by name; `media.bundled` for a bundled item only,
-swapping its entry and, while the item is still called after its previous entry,
-its name, as `layer.visual` does for a Layer; `media.beats` for a video file
-only (a Screen Share is refused by name), writing its Beats and First Beat or,
-with `beats` null, removing both, a First Beat of zero stored as none;
-`media.remove`, which takes a Group's contents with it. All are authoring. A
-file repointed by `media.path` keeps its Beats while it stays a video. The CLI
-has shortcuts for the everyday ones: `difracta media add <path> [--group G]`,
-`difracta media group <name> [--group G]`,
-`difracta media screen-share [name] [--group G]`,
-`difracta media beats <media> <beats|none> [--first-beat <seconds>]` and
-`difracta media list`, the tree indented by Group with kind, type, status, path
-and Beats; a Screen Share shows kind `share`, type `live` and its share's
-status. `mediaBeatsIn` answers an item's Beats whatever its kind, a bundled
-item's from its entry. The path helpers in `document/media.ts` are pure and run
-in the browser too: one relativizes an absolute path against the document's
-folder, which Desktop's picker and the CLI use, and one says whether a resolved
-path stays under that folder.
+A **Pack** (`core/src/packs/`) is any folder of images and videos with a
+manifest, `<pack>/.difracta/pack.json` (`PackManifestSchema`, strict, `version`
+1): the Pack's `id`, `name`, optional `readOnly: true`, and one entry per media
+file found in it. An entry has an `id`, a slug of its path inside the Pack
+without the extension, segments joined with dashes (`tunnels/04.mp4` →
+`tunnels-04`, `entryIdFor`), made unique with a numeric suffix, assigned at
+first scan and never changed, so a Layer keeps working across a rename; its
+`file`, relative and POSIX with no segment starting with a dot; its `type`
+(`image` or `video`, from the extension, `settings.media` lists them); a `name`,
+the file name at first scan, editable; optional `description` and `notes`;
+`tags`, free-form, compared ignoring case, of which Difracta reads `loop`, `hit`
+and `recommended` (`KNOWN_TAGS`); a `fingerprint`, the first sixteen hex
+characters of the SHA-256 of the file's first `settings.packs.fingerprintBytes`
+bytes, a dash and the size in base 36 (`formatFingerprint`), which keys its
+thumbnail and proxy and re-attaches the entry to a file renamed inside the Pack;
+and, once measured, `width`, `height`, `duration`, `thumbnailAt`, `beats` and
+`firstBeat`. A Pack's id is the slug of its folder name plus four random base-36
+characters (`packIdFor`, `neon-k7f3`), so two people each making a "neon" Pack
+never collide; the Bundled Pack's is `bundled` (`BUNDLED_PACK_ID`). A file that
+is gone keeps its entry: missing is live status, never written.
 
-A Visual refers to an item through a Parameter of kind `media`
+The Installation's `packs` table holds one row per attached Pack, keyed by Pack
+id: `name`, a copy so a Pack this machine lacks can still be named, and an
+optional `relativePath`, written when the Pack sat inside or beside the
+Installation's folder at attach time (relative, POSIX, `..` allowed, normalized
+by `normalizeMediaPath`), so a show folder carrying its Packs opens elsewhere
+with no Registry. The Bundled Pack is implicit and never in the table. The
+`shares` table holds the Screen Shares: `name` and `order`, nothing more (see
+Screen Shares below). `packs.attach { packId, name, relativePath? }`,
+`packs.detach { packId }` and `packs.rename { packId, name }` are authoring
+commands and refuse `bundled`; detaching never rewrites Layers.
+`share.create { name?, after? }` (named "Screen Share" unless told otherwise,
+numbered while another holds the name), `share.rename` and `share.remove` manage
+the Screen Shares; removing one clears every Parameter holding it and drops the
+Macro actions that would set it, as removing a Surface clears Targets;
+`entity.move` reorders them.
+
+A Visual refers to Media through a Parameter of kind `media`
 (`{ kind: "media", accepts: "image" | "video" | "live", default: "" }`), whose
-value is a file's, bundled item's or Screen Share's id or `""` for none. Its
-Address is of type `media`: the options are none plus the items of the accepted
-type in navigator order (`mediaItemTypeIn` reads a bundled item's type from the
-Catalog), Groups and bundled items whose entry the Catalog lacks never among
-them, `address.set` and `address.edit` refuse anything else, a Macro `set`
-action swaps artwork, and a Link is refused. `layer.visual` checks the value the
-same way; `layer.reset` puts `""` back. `media.remove` clears every Parameter
-holding the item, or any item inside a removed Group, to `""`, as removing a
-Surface clears Targets, and drops the Macro actions that would set it;
-`media.path` does the same when the new extension changes the type, since the
-Parameters that held it accept only the type it was, and so does `media.bundled`
-when the new entry is of the other type. The file on disk is never touched.
+value is a **Media reference**: `<packId>/<entryId>` with exactly one slash and
+a slug on each side (`parseMediaReference`, `core/src/packs/reference.ts`) for
+an image or video, a Screen Share's id for live, or `""` for none. Core
+validates the shape only (`mediaValueProblem`, `document/media.ts`: a live value
+must name a Screen Share the Installation has); whether the entry exists, is of
+the accepted type and has its file is live status the runtime computes. Nothing
+in core enumerates entries, so the resolved Address is of type `media` with
+`accepts` and no `options`; `address.set`, `address.edit` and a Macro `set`
+action write the same string, and a Link is refused. `layer.visual` checks a
+value the same way; `layer.reset` puts `""` back. `media.replace { from, to }`
+sets every Layer Parameter and Macro action value equal to `from` to `to`, both
+Pack entries or both Screen Shares: how "swap this clip everywhere" is done.
+`mediaReferencesInUse(document, catalog)` (`document/media-uses.ts`) is the one
+scan of where references are held, the `media` Parameter values of every Layer
+whose definition the Catalog knows and every Macro set action whose Address is
+of type `media`; the render loader preloads what it names, `media.replace`
+rewrites it and Studio counts it before a Pack is detached. The path helpers in
+`document/media.ts` are pure and run in the browser too: one relativizes an
+absolute path against the document's folder, for the `relativePath` hint, and
+one says whether a resolved path stays under that folder.
 
-**Why a table and a reference rather than a path on the Layer:** the same file
-is shown by several Layers and swapped by Macros; one entity gives it a name, a
-status and one place to change the path. **Why relative paths:** a show folder
-is copied to the stage machine or mounted into a container, and the file must
-still be found beside the Installation. **Why the type is derived:** the
-extension already says it; storing it would be one more thing to keep in step.
-**Why `kind` is file, bundled, share or group and image, video or live is
-`type`:** every tree in the document keys on `kind === "group"`, so the Media
-tree reuses the same move, ungroup and rename helpers, and a Parameter asks for
-what it can show (a picture, a clip, a live picture) whatever the item is made
-of.
+The CLI has a group for each (`difracta-cli/src/commands/packs.ts`, `media.ts`).
+`difracta packs list` prints the Bundled Pack and the attached ones with id,
+state (`ok`, `preparing n/m`, `missing`, `loading`), entry count, read-only and
+folder or hint; `packs add <folder>` sends `packs.add` (a relative folder is
+resolved against the shell's directory when the runtime is on this machine);
+`packs attach <pack>` attaches one of `packs known`, the Registry's listing,
+with the document command; `packs detach`, `packs locate <pack> <folder>` and
+`packs rescan` follow. `difracta media list [pack]` prints every entry with its
+reference, path inside the Pack, type, size, length, Beats with the tempo they
+make, tags and `missing`; `media tag <entry> <tag…> [--remove]`,
+`media beats <entry> <beats|none> [--first-beat <s>]`,
+`media thumbnail <entry> <seconds>` and `media rename <entry> <name>` go through
+`media.update`; `media replace <from> <to>` runs `media.replace`;
+`media screen-share [name]` adds a Screen Share. A reference typed at the shell
+is `<pack>/<entry>` by ids, or a Pack's name in place of its id and the entry's
+path inside the Pack, with or without its extension, in place of the entry's id
+(`media-references.ts`), resolved against the `packs` live slice the CLI's
+replica holds and the Installation's `packs` table; an ambiguous name or path is
+refused naming the candidates, and a well-formed reference into a Pack the
+runtime has not loaded is kept as typed, since the Installation may hold it on
+purpose. `edit` and `set` resolve a media Address's value the same way, a Screen
+Share by name; `run` payloads pass media values through unchanged. Listings
+print both the reference and the path.
 
-### Bundled Media
+**Why a reference and not an item:** an item made picking a two-step, create
+then bind; the reference is what a person picks in the Library and what a Macro
+sets. **Why ids, not paths, inside a Pack:** a rename would break every Layer;
+the fingerprint re-attaches the entry instead. **Why the Pack id carries a
+random suffix:** plain slugs collide across machines. **Why the Installation
+holds no absolute path:** a show would relocate on every machine change; the
+Registry and the relative hint cover both cases. **Why shape-only validation in
+core:** core runs in every client and never reads a disk; existence is the
+runtime's live word.
 
-Difracta ships a set of white-on-black clips, the Bundled Media, from its own
-repository, `difracta-media`: `clips/`, one `thumbnails/<id>.png` per clip and a
-`manifest.json` describing each (id, name, description, notes, `file`, `type`,
-optional `recommended`, `loop` and `hit`, `thumbnailAt`, width, height,
-duration). `settings.media.bundle` pins one release by version and SHA-256.
-`scripts/fetch-media.mjs` (`npm run media:fetch`; also the root `postinstall`
-and the first step of `dev`, `build`, `desktop` and `package:desktop`) downloads
-that release's tarball, refuses it unless the hash matches, and unpacks
-`manifest.json`, `clips/` and `thumbnails/` into `difracta-visuals/bundled/`
-(gitignored) with a `.version` stamp, so a second run is free unless `--force`.
-`DIFRACTA_MEDIA_DIR=<path>` copies the three from a local checkout of the media
-repository instead, stamped `dir:<path>`. While the pin has no SHA-256 and no
-directory is given, the script writes an empty manifest and warns; with one
-pinned, a failed fetch fails the install or the build.
+### Bundled Pack
 
-`difracta-visuals` imports the manifest as JSON (`src/bundled/manifest.ts`),
-validates it with the schema in `core/catalog/bundle-manifest.ts` when the
-module loads, so a bad manifest fails the build and the tests rather than a
-show, and adds its entries to `builtInCatalog` as `media` definitions
-(`{ kind: "media", id, name, description, notes, recommended?, type, loop?, hit?, file, width, height, duration? }`:
-no backend, Parameters or Cues). The Catalog's `media()` lists them and
-`definition("media", id)` finds one; ids are unique across Visuals, Filters and
-Bundled Media, since all name a thumbnail in the same URL space. Bundlers inline
-the JSON into Studio, the Output page and Desktop's runtime; the clips and
-thumbnails stay files under `bundledRoot`.
-
-A Media item of kind `bundled` names an entry by id. `media.create` refuses an
-id the Catalog lacks, but a file holding one stays valid: the item is of no
-type, never offered or accepted as a Parameter value, and its status is
-`unavailable`. The runtime serves a bundled item at the same `GET /media/<id>`
-as a file, from `<bundled>/<file>`, so the Output loads it exactly as a file and
-needs the Installation saved for neither; `GET /bundled/<entry id>` serves an
-entry with no item, for previews. Both use the same Range, ETag and CORS
-handling. The bundle's thumbnails are a second root behind the Catalog's
-thumbnail path, after the Visuals' own. The runtime finds the bundle inside
-`@difracta/visuals`, or where `DIFRACTA_BUNDLED_DIR` says: Desktop's build
-copies it to `dist/bundled`, and the packaged runtime reads it from the asar
-archive like the thumbnails. The CLI has `difracta media bundled` (the entries
-and their flags), `difracta media add --bundled <id|name>`, and lists the
-entries under "Bundled Media" in `difracta catalog`.
+Difracta ships a set of white-on-black clips as the Bundled Pack, from its own
+repository, `difracta-media`. `settings.media.bundle` pins one release by
+version and SHA-256. `scripts/fetch-media.mjs` (`npm run media:fetch`; also the
+root `postinstall` and the first step of `dev`, `build`, `desktop` and
+`package:desktop`) downloads that release's tarball, refuses it unless the hash
+matches, and unpacks it into `difracta-visuals/bundled/` (gitignored) with a
+`.version` stamp, so a second run is free unless `--force`.
+`DIFRACTA_MEDIA_DIR=<path>` copies from a local checkout of the media repository
+instead, stamped `dir:<path>`. While the pin has no SHA-256 and no directory is
+given, the script writes an empty manifest and warns; with one pinned, a failed
+fetch fails the install or the build. `difracta-visuals` exports where the
+folder is (`bundledRoot`, `src/bundled/manifest.ts`); the runtime finds it
+there, or where `DIFRACTA_BUNDLED_DIR` says: Desktop's build copies it to
+`dist/bundled`, and the packaged runtime reads it from the asar archive like the
+thumbnails. The Catalog holds Visuals, Filters and Fonts only; the Bundled Pack
+is a Pack like any other, read-only, attached to every Installation and never
+written to.
 
 **Why a separate repository, pinned and fetched, and then shipped inside every
 package:** the clips are tens of megabytes of binary that change on their own
@@ -507,41 +515,42 @@ Macro-wide value would be a second concept for the same effect.
 ### Catalog and Parameters
 
 The Catalog is the set of Visual and Filter definitions a runtime knows
-(`core/catalog/`), its Bundled Media (see Bundled Media above) and its Bundled
-Fonts (see Bundled Fonts below). A definition is code with a stable id, a name,
-a description, a backend (`canvas` or `shader`), an optional `recommended` flag,
-a Parameter schema, and for Visuals the Paths they follow and the Cues they
-answer to. Core owns the types and the validation; `difracta-visuals` owns the
-entries and their thumbnails, and the runtime passes that Catalog to the command
-registry. A definition's file also carries its implementation, written against
-the SDK in `difracta-render` (see Visuals and Filters below); the runtime and
-Studio only read the metadata. A definition may carry `notes`: paragraphs for
-whoever composes with it, human or agent, saying what the code cannot (how it
-reads on a Surface, which Parameters interact, what it costs, what to stack it
-with). The runtime answers `catalog.list` with its definitions minus their
-functions and shader source, which is how the CLI's `catalog` prints the notes
-and a reference generated from the schema, and how its `addresses` resolves
-Parameters without shipping the Visuals package.
+(`core/catalog/`) and its Bundled Fonts (see Bundled Fonts below). A definition
+is code with a stable id, a name, a description, a backend (`canvas` or
+`shader`), an optional `recommended` flag, a Parameter schema, and for Visuals
+the Paths they follow and the Cues they answer to. Core owns the types and the
+validation; `difracta-visuals` owns the entries and their thumbnails, and the
+runtime passes that Catalog to the command registry. A definition's file also
+carries its implementation, written against the SDK in `difracta-render` (see
+Visuals and Filters below); the runtime and Studio only read the metadata. A
+definition may carry `notes`: paragraphs for whoever composes with it, human or
+agent, saying what the code cannot (how it reads on a Surface, which Parameters
+interact, what it costs, what to stack it with). The runtime answers
+`catalog.list` with its definitions minus their functions and shader source,
+which is how the CLI's `catalog` prints the notes and a reference generated from
+the schema, and how its `addresses` resolves Parameters without shipping the
+Visuals package.
 
 Thumbnails are rendered, not drawn: `npm run thumbnails` in `difracta-visuals`
 runs each definition through the compositor in a headless Chromium (Playwright),
 a Visual on a full-frame Surface for a few seconds with its first Cue fired a
 few times near the end, a Filter over a gray checkerboard with a ring, and
-writes one PNG per definition. Image and Video show Bundled Media, the picture
-being a clip's thumbnail. Where the defaults would make a poor picture, the
-definition has a setup in `scripts/thumbnail-setups.ts`: Parameter values over
-the defaults, how long it runs, and whether the Cue fires (Counter rests, since
-a Cue that close to the picture catches its digits rolling). **Why rendered:** a
-thumbnail is then what the definition does, and adding a definition costs one
-command rather than an illustration; Filters over the same picture compare with
-each other, and the ring shows displacements a checkerboard alone would hide.
-Every command's `apply` receives it, so `layer.visual` and `layer.filter` can
-refuse an unknown id and check values.
+writes one PNG per definition. Image and Video show a clip of the Bundled Pack
+by Media reference, the picture being the clip's thumbnail. Where the defaults
+would make a poor picture, the definition has a setup in
+`scripts/thumbnail-setups.ts`: Parameter values over the defaults, how long it
+runs, and whether the Cue fires (Counter rests, since a Cue that close to the
+picture catches its digits rolling). **Why rendered:** a thumbnail is then what
+the definition does, and adding a definition costs one command rather than an
+illustration; Filters over the same picture compare with each other, and the
+ring shows displacements a checkerboard alone would hide. Every command's
+`apply` receives it, so `layer.visual` and `layer.filter` can refuse an unknown
+id and check values.
 
 A Parameter is declared once, in the definition, as one of six kinds: number
 (with min, max, step and unit), color (four components from 0 to 1), choice
 (named options, each optionally naming the Bundled Font a control draws it in),
-boolean, media (a Media file's id, of the accepted type, or `""`; see Media) or
+boolean, media (a Media reference of the accepted type, or `""`; see Media) or
 text (a string of at most `settings.text.maxLength` characters, on one line
 unless the declaration says `multiline`; `textProblem` is the one rule, for a
 Parameter, an Address and a Text Controller alike). Values live on the Layer in
@@ -645,13 +654,13 @@ it the runtime's draws.
 An Address names a controllable property or trigger, such as
 `installation/blackout` or `layer/<id>/opacity`. `resolveAddress` maps it to a
 document path, a value type (boolean, number, color, choice, media or trigger),
-a default, and for numbers a range and for choices and media the options;
-`listAddresses` enumerates every reachable one. The entries today are Blackout,
-a Scene's `play`, a Macro's `run`, a Surface's `render-scale`, a Controller's
-`value`, and, per Layer, `enabled`, `opacity` and `blend` (Visual Layers), `mix`
-(Filter Layers), `param/<name>` for every Parameter of the Layer's definition
-and `cue/<key>` for every Cue it declares, typed from the Catalog. Controllers,
-Macros, OSC and the CLI all read and write Addresses.
+a default, for numbers a range, for choices the options and for media what it
+accepts; `listAddresses` enumerates every reachable one. The entries today are
+Blackout, a Scene's `play`, a Macro's `run`, a Surface's `render-scale`, a
+Controller's `value`, and, per Layer, `enabled`, `opacity` and `blend` (Visual
+Layers), `mix` (Filter Layers), `param/<name>` for every Parameter of the
+Layer's definition and `cue/<key>` for every Cue it declares, typed from the
+Catalog. Controllers, Macros, OSC and the CLI all read and write Addresses.
 
 Two commands write one: `address.edit` is the authoring write the inspector
 sends, undoable, labelled by the property ("Change Opacity", "Change Speed") and
@@ -699,11 +708,17 @@ they could not notice, so the runtime sends each of them a new `snapshot`.
 - `subscribe` with `live: true` adds the **live state** to the snapshot and
   sends `live` messages afterwards: patches relative to the live root, with no
   revision. Live state is what is happening right now around the document, today
-  the OSC door, the Output Sessions, the connected Display Hosts, the status of
-  each Media item's file and who shares into each Screen Share; it is never
-  saved, never undone, and never changes the document revision. Studio reads it
-  under the `live` path root (`["live", "outputs", id, "sessions"]`) with the
-  same subscriptions as the document. Output pages never ask for it.
+  the OSC door, the Output Sessions, the connected Display Hosts, the Packs the
+  runtime has loaded and who shares into each Screen Share; it is never saved,
+  never undone, and never changes the document revision. Studio reads it under
+  the `live` path root (`["live", "outputs", id, "sessions"]`) with the same
+  subscriptions as the document. `live` is `true` for all of it or a list of its
+  sections (`LIVE_SECTIONS`: `osc`, `outputs`, `displayHosts`, `packs`,
+  `shares`); the snapshot carries the sections asked for and only their patches
+  follow (`liveStateFor`, `liveSectionWanted`). An Output page asks for
+  `["packs"]` alone: the Packs say which entries its Layers can load, and an
+  edit to an entry's beats reaches a playing clip through them; it never pays
+  for telemetry or Display Hosts.
 - `attach` declares the connection an Output page showing one Output; the
   runtime keeps an **Output Session** per attached connection. `telemetry`
   reports frame interval, render work, resolution, pixel ratio and workload
@@ -756,31 +771,86 @@ sends, `client-sessions.ts` who among them hears what, `document-commands.ts`
 runs commands, and `runtime-requests.ts` validates a `request`, applies the
 pinned refusal and calls the request's handler. Handlers come by feature
 (`document-requests.ts`, `catalog-requests.ts`, `display-requests.ts`,
-`screen-shares.ts`) and the table's type makes a request without a handler a
-compile error.
+`pack-requests.ts`, `screen-shares.ts`), each given the payload and the
+connection it came from, and the table's type makes a request without a handler
+a compile error.
 
-### Media status
+### Packs in the runtime
 
-`["live", "media", <id>]` holds `{ status }` for every Media file and bundled
-item of the open document (a Media Group has no file and no entry), and a Screen
-Share's state for each Screen Share (see Screen Shares below), so a reader shows
-one status for every item whatever its kind. A file's or bundled item's is `ok`,
-`missing` (no file at the resolved path), `outside` (the path leaves the
-Installation file's folder and the runtime does not allow that), `unsaved` (the
-Installation has no path yet, so no file item resolves) or, for a bundled item
-only, `unavailable` (the runtime's Catalog lacks its entry). The runtime
-(`live/media-status.ts`) stats every file when a document opens or is replaced,
-when it is saved to a new path and after any command that touches `media`, and
-replicates only the entries that changed; there is no file watcher, so a file
-that appears later is noticed at the next of those moments.
-`difracta media list` prints it beside each item. `media-status.ts` never
-touches a Screen Share's entry, even under an id a file had before, and the
-snapshot merges the two.
+`["live", "shares", <id>]` holds each Screen Share's state (see Screen Shares
+below). `["live", "packs", <packId>]` is where a loaded Pack goes: its name,
+whether it is read-only, `loading`, `ok` or `missing`, its folder, a warning
+when a scan hit a limit, whether ffmpeg is there, how many entries are prepared,
+and its entries, each the manifest entry plus whether its file is there and
+which of its thumbnail and proxy exist (`protocol/src/packs.ts`). The runtime
+loads the Bundled Pack at start, the Packs the open Installation attaches, and
+the folders `--pack <dir>` (repeatable) or `DIFRACTA_PACKS` (a path list) name
+for one run (`difracta-runtime/src/packs/`, `pack-store.ts`).
 
-**Why stat on those moments and not watch:** the moments are when the answer can
-change from the document's side, which is what an operator asks about; a watcher
-would cost a handle per file across the show folder for a status that Studio
-shows and nothing acts on.
+The **Registry** (`registry.ts`) is the machine's record of where each Pack it
+knows is: `packs.json` in the user's config folder (`$XDG_CONFIG_HOME` or
+`~/.config`, `~/Library/Application Support`, `%APPDATA%`; `DIFRACTA_PACKS_FILE`
+overrides, `platform-dirs.ts`), a map from Pack id to folder and name, so
+`packs.known` lists without scanning. `packs.add` and `packs.locate` write it;
+`--pack` folders join it in memory only. An attached Pack is resolved in order:
+the Registry, then the Installation's `relativePath` hint against the file's
+folder, accepted only when the manifest there carries the same id, else
+`missing`, with its name from the Installation's copy. Detaching unloads a Pack
+unless `--pack` named it; a `--pack` Pack stays loaded whatever is attached.
+
+Loading walks the folder (`walk.ts`: dot folders and dot files skipped,
+`settings.packs.maxDepth` levels, `settings.packs.maxMedia` files, path order, a
+warning past a limit), fingerprints each file (`fingerprint.ts`) and brings the
+manifest up to date (`scan.ts`, pure: new files get entries, a file whose
+fingerprint matches a missing entry's takes that entry's `file`, nothing is
+removed and no metadata is touched), writing it only when it changed. The
+manifest, thumbnails and proxies live in the Pack's `.difracta/`; when that
+cannot be written (a read-only mount, a stick without permission) they live in
+`<cache>/difracta/packs/<packId>/` instead (`$XDG_CACHE_HOME` or `~/.cache`,
+`~/Library/Caches`, `%LOCALAPPDATA%`; `DIFRACTA_CACHE_DIR` overrides), and the
+Pack is read-only only when its manifest says so. A read-only Pack, the Bundled
+Pack among them, is never written and never baked.
+
+The **baker** (`baker.ts`, plans in `bake-jobs.ts`) queues every entry whose
+file is there and that lacks a measurement, its thumbnail or, for a video, its
+proxy, `settings.packs.bake.concurrency` at a time under `nice`
+(`settings.packs.bake.nice`; plain on Windows): ffprobe for width, height and
+duration, written into the manifest; a WebP thumbnail at `thumbnailAt` or
+`settings.packs.thumbnail.defaultAt` of the duration, fitted inside
+`settings.packs.thumbnail`; an H.264 proxy at `settings.packs.proxy` height and
+bitrate, no audio. The binaries come from `PATH` or `DIFRACTA_FFMPEG` and
+`DIFRACTA_FFPROBE` (`tools.ts`); without them Packs load with `ffmpeg: false`
+and nothing bakes. Each finished entry patches its own flags and the Pack's
+`prepared` count; a failed one is logged and left for the next run. Every change
+to a Pack's data goes through one chain per Pack (`PackStore.change`), so a bake
+landing while a tag is edited loses nothing. Deltas are per property
+(`pack-live.ts`, `diffPackLive`): a Pack first read is set whole, after that a
+tag edit is one patch on the entry's `tags`, a rename one on `name`.
+
+The requests (`live/pack-requests.ts` over `packs/pack-operations.ts`):
+`packs.add { folder }` scans, writes the manifest, records the Registry, loads
+the Pack and applies `packs.attach` with a `relativePath` hint when the folder
+sits inside or beside the Installation's folder (at most one `..`);
+`packs.known` lists the Registry with whether each Pack is loaded;
+`packs.locate { packId, folder }` requires the folder's manifest to carry that
+id, records it and loads the Pack; `packs.rescan`; `packs.rename` writes the
+manifest and the Registry, then applies the document command so the
+Installation's copy follows; `media.update` edits an entry's name, tags
+(trimmed, one per spelling ignoring case, first-use case kept), Beats, first
+beat, thumbnail time (re-baked) or measured size and duration. Every write on a
+read-only Pack is refused with the reason. `packs.add` and `packs.locate` name
+folders on the runtime's disk, so a pinned connection is refused them like
+`documents.open` (`pinnedRefusal`); the other Pack requests are open to every
+client. `packs.detach` is a plain document command; the store follows the
+Installation's `packs` table.
+
+**Why a Registry per machine and a hint in the file:** the Installation names a
+Pack by id so a show travels; where that Pack is differs on every machine, and a
+show folder carrying its own Packs should open without setup. **Why bake with
+the system's ffmpeg:** bundling one adds tens of megabytes of GPL builds to
+every package; a runtime without it still shows every clip, only without
+previews. **Why one change at a time per Pack:** probing a hundred clips while
+someone tags one must not write a manifest that forgets either edit.
 
 ### Display Hosts
 
@@ -847,7 +917,7 @@ Viewer ── share-signal {mediaId, payload} ──▶ Runtime ── share-sig
 Any client ── request shares.stop {mediaId} ──▶ Runtime ── share-ended {reason: stopped} ──▶ Sharer
 ```
 
-A Screen Share is a Media item of kind `share` (see Media above): a slot. A
+A Screen Share is an entity of the `shares` table (see Media above): a slot. A
 Sharer, a connection of kind `desktop`, shares a screen or window into it; any
 connection views it as a Viewer. Pictures travel over WebRTC, one peer
 connection per Viewer, straight between the two; the runtime keeps who shares
@@ -892,8 +962,8 @@ the runtime's side is `live/screen-shares.ts`, which decides what is taken, and
   its Sharer hears `share-ended { reason: "stopped" }`, the Viewers `idle`. It
   fails when nobody shares into the slot.
 
-The live state keeps a slot's state where every Media item's status is,
-`["media", id]`: `{ status: "idle" }`, or
+The live state keeps a slot's state under `["shares", id]`:
+`{ status: "idle" }`, or
 `{ status: "live" | "interrupted", sharer, source, since, viewers }`, where
 `since` is when the share started and `viewers` counts the slot's Viewers,
 waiting ones included. A share that starts or ends sets the entry whole;
@@ -932,7 +1002,7 @@ the Sharer's payloads. After a reconnect the client declares every share again,
 as a resume, and asks again for every slot it views. Neither holds any WebRTC
 object. The CLI has `difracta share list` (each slot with status, Sharer, screen
 or window, since when and Viewers, from the live state) and
-`difracta share stop <media>`; `difracta media screen-share [name]` adds a slot.
+`difracta share stop <share>`; `difracta media screen-share [name]` adds a slot.
 Studio adds a slot from the Media section, shows each slot's status in its row
 and inspector and every active share in its status strip, stops a share with
 `shares.stop`, and views a slot as one Viewer per window while a picture of it
@@ -943,8 +1013,8 @@ client can reach, so a Sharer and a Viewer on different machines need no other
 server, and a runtime that only passes opaque payloads between named ends has
 nothing to get wrong about codecs or networks, while the picture itself never
 costs it anything. **Why keyed by slot:** Layers, Macros and the live state
-already name the Media item; keying the protocol, the state and the Sharer's own
-bookkeeping by the same id lets one Desktop share into several slots and one
+already name the Screen Share; keying the protocol, the state and the Sharer's
+own bookkeeping by the same id lets one Desktop share into several slots and one
 Output view several without any other identity. **Why a second Sharer replaces
 the first rather than being refused:** at a show the person at the laptop that
 means to share now is right, and whoever shared before may have walked away; the
@@ -1122,27 +1192,19 @@ instead of answering an error, where HTTP answers 413. PUT, unlike a form POST,
 is preflighted by browsers when it comes from another origin, and the runtime
 answers no preflight, so a web page elsewhere cannot replace the show.
 
-A Media item's file travels the same way, by id: `GET /media/<id>` resolves the
-item's path against the open document's folder and streams the file
-(`documents/media-routes.ts`) with the content type from its extension,
-`Cache-Control: no-cache` and an ETag from size and modification time, so an
-Output page revalidates cheaply and sees a replaced file, and with Range
-requests honoured (206, `Content-Range`, 416), which video seeking needs. 404
-for an unknown id, a Media Group, a bundled item whose entry the Catalog lacks,
-a missing file or a document without a path (a bundled item needs none; see
-Bundled Media); 403 when the resolved path leaves the folder, unless the runtime
-was started with `--media-anywhere` (or `DIFRACTA_MEDIA_ANYWHERE=1`; Desktop
-passes its own `--media-anywhere` on to its runtime), which turns
-`settings.media.allowOutsideShowFolder` on for that runtime alone: a machine
-setting, never in the file. In a container the show folder is mounted for the
-file already, so media beside it is reachable and `scp` puts files there.
+A Pack entry's file is addressed by its Media reference,
+`GET /packs/<packId>/<entryId>` (`settings.runtime.packsPath`,
+`packs/pack-routes.ts`): the original streams with its content type, an ETag
+from size and modification time under `Cache-Control: no-cache`, Range requests
+honoured for seeking, and any origin allowed (`send-file.ts`); `/thumb` and
+`/proxy` under it stream what the runtime baked, 404 until they exist. 404,
+naming the problem, for a Pack that is not loaded, an entry the Pack lacks and a
+missing file. The Output page and Studio's Preview build the URL from the
+reference.
 
-**Why by id and not by path:** the URL then says nothing about the runtime's
-disk, and renaming or moving the file is one `media.path` with every Output
-following. **Why the folder boundary:** the Installation names files, so a file
-anywhere on the machine would be one command away from any client; inside the
-show folder is what a show carries with it, and the flag is for the rig that
-keeps its footage elsewhere.
+**Why by reference and not by path:** the URL then says nothing about the
+runtime's disk, and a file renamed inside its Pack keeps its entry, so every
+Output follows.
 
 Save is explicit and atomic: the content is written to a sibling temporary file,
 flushed to disk, then renamed over the target, so a crash leaves either the old
@@ -1173,8 +1235,8 @@ started `--documents free` on every interface. Each **window** is a sandboxed
 Chromium renderer showing a page the runtime serves: Studio from
 `http://127.0.0.1:<port>/studio/`, and an Output page opened from Studio in a
 window of its own with background throttling off. The build copies the built
-Studio, Output page, Catalog thumbnails and Bundled Media next to the bundle,
-and main names them to the runtime through `DIFRACTA_STUDIO_DIST`,
+Studio, Output page, Catalog thumbnails and Bundled Pack next to the bundle, and
+main names them to the runtime through `DIFRACTA_STUDIO_DIST`,
 `DIFRACTA_OUTPUT_DIST`, `DIFRACTA_THUMBNAILS_DIR` and `DIFRACTA_BUNDLED_DIR`, so
 `dist/` runs without the repository or `tsx`.
 
@@ -1266,17 +1328,14 @@ Studio in Desktop gets `window.difractaDesktop` from the preload script:
 `documents/file-path-request.ts`: with the bridge, Open and Save As show native
 dialogs and then send the same `documents.open` and `documents.save` with the
 absolute path; without it, in a browser on a free runtime, the path is typed.
-`pickMediaPath()` is the same for a Media file
-(`entities/media/media-path-request.ts`): a native Open dialog filtered to the
-extensions in `settings.media` (`media-dialog.ts` builds the filter list), whose
-absolute path Studio relativizes against the Installation file's folder before
-`media.create` or `media.path`; in a browser the path is typed. A file opened
-from the OS while Desktop runs (a second launch, which the lock turns into a
-message to the first; `open-file` on macOS) is handed to Studio through
-`onOpenRequest` and goes through Studio's own open, unsaved-changes question
-included. The preload exposes the bridge only to the local runtime's origin,
-main answers only IPC whose sender frame is from that origin, and only while a
-local session exists.
+`pickMediaPath()` is a native Open dialog filtered to the extensions in
+`settings.media` (`media-dialog.ts` builds the filter list); nothing in Studio
+calls it. A file opened from the OS while Desktop runs (a second launch, which
+the lock turns into a message to the first; `open-file` on macOS) is handed to
+Studio through `onOpenRequest` and goes through Studio's own open,
+unsaved-changes question included. The preload exposes the bridge only to the
+local runtime's origin, main answers only IPC whose sender frame is from that
+origin, and only while a local session exists.
 
 Every Studio window, local or remote, also gets `window.difractaMenu`
 (`menu-contract.ts`): `setMenu(model)`, `onMenuCommand(callback)` and
@@ -1491,7 +1550,7 @@ a runtime. The page is the Sharer itself: it holds a connection of its own to
 the runtime, of kind `desktop`, the captures and one peer connection per Viewer
 of each share. Over that connection it follows the open Installation and its
 live state (`share-installation.ts`), lists the Screen Shares with who shares
-into each (`share-slots.ts`), adds one with the ordinary `media.create` when the
+into each (`share-slots.ts`), adds one with the ordinary `share.create` when the
 Installation has none, declares its shares and exchanges the signalling
 (`client.sharing`, `sharer.ts`). Its actor is made up once and kept in
 `desktop-state.json` (`sharerActor`), so the runtime recognises the same Sharer
@@ -1686,7 +1745,7 @@ The package holds `dist/` without its source maps and a `package.json`, in one
 asar archive, and no `node_modules`: esbuild inlined every dependency, so the
 workspace packages Desktop bundles are devDependencies, and Electron is the only
 import left. The runtime child reads its Studio, Output page, thumbnails and
-Bundled Media out of the archive through Electron's fs. Chromium's sandbox needs
+Bundled Pack out of the archive through Electron's fs. Chromium's sandbox needs
 unprivileged user namespaces, which Ubuntu 23.10 and later refuse to programs
 without an AppArmor profile, and an AppImage cannot ship one or a setuid
 `chrome-sandbox`; the AppImage's `AppRun` probes with `unshare -Ur true` and
@@ -1702,19 +1761,18 @@ attaches the packages to the tag's GitHub Release.
 
 `difracta-core/src/settings.ts` holds every tunable in one object: history
 coalesce window and limit, autosave delay, default host, port and document mode,
-the Media extensions, whether files outside the show folder are served and the
-pinned Bundled Media release, the discovery service and its delays, how long a
-Display Host gets to answer, the Viewers a Screen Share takes, how long an
-interrupted share waits for its Sharer, how large a relayed signalling payload
-may be and a Viewer's waits (before leaving a slot, before asking for a new
-offer, between asks), how long Live holds a lost frame and the least a crop
-leaves, the largest picture a Sharer sends and what Sharp and Smooth each mean
-(content hint, what gives way under load, frame rate, bitrate, codec order), the
-size of the pictures in Desktop's own picker, client reconnect backoff, CLI
-connect timeout, Desktop's waits for its runtime to start and stop, for a
-runtime elsewhere to answer and for the share window to stop its shares, its
-window sizes and how many runtimes it remembers. Packages import from there
-instead of carrying their own literals.
+the Media extensions, the Pack scan limits and bake settings, the pinned Bundled
+Pack release, the discovery service and its delays, how long a Display Host gets
+to answer, the Viewers a Screen Share takes, how long an interrupted share waits
+for its Sharer, how large a relayed signalling payload may be and a Viewer's
+waits (before leaving a slot, before asking for a new offer, between asks), how
+long Live holds a lost frame and the least a crop leaves, the largest picture a
+Sharer sends and what Sharp and Smooth each mean (content hint, what gives way
+under load, frame rate, bitrate, codec order), the size of the pictures in
+Desktop's own picker, client reconnect backoff, CLI connect timeout, Desktop's
+waits for its runtime to start and stop, for a runtime elsewhere to answer and
+for the share window to stop its shares, its window sizes and how many runtimes
+it remembers. Packages import from there instead of carrying their own literals.
 
 ## Rendering
 
@@ -1880,18 +1938,29 @@ boundary. **Why sized to the Surface, in steps:** a Mask edge is only as sharp
 as its texels on the wall, and rounding the size up keeps a corner drag from
 re-rasterizing every step.
 
-Media: the loader (`media-loader.ts`) is engine-owned and preloading. On every
-document revision it gives each file and bundled item of the `media` table an
-element (a bundled item's type from the Catalog the compositor holds), an
-`<img>` that decodes or a `<video>` that preloads muted and inline, from
-`mediaUrl(id)` (`/media/<id>` on the runtime's origin for an Output page, with
-`crossOrigin` set when that origin is not the page's; a data URL in the
-thumbnail harness and the GPU suite), and drops the elements of items the table
-lost; nothing is evicted while the Installation is open. An item pointed at
-another file or entry is loaded again under `?v=<n>`, since the browser keeps
-what it fetched per URL and would show the old picture, and gets a new shared
-handle, which is how the Video Visual knows to open a fresh playback. The loader
-is kept outside the GPU resources, so a lost context costs no reload. An
+Media: the loader (`media-loader.ts`) is engine-owned and preloading. The page
+hands the compositor the `packs` live state as it has it (`setPacks`; the Output
+page and Studio's Preview subscribe to `["live", "packs"]` and pass the slice on
+every change; the thumbnail harness and the GPU suite make one up with
+`fakePacks`). On every document revision, and whenever the slice changes, the
+engine (`engine-media.ts`, `pack-sources.ts`) scans the Media references the
+document names (`mediaReferencesInUse`: every `media` Parameter value of every
+Layer and every Macro set action on such an Address) and makes one source per
+image or video reference whose entry the slice has in a Pack that is not
+missing, with its file there and of the type the Parameter accepts: its URL from
+`mediaUrl(reference)` (`/packs/<packId>/<entryId>` on the runtime's origin for
+an Output page, with `crossOrigin` set when that origin is not the page's; a
+data URL in the harnesses), its revision the entry's fingerprint and its beats
+the entry's. A reference into a missing Pack or entry, or of another type, gives
+no source and its Layer stays blank. The loader gives each source an element, an
+`<img>` that decodes or a `<video>` that preloads muted and inline, and drops
+the elements of references the document no longer names or the Packs no longer
+have; nothing else is evicted while the Installation is open. A source whose URL
+or revision changed is loaded again under `?v=<n>`, since the browser keeps what
+it fetched per URL and would show the old picture, and gets a new shared handle,
+which is how the Video Visual knows to open a fresh playback. The render package
+reads the slice by structure (`PacksView`), so it depends on core alone. The
+loader is kept outside the GPU resources, so a lost context costs no reload. An
 instance reaches it through `media` in its context (`sdk/media.ts`): `get(id)`
 is the shared handle, whose `image` is null until the file is decoded and whose
 `version` counts the pictures behind it; `video(id)` is a playback of the
@@ -1907,7 +1976,7 @@ preloads take turns (`media-preload-queue.ts`):
 the first ones and the ones replacing a taken element alike, and a turn ends
 with the first frame, an error, or `preloadStallMs` without either, so a file
 that never loads holds nobody back. One waiting its turn holds no element. Each
-frame the compositor starts the ones waiting, the Media items the planned Layers
+frame the compositor starts the ones waiting, the entries the planned Layers
 name in a Parameter first. The loader counts the elements it holds, for
 telemetry. The GPU side (`media-textures.ts`) keeps one texture per handle a
 running instance holds, uploads when the handle's version is newer than the
@@ -1926,7 +1995,7 @@ preloads take turns:** a decoder at work, a player playing or loading its first
 frame, takes one of the hardware decoders, of which Chromium on Linux with
 VA-API runs 16 at the same moment (`settings.media.video.hardwareDecoders`;
 other platforms were not measured), and a player that starts past them decodes
-on the CPU. Loaded all at once, an Installation with more video Media items than
+on the CPU. Loaded all at once, an Installation with more video entries than
 that would hand CPU-decoding players to the Layers that play them; in turns,
 only what plays counts. An Output playing more players than the limit says so in
 its telemetry's readers, Studio's Output card and `difracta outputs`, as a
@@ -2137,15 +2206,15 @@ Parameters' ranges:** two Layers cut two parts of one screen, a Macro moves a
 crop like any Address, and a range that kept Left and Right from meeting would
 forbid cutting a corner out.
 
-Video follows a tempo through the Media item's Beats (`media.beats(id)` in the
-context, read from the `media` table on every call, so an edit reaches a clip
-that is playing without a reload). With Sync to Tempo on, the rate is Tempo over
-the clip's own tempo, `beats × 60 / duration`, times Speed read as the nearest
-power of two; a Media item without Beats, or a playback whose length the element
-does not know yet, plays at Speed. The Beat Cue says a beat of the song is now:
-the instance reads the playback's position, takes the distance to the nearest
-line of a grid of song beats in clip time starting at the First Beat, and owes
-it. Each update bends the rate toward paying that over
+Video follows a tempo through the entry's Beats (`media.beats(id)` in the
+context, read from the sources the `packs` live state made on every call, so an
+edit reaches a clip that is playing without a reload). With Sync to Tempo on,
+the rate is Tempo over the clip's own tempo, `beats × 60 / duration`, times
+Speed read as the nearest power of two; an entry without Beats, or a playback
+whose length the element does not know yet, plays at Speed. The Beat Cue says a
+beat of the song is now: the instance reads the playback's position, takes the
+distance to the nearest line of a grid of song beats in clip time starting at
+the First Beat, and owes it. Each update bends the rate toward paying that over
 `settings.media.video.sync.chaseSeconds`, by `maxBend` at most and in steps of
 `bendStep`, and takes what the bend paid during `dt` off what is owed; within
 `lockedWithin` nothing is owed and the rate is the tempo's. A new Beat Cue
@@ -2286,20 +2355,16 @@ page's origin, and an option whose font fails stays in Studio's own. A text
 Parameter is a field, several lines tall when the Parameter takes line breaks,
 that commits on Enter or when it is left and never while typing, since every
 commit reaches the wall; where Enter breaks the line, Ctrl+Enter commits, and
-Escape puts back what the document holds. A media Parameter is a select over the
-Media files of the type it accepts, None first, with a "+" menu beside it that
-adds an item and picks it on the Layer in one flow, as the "+" on a Path row
-makes a Path: File… through the Media section's picker, Bundled… as the
-section's Bundled… but on an entry of the accepted type, setting the Parameter
-to the new item before the Library opens on it, with only entries of that type
-offered; Escape there puts the Parameter back and removes the item. For a
-Parameter accepting `live` the "+" offers New Screen Share instead, which adds a
-slot and picks it. A value whose item is gone shows as None. The options come
-with the Address (`layerAddresses` takes the Media table), so the Link picker
-and the Macro picker, which resolve against the whole document, list the same
-items. Sliders and the color input stream every position through `address.edit`,
-one send in flight at a time. The Parameters header has Reset all, one
-`layer.reset` step. Section open states are remembered per section.
+Escape puts back what the document holds. A media Parameter accepting `live` is
+a select over the Installation's Screen Shares, None first, with a "+" beside it
+that adds a slot and picks it on the Layer in one flow, as the "+" on a Path row
+makes a Path; a value naming no Screen Share shows as None. One accepting an
+image or a video is the Media reference as text, `<pack>/<entry>`, committed
+when the field is left (`inspector/fields/media-control.tsx`). The Link picker
+and the Macro picker resolve against the whole document and draw the same
+control. Sliders and the color input stream every position through
+`address.edit`, one send in flight at a time. The Parameters header has Reset
+all, one `layer.reset` step. Section open states are remembered per section.
 
 The Controllers section is a tree like a Scene's: Number, Color and Text
 Controllers with their live value at the right (a percentage, a swatch, the
@@ -2355,23 +2420,8 @@ the inspector's button opens it later. Selecting another Visual or Filter Layer
 rebinds the Library, selecting anything else closes it. A Layer still carrying
 its generated name takes the name of what it picks.
 
-Bound to a bundled Media item, the Library offers the Bundled Media instead
-(`library/media-library.tsx`): the same ranking, with notes searched after
-descriptions, facets Loop and Hit, tiles with the Recommended, Loop and Hit
-badges whose clip plays muted over the thumbnail while hovered (the `<video>`
-exists only then, streamed from `GET /bundled/<entry id>`), and the focused
-entry's clip, notes, size and length in the description strip. A pick sends
-`media.bundled`, which coalesces per item and renames an item still called after
-its previous entry, so anything showing the item changes on the Outputs and the
-browse undoes as one step. Enter keeps the entry and focuses the item's row;
-Escape puts back the entry it had, or removes an item whose creation opened the
-browse and whose name still follows the entries. Opened from a media Parameter's
-"+", the binding also holds the Parameter's type, the selection it began from
-(the Library stays open while that Layer or Macro is selected) and how to put
-the Parameter back. Selecting another bundled item rebinds the Library;
-selecting anything else closes it. The binding, a Layer or a Media item, is
-Studio-local state (`library/browser-state.tsx`), and both kinds share the
-frame, keyboard and grid (`library/library-shell.tsx`).
+The binding, a Layer, is Studio-local state (`library/browser-state.tsx`); the
+frame, keyboard and grid are `library/library-shell.tsx`.
 
 **Why apply on highlight rather than try a candidate locally:** the projector is
 the only honest view of a Visual on a real Surface, and the Preview renders the
@@ -2498,70 +2548,87 @@ Blackout sits in the menu bar because it is the one control a performer must
 reach without looking; it writes `installation/blackout` through the input
 channel and is not undoable.
 
-The Media section, below Surfaces, lists the Media items as a tree of Media
-Groups, as the Controllers section does: Groups expand and collapse, rows drag
-within and between Groups (`media.move`). A file row has its type's icon and, at
-the row's end, the type as a dim word or, when the runtime cannot serve the
-file, an amber warning naming the status (`live/media/<id>`: missing, outside
-the show folder, or unsaved) explained on hover, the way a Layer without a
-Target warns; each row subscribes to its own status, and the collapsed section's
-warning count skips Groups. The section's "+" is a menu of File…, Bundled…,
-Screen Share and Group, and a Group row's "+" and context menu offer the same
-(Add File…, Add Bundled…, Add Screen Share, Add Group) with Ungroup and Remove;
-a new item lands last in the Group whose menu was used, and Group asks for a
-name. Bundled… sends `media.create` with kind `bundled` on the first entry the
-Library shows with nothing typed (the first Recommended one), selects the item
-and opens the Library bound to it; with no Bundled Media in the Catalog it is
-disabled, and its tooltip says `npm run media:fetch` puts them in place. File…
-asks for the file first: in Desktop it opens the native picker straight away, in
-a browser a dialog with a path field, then sends `media.create` with the path
-relativized against the Installation file's folder and the Group as `parentId`,
-and selects the new item. Without a file for the Installation yet, the path is
-sent as it came, and the row's "unsaved" warning says to save first. A Group's
-inspector has only its name. A bundled item's inspector has the name, "Bundled"
-with the entry's name, badges, description, size, length and Beats and a Change…
-button that opens the Library on the item, then the type, the status
-(`unavailable` when this runtime's bundle lacks the entry) and "Used by", with
-no path. A file's inspector has the name, the path as text committed on blur
-(`media.path`) with, in Desktop, a Browse button running the same picker, the
-type its extension says, the status with its reason, for a video its Beats and
-First Beat (`media.beats`) beside the tempo they make of the length the browser
-reads from the file's metadata, and "Used by": the Layers whose media Parameter
-holds the item, found by reading each Layer's definition for which Parameter is
-a media one; clicking one selects the Layer and opens its Scene row. Remove
-works from the context menu, the Delete key and Edit ▸ Remove like every entity.
+The Media section, below Surfaces, lists the Packs and the Screen Shares. The
+Bundled Pack comes first with a Bundled badge and no Detach, then the attached
+Packs by name, then the Screen Shares in their order. A Pack row reads its state
+from `live/packs/<id>` (`entities/pack/pack-status.ts`): "preparing 42/310" with
+a thin bar while the baker works, "missing" with Locate…, a read-only badge, and
+a warning for a scan limit or a runtime without ffmpeg. The section's "+" offers
+Add Pack ▸ From folder…, Add Pack ▸ each Pack the runtime's machine knows and
+the Installation does not attach (`packs.known`), and Screen Share. Packs and
+Screen Shares are two entity kinds (`entities/pack/`, `entities/share/`) sharing
+one section (`entities/media/`); the collapsed section's warning count is the
+missing Packs plus the interrupted slots.
 
-**Why the "+" opens the picker before creating:** `media.create` names the item
-after its file, so there is nothing to ask until the file is known, and an item
-without a path would draw nothing and warn at once; other sections create a
-named placeholder because a Surface or a Scene is useful before it is
-configured. **Why Bundled… creates the item before anything is chosen:** as with
-a new Layer, the Outputs are the only honest view, so the item exists from the
-first tile and every pick is shown where it will be seen; Escape takes it back
-out. **Why the status is not computed in Studio:** only the runtime has the disk
-the path resolves on; Studio shows what `live/media` reports and explains it.
+Naming a folder (`packs.add`, `packs.locate`) is allowed where `documents.open`
+is (`entities/pack/pack-gate.ts`): inside Difracta Desktop, through its
+`pickPackFolder` bridge, or on a free loopback connection, where the path is
+typed; elsewhere From folder… and Locate… are disabled with the reason and a
+known Pack is attached instead. Selecting a Pack shows its inspector
+(`pack-inspector.tsx`: name through `packs.rename` unless read-only, location on
+disk, entry and prepared counts, Rescan, Locate… when missing, Remove from
+Installation) and opens the Library on it to browse. Every Remove of a Pack, the
+Delete key's included, first says how many Layers and Macro actions use its
+entries (`usesMatching`), then sends `packs.detach`; those references read as
+missing afterwards.
 
-A Screen Share row shows, in place of a type, its status from `live/media/<id>`:
-`idle` dim, `live` green, `interrupted` amber, explained on hover
-(`entities/media/share-status.ts`). Screen Share in a "+" menu sends
-`media.create` with kind `share` and selects the slot. Its inspector
-(`share-inspector.tsx`) has the name, the status in words, and while somebody
-shares the Sharer, screen or window, since when, the Viewers out of the eight a
-share takes, the picture, and Stop, which sends `shares.stop`; idle, it says how
-a share starts: in Difracta Desktop on the computer to share from, File ▸ Share
-Screen... There is no Start: a share starts only on its Sharer's machine. "Used
-by" follows, as for a file. The status strip lists every slot somebody shares
-into, `live` or `interrupted`, with its Sharer (`status/active-shares.tsx`), in
-every Studio whoever shares, and clicking one selects the slot. The share
-window's list and the strip read the slots the same way
-(`entities/media/share-slots.ts`).
+The Library (`library/`) has three bindings (`browser-state.tsx`): a Layer,
+which browses the Catalog (`layer-library.tsx`); a Pack, browse mode
+(`media-library.tsx`); and a media Address, Parameter mode, opened from the chip
+in a Layer's or Macro action's row (`inspector/fields/media-control.tsx`, its
+states in `media-chip-state.ts`: set, missing Pack with Locate…, missing entry,
+a value that is not a reference, empty). The rows are the entries of every
+loaded Pack from the `packs` live slice; facets (`media-facets.tsx`,
+`media-search.ts`) scope by Pack, by the entry's folder inside it as a
+breadcrumb, by tags whose counts narrow as tags are picked, and by type when not
+bound to a Parameter; search ranks name, tags, description and notes. A tile
+(`media-tile.tsx`) shows the baked thumbnail from `/packs/<pack>/<entry>/thumb`
+and plays the proxy, or the original when none is baked, muted on hover; a
+missing entry is hidden unless the query names it. In Parameter mode a click
+sets the Address at once, so the Outputs preview it, Enter keeps and Escape
+restores what the Address held, and a strip above the grid
+(`media-description.tsx`) describes the entry it holds; in browse mode a click
+selects the entry and sets nothing. An entry is an entity kind of its own
+(`entities/entry/`), selected by its Media reference, with no row: its Pack's
+row shows as holding the selection, and the Library stays open while the
+selection is the Pack or one of its entries. Its inspector
+(`entry-inspector.tsx`, `media-player.tsx`, `tag-editor.tsx`) edits name, tags,
+Beats, first beat and the thumbnail frame through `media.update`, fills a width,
+height or duration the manifest lacks when the original loads, and is read-only,
+each field saying why, for a read-only Pack; its file path opens the Library on
+that folder of the Pack. Nothing removes an entry, so the kind has no `removal`
+and Remove does nothing on one. While browsing, the Library takes the whole
+center column, since there is nothing to preview; while picking under the
+Preview tab it sits under the Preview, as the Catalog does for a Layer. The
+Library with no entries anywhere shows one Add Pack….
+
+The Screen Shares follow in their order, rows dragging to reorder (`entity.move`
+on `shares`). A row shows, at its end, the slot's status from
+`live/shares/<id>`: `idle` dim, `live` green, `interrupted` amber with a warning
+explained on hover (`entities/share/share-status.ts`); the collapsed section's
+warning count is the interrupted slots. The section's "+" offers Screen Share,
+which sends `share.create` and selects the slot. Its inspector
+(`share-inspector.tsx`) has the name (`share.rename`), the status in words, and
+while somebody shares the Sharer, screen or window, since when, the Viewers out
+of the eight a share takes, the picture, and Stop, which sends `shares.stop`;
+idle, it says how a share starts: in Difracta Desktop on the computer to share
+from, File ▸ Share Screen... There is no Start: a share starts only on its
+Sharer's machine. Remove (`share.remove`) works from the context menu, the
+Delete key and Edit ▸ Remove like every entity. The status strip lists every
+slot somebody shares into, `live` or `interrupted`, with its Sharer
+(`status/active-shares.tsx`), in every Studio whoever shares, and clicking one
+selects the slot. The share window's list and the strip read the slots the same
+way (`entities/share/share-slots.ts`).
+
+**Why the status is not computed in Studio:** only the runtime knows who is
+connected to it; Studio shows what `live/shares` reports and explains it.
 
 Studio is one Viewer (`lib/share-viewer.tsx`): a `SharedViewer` over its
 client's `viewing`, made with the client and living as long, of which every
 place showing a share takes a claim. The Preview's compositor gets one as its
 `viewer`, so a Live Layer shows the share there as on an Output, and the claim
 wants nothing while the Preview's loop is stopped (another tab in use, the page
-hidden). `SharePicture` (`entities/media/share-picture.tsx`) claims one slot
+hidden). `SharePicture` (`entities/share/share-picture.tsx`) claims one slot
 while it is mounted and the page visible and copies each new frame of it into a
 canvas at the size shown, keeping the slot's last known shape (16:9 before any)
 for an empty frame; the slot's inspector and the crop editor show it. So Studio

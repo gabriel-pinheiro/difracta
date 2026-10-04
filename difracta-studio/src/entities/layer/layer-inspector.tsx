@@ -12,7 +12,6 @@ import {
   type Controller,
   type Layer,
   type Link,
-  type Media,
   type Region,
   type ResolvedAddress,
   type Surface,
@@ -86,8 +85,6 @@ export function LayerInspector({
         region: true,
       })),
   ]);
-  // A media Parameter lists the Media files of its type as its options.
-  const media = useDocumentPath<Table<Media>>(view, ["media"]) ?? {};
   const links = useDocumentPath<Table<Link>>(view, ["links"]) ?? {};
   const controllers =
     useDocumentPath<Table<Controller>>(view, ["controllers"]) ?? {};
@@ -98,7 +95,7 @@ export function LayerInspector({
   }, [layer, select]);
   if (layer === undefined) return null;
 
-  const addresses = layerAddresses(layer, catalog, media);
+  const addresses = layerAddresses(layer, catalog);
   const settings = addresses.filter(
     (entry) => !isParameter(entry) && !isCue(entry),
   );

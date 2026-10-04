@@ -1,4 +1,4 @@
-import { settings, type Media, type Table } from "@difracta/core";
+import { settings, type Share, type Table } from "@difracta/core";
 
 import {
   BROWSER_TIMERS,
@@ -30,7 +30,7 @@ interface Entry {
  * (`live-slot.ts`) per share wanted. It views on demand: `sync` is told
  * which slots are wanted now (`live-wanted.ts`), views the new ones and
  * leaves one `settings.shares.viewer.leaveAfterMs` after it stopped being
- * wanted, or at once when the `media` table lost it. An instance reads a
+ * wanted, or at once when the `shares` table lost it. An instance reads a
  * slot through `live(id)`, as `media.live` in its context. Kept outside
  * the GPU resources like the Media loader, so a lost context costs no
  * renegotiation.
@@ -40,7 +40,7 @@ export class LiveViewer {
   readonly #entries = new Map<string, Entry>();
   readonly #unsubscribe: readonly (() => void)[];
   #wanted: ReadonlySet<string> | undefined;
-  #table: Table<Media> | undefined;
+  #table: Table<Share> | undefined;
 
   constructor(options: LiveViewerOptions = {}) {
     const { signalling } = options;
@@ -65,12 +65,12 @@ export class LiveViewer {
   }
 
   /** Brings the slots in step with what is wanted; the same set and table cost nothing. */
-  sync(wanted: ReadonlySet<string>, media: Table<Media>): void {
+  sync(wanted: ReadonlySet<string>, shares: Table<Share>): void {
     const context = this.#context;
     if (context === undefined) return;
-    if (wanted === this.#wanted && media === this.#table) return;
+    if (wanted === this.#wanted && shares === this.#table) return;
     this.#wanted = wanted;
-    this.#table = media;
+    this.#table = shares;
     const { timers, signalling } = context;
     for (const id of wanted) {
       const entry = this.#entries.get(id);
@@ -91,7 +91,7 @@ export class LiveViewer {
     }
     for (const [id, entry] of this.#entries) {
       if (wanted.has(id)) continue;
-      if (media[id]?.kind !== "share") this.#leave(id);
+      if (shares[id] === undefined) this.#leave(id);
       else
         entry.leaving ??= timers.set(
           () => this.#leave(id),

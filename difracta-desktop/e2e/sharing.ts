@@ -1,5 +1,5 @@
 import { DifractaClient } from "@difracta/client";
-import type { MediaLive } from "@difracta/protocol";
+import type { ShareLive } from "@difracta/protocol";
 import type { Page } from "playwright";
 
 import {
@@ -26,7 +26,7 @@ export const SLOT = "m_laptop";
 type Port = string | number | undefined;
 
 /** What the runtime says of the slot, asked as another client that follows live state. */
-export async function slotLive(port: Port): Promise<MediaLive> {
+export async function slotLive(port: Port): Promise<ShareLive> {
   const client = new DifractaClient({
     url: `ws://127.0.0.1:${String(port ?? "")}/live`,
     kind: "cli",
@@ -42,7 +42,7 @@ export async function slotLive(port: Port): Promise<MediaLive> {
       () => Promise.resolve(view.get()),
       (document) => document !== undefined,
     );
-    const live = view.liveState.get().media[SLOT];
+    const live = view.liveState.get().shares[SLOT];
     if (live === undefined) throw new Error("The runtime has no such slot.");
     return live;
   } finally {
@@ -50,7 +50,7 @@ export async function slotLive(port: Port): Promise<MediaLive> {
   }
 }
 
-export const slotIs = (port: Port, status: MediaLive["status"]) =>
+export const slotIs = (port: Port, status: ShareLive["status"]) =>
   eventually(
     () => slotLive(port),
     (live) => live.status === status,
@@ -66,7 +66,7 @@ export async function stage(port: Port): Promise<void> {
     name: "Front",
     outputs: ["wall"],
   });
-  await run("media.create", { id: SLOT, kind: "share", name: "Laptop" });
+  await run("share.create", { id: SLOT, name: "Laptop" });
   await run("scene.create", { id: "show", name: "Show" });
   await run("layer.create", {
     id: "share",

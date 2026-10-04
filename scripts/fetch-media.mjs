@@ -1,14 +1,15 @@
-// Puts the Bundled Media in difracta-visuals/bundled/: manifest.json, clips/
-// and thumbnails/ of the difracta-media release that `settings.media.bundle`
-// pins. It downloads the release's tarball, refuses it unless its SHA-256
-// matches the pin, and unpacks it. DIFRACTA_MEDIA_DIR=<path> copies the same
-// three from a local working copy of difracta-media instead.
+// Puts the Bundled Pack in difracta-visuals/bundled/: the `clips/` and
+// `.difracta/` (pack.json, thumbs/, proxies/) of the difracta-media release
+// that `settings.media.bundle` pins. It downloads the release's tarball,
+// refuses it unless its SHA-256 matches the pin, and unpacks it.
+// DIFRACTA_MEDIA_DIR=<path> copies the same two from a local working copy of
+// difracta-media instead.
 //
 // A `.version` stamp (`<version>`, or `dir:<path>` for a copy) makes a
 // second run free: it does nothing while the stamp matches, unless --force.
 // While the pin has no SHA-256 and no DIFRACTA_MEDIA_DIR is given, nothing is
-// downloaded: an empty manifest is written so the packages still build and
-// test. With a SHA-256 pinned, failing to fetch is an error.
+// downloaded: an empty Pack manifest is written so the packages still build
+// and test. With a SHA-256 pinned, failing to fetch is an error.
 //
 // Runs as the root postinstall and before dev, build and the Desktop
 // scripts; `npm run media:fetch` runs it by hand. Plain Node, no packages.
@@ -24,7 +25,8 @@ import { settings } from "../difracta-core/src/settings.ts";
 const root = fileURLToPath(new URL("..", import.meta.url));
 const target = path.join(root, "difracta-visuals", "bundled");
 const stampFile = path.join(target, ".version");
-const PARTS = ["manifest.json", "clips", "thumbnails"];
+const PARTS = ["clips", ".difracta"];
+const MANIFEST = path.join(".difracta", "pack.json");
 const EMPTY_STAMP = "empty";
 
 const force = process.argv.includes("--force");
@@ -58,12 +60,12 @@ async function copyFrom(dir) {
         recursive: true,
       });
   });
-  console.log(`Bundled Media copied from ${source}.`);
+  console.log(`Bundled Pack copied from ${source}.`);
 }
 
 async function download() {
   const url = urlPattern.replaceAll("<version>", version);
-  console.log(`Downloading Bundled Media ${version} from ${url}`);
+  console.log(`Downloading Bundled Pack ${version} from ${url}`);
   const response = await fetch(url);
   if (!response.ok)
     throw new Error(
@@ -78,7 +80,7 @@ async function download() {
   await replaceTarget(version, (staging) =>
     untar(gunzipSync(archive), staging),
   );
-  console.log(`Bundled Media ${version} unpacked into ${target}.`);
+  console.log(`Bundled Pack ${version} unpacked into ${target}.`);
 }
 
 /** A NUL-terminated string field of a tar header. */
@@ -137,18 +139,29 @@ async function untar(tar, dir) {
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, data);
   }
-  await readFile(path.join(dir, "manifest.json")).catch(() => {
-    throw new Error("The archive has no manifest.json at its root.");
+  await readFile(path.join(dir, MANIFEST)).catch(() => {
+    throw new Error("The archive has no .difracta/pack.json.");
   });
 }
 
 async function writeEmpty() {
-  await replaceTarget(EMPTY_STAMP, (staging) =>
-    writeFile(
-      path.join(staging, "manifest.json"),
-      `${JSON.stringify({ version: 1, items: [] }, null, 2)}\n`,
-    ),
-  );
+  await replaceTarget(EMPTY_STAMP, async (staging) => {
+    await mkdir(path.join(staging, ".difracta"), { recursive: true });
+    await writeFile(
+      path.join(staging, MANIFEST),
+      `${JSON.stringify(
+        {
+          version: 1,
+          id: "bundled",
+          name: "Bundled",
+          readOnly: true,
+          entries: [],
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  });
 }
 
 const stamp = await readStamp();
@@ -160,14 +173,14 @@ try {
     if (stamp === undefined) await writeEmpty();
     if (stamp === undefined || stamp === EMPTY_STAMP)
       console.warn(
-        `No Bundled Media release is pinned yet: difracta-visuals/bundled/ has an empty manifest. Set DIFRACTA_MEDIA_DIR to a difracta-media checkout and run npm run media:fetch to copy its clips.`,
+        `No Bundled Pack release is pinned yet: difracta-visuals/bundled/ has an empty manifest. Set DIFRACTA_MEDIA_DIR to a difracta-media checkout and run npm run media:fetch to copy its clips.`,
       );
   } else if (force || stamp !== version) {
     await download();
   }
 } catch (error) {
   console.error(
-    `Could not fetch the Bundled Media: ${error instanceof Error ? error.message : String(error)}`,
+    `Could not fetch the Bundled Pack: ${error instanceof Error ? error.message : String(error)}`,
   );
   process.exitCode = 1;
 }

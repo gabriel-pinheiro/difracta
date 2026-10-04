@@ -26,8 +26,8 @@ export interface ShareClient {
 }
 
 export interface ScreenSharesOptions {
-  /** The open Installation's Media table; undefined when none is open. */
-  readonly document: () => Pick<Document, "media"> | undefined;
+  /** The open Installation's Screen Shares; undefined when none is open. */
+  readonly document: () => Pick<Document, "shares"> | undefined;
   /** Sends to one connection; false when it is gone. */
   readonly send: (sessionId: string, message: ServerMessage) => boolean;
   readonly now?: () => number;
@@ -36,8 +36,8 @@ export interface ScreenSharesOptions {
 }
 
 /**
- * The Screen Shares of the open Installation: one slot per Media item of
- * kind `share` (`share-slot.ts`), who shares into it and who views it. This
+ * The Screen Shares of the open Installation: one slot per Screen Share
+ * (`share-slot.ts`), who shares into it and who views it. This
  * decides what is taken: a declaration from a `desktop` connection for a
  * slot of the open Installation, a Viewer while the slot has room.
  *
@@ -52,8 +52,8 @@ export interface ScreenSharesOptions {
  * any Viewer, so every Viewer is announced to it.
  *
  * Shares belong to connections and slots, not to the document: replacing
- * the document keeps a share whose slot the new one still has, by id and
- * kind, and ends the others.
+ * the document keeps a share whose slot the new one still has, by id, and
+ * ends the others.
  */
 export class ScreenShares {
   readonly #options: ScreenSharesOptions;
@@ -69,7 +69,7 @@ export class ScreenShares {
     return () => this.#listeners.delete(listener);
   }
 
-  /** Every slot's entry, to merge into the live state's `media`. */
+  /** Every slot's entry: the live state's `shares`. */
   state(): Record<string, ShareLive> {
     return Object.fromEntries(
       [...this.#slots].map(([id, slot]) => [id, slot.live()]),
@@ -78,18 +78,14 @@ export class ScreenShares {
 
   /** Follows the open document's Screen Shares: new slots start idle, gone ones end their share. */
   reconcile(): void {
-    const media = this.#options.document()?.media;
-    const ids = new Set<string>(
-      Object.values(media ?? {})
-        .filter((item) => item.kind === "share")
-        .map((item) => item.id),
-    );
+    const shares = this.#options.document()?.shares;
+    const ids = new Set<string>(Object.keys(shares ?? {}));
     for (const [id, slot] of [...this.#slots]) {
       if (ids.has(id)) continue;
       this.#slots.delete(id);
       slot.close();
-      this.#emit([{ op: "remove", path: ["media", id] }]);
-      const why = media === undefined ? say.noInstallation : say.gone(id);
+      this.#emit([{ op: "remove", path: ["shares", id] }]);
+      const why = shares === undefined ? say.noInstallation : say.gone(id);
       slot.end("removed", why);
       for (const viewer of slot.viewers)
         slot.tell(viewer, { status: "refused", error: why });
@@ -104,7 +100,7 @@ export class ScreenShares {
           this.#options.interruptedForMs ?? settings.shares.interruptedForMs,
       });
       this.#slots.set(id, slot);
-      this.#emit([{ op: "set", path: ["media", id], value: slot.live() }]);
+      this.#emit([{ op: "set", path: ["shares", id], value: slot.live() }]);
     }
   }
 
@@ -237,15 +233,14 @@ export class ScreenShares {
   }
 
   #name(mediaId: string): string {
-    return this.#options.document()?.media[mediaId]?.name ?? mediaId;
+    return this.#options.document()?.shares[mediaId]?.name ?? mediaId;
   }
 
   /** Why `mediaId` is no slot of the open Installation. */
   #missing(mediaId: string): string {
     const document = this.#options.document();
     if (document === undefined) return say.noInstallation;
-    const item = document.media[mediaId];
-    return item === undefined ? say.gone(mediaId) : say.notAShare(item.name);
+    return say.gone(mediaId);
   }
 
   #emit(patches: readonly Patch[]): void {

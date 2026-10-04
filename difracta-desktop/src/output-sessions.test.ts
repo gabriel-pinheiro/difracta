@@ -31,7 +31,8 @@ function live(...sessions: OutputSessionLive[]): LiveState {
     osc: { port: null, listeners: 0 },
     outputs,
     displayHosts: {},
-    media: {},
+    packs: {},
+    shares: {},
   };
 }
 

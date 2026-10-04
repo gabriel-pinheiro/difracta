@@ -33,7 +33,7 @@ export function wantedShares(
       if (parameter.kind !== "media" || parameter.accepts !== "live") continue;
       const value = layer.parameters[name];
       if (typeof value !== "string" || value === "") continue;
-      if (document.media[value]?.kind !== "share") continue;
+      if (document.shares[value] === undefined) continue;
       onOutput ??= landsOn(document, layer.target, outputId);
       if (onOutput) (wanted ??= new Set()).add(value);
     }

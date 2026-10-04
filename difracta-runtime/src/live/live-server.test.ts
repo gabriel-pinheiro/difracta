@@ -55,7 +55,9 @@ beforeEach(async () => {
     autosaveIntervalMs: 60_000,
     oscPort: undefined,
     discovery: false,
-    mediaAnywhere: false,
+    packs: [],
+    packsFile: undefined,
+    packsCacheDir: undefined,
   });
   const address = await runtime.listen();
   url = `${address.replace("http", "ws")}/live`;
@@ -260,7 +262,8 @@ describe("live protocol", () => {
       osc: { port: null, listeners: 0 },
       outputs: {},
       displayHosts: {},
-      media: {},
+      packs: {},
+      shares: {},
     });
 
     // Removing the Output drops its sessions; closing the page drops the rest.
@@ -370,7 +373,6 @@ describe("live protocol", () => {
     const live = new LiveServer({
       store,
       catalog: emptyCatalog,
-      bundledDir: "",
       runtimeName: "test",
       runtimeVersion: "0",
       documents: "free",
@@ -426,7 +428,6 @@ describe("live protocol", () => {
     const live = new LiveServer({
       store,
       catalog: emptyCatalog,
-      bundledDir: "",
       runtimeName: "test",
       runtimeVersion: "0",
       documents: "free",

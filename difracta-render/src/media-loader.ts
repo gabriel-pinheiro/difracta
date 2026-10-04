@@ -1,14 +1,4 @@
-import {
-  emptyCatalog,
-  mediaBeatsIn,
-  mediaItemTypeIn,
-  settings,
-  type Catalog,
-  type Media,
-  type MediaBeats,
-  type FileMediaType,
-  type Table,
-} from "@difracta/core";
+import { settings, type FileMediaType, type MediaBeats } from "@difracta/core";
 
 import {
   createPreloadQueue,
@@ -25,26 +15,24 @@ import type { MediaContext, MediaHandle, MediaVideo } from "./sdk/media.ts";
 
 /**
  * The Output's Media, loaded ahead of use: on every document revision
- * `sync` gives each file and bundled item of the `media` table an element
- * (a Screen Share has no file and gets none),
- * an image that decodes or a video that preloads, and drops the ones the
- * table lost or repointed, so
- * a Layer that starts showing an item finds it ready and nothing is
- * evicted while the Installation is open. Files come from `mediaUrl(id)`:
- * `/media/<id>` on the runtime for an Output page, a data URL in the
- * thumbnail harness. An item repointed to another file or entry is loaded
- * again under `?v=<n>`, since the browser keeps what it fetched per URL and
- * would otherwise show the old picture. Element creation is injected so the loader is tested
- * without a browser. A video is kept warm (see `media-preload.ts`): its
- * shared handle shows the first frame, and a Layer that plays it asks
- * `video(id)` for a playback of its own, which takes the warm element when
- * it is ready and otherwise opens one over the same URL, which the browser
- * serves from its cache. The preloads take turns
- * (`media-preload-queue.ts`), `settings.media.video.preloadBatch` loading
- * at the same moment, and `preload` starts the ones waiting, the items a
- * planned Layer names first. `videos()` counts the elements held, each of
- * which holds a decoder. `beats(id)` reads the table, not what was loaded,
- * so beats written to an item need no reload.
+ * `sync` is given the sources in use, one per Media reference the document
+ * names (`engine-media.ts`), and gives each an element, an image that
+ * decodes or a video that preloads, and drops the ones no longer named, so
+ * a Layer that starts showing an entry finds it ready and nothing is
+ * evicted while the Installation is open. A source whose `url` or
+ * `revision` changed is loaded again under `?v=<n>`, since the browser
+ * keeps what it fetched per URL and would otherwise show the old picture.
+ * Element creation is injected so the loader is tested without a browser.
+ * A video is kept warm (see `media-preload.ts`): its shared handle shows
+ * the first frame, and a Layer that plays it asks `video(id)` for a
+ * playback of its own, which takes the warm element when it is ready and
+ * otherwise opens one over the same URL, which the browser serves from its
+ * cache. The preloads take turns (`media-preload-queue.ts`),
+ * `settings.media.video.preloadBatch` loading at the same moment, and
+ * `preload` starts the ones waiting, the references a planned Layer names
+ * first. `videos()` counts the elements held, each of which holds a
+ * decoder. `beats(id)` reads the sources, not what was loaded, so beats
+ * written to an entry need no reload.
  */
 export interface MediaElements {
   image(): HTMLImageElement;
@@ -60,10 +48,6 @@ export interface VideoCount {
 }
 
 export interface MediaLoaderOptions {
-  /** Where the item's file is; undefined for one this page cannot reach. */
-  readonly mediaUrl: (id: string) => string | undefined;
-  /** Where a bundled item's type comes from; one whose entry it lacks is not loaded. */
-  readonly catalog?: Catalog;
   readonly elements?: MediaElements;
   /** The page's origin, to decide when a file needs CORS; the browser's by default. */
   readonly pageOrigin?: string;
@@ -71,14 +55,22 @@ export interface MediaLoaderOptions {
   readonly timers?: PreloadTimers;
 }
 
-/**
- * The `media` table, of which only what each item shows matters here; a
- * Group shows nothing, and a Screen Share has no file: it is never loaded.
- */
-export type MediaTable = Table<Media>;
+/** One image or video to keep loaded, under the Media reference that names it. */
+export interface MediaSource {
+  readonly type: FileMediaType;
+  /** Where the file is: on the runtime for an Output page, a data URL in the thumbnail harness. */
+  readonly url: string;
+  /** What the file is, such as its fingerprint: a change under the same URL loads it again. */
+  readonly revision?: string | undefined;
+  /** The entry's beats as they are now; undefined for one without them. */
+  readonly beats?: MediaBeats | undefined;
+}
+
+/** The sources in use, by Media reference. */
+export type MediaSources = Readonly<Record<string, MediaSource>>;
 
 interface Entry {
-  /** What the item shows, `file:<path>` or `bundled:<entry id>`: a change reloads it. */
+  /** The source's `url` and `revision`: a change reloads it. */
   readonly source: string;
   readonly type: FileMediaType;
   readonly url: string;
@@ -88,11 +80,8 @@ interface Entry {
   readonly release: () => void;
 }
 
-const sourceOf = (item: Media | undefined): string | undefined => {
-  if (item?.kind === "file") return `file:${item.path}`;
-  if (item?.kind === "bundled") return `bundled:${item.bundled}`;
-  return undefined;
-};
+const sourceOf = (source: MediaSource | undefined): string | undefined =>
+  source === undefined ? undefined : `${source.url}|${source.revision ?? ""}`;
 
 const DOM_ELEMENTS: MediaElements = {
   image: () => document.createElement("img"),
@@ -103,7 +92,7 @@ const DOM_ELEMENTS: MediaElements = {
       : undefined,
 };
 
-/** `url` for the `loads`-th load of an item: the first as it is, later ones with `v=<n>`; data and blob URLs as they are. */
+/** `url` for the `loads`-th load of a source: the first as it is, later ones with `v=<n>`; data and blob URLs as they are. */
 export function withLoad(url: string, loads: number): string {
   if (loads <= 1 || url.startsWith("data:") || url.startsWith("blob:"))
     return url;
@@ -121,9 +110,7 @@ export function needsCrossOrigin(url: string, pageOrigin: string): boolean {
 }
 
 export class MediaLoader implements Omit<MediaContext, "live"> {
-  readonly #options: MediaLoaderOptions;
   readonly #elements: MediaElements;
-  readonly #catalog: Catalog;
   readonly #pageOrigin: string;
   readonly #entries = new Map<string, Entry>();
   /** How many times each item was loaded, for the reload's URL. */
@@ -131,12 +118,10 @@ export class MediaLoader implements Omit<MediaContext, "live"> {
   /** The elements of the playbacks Layers hold, until each is disposed. */
   readonly #playbacks = new Set<HTMLVideoElement>();
   readonly #queue: PreloadQueue;
-  #table: MediaTable | undefined;
+  #sources: MediaSources | undefined;
 
-  constructor(options: MediaLoaderOptions) {
-    this.#options = options;
+  constructor(options: MediaLoaderOptions = {}) {
     this.#elements = options.elements ?? DOM_ELEMENTS;
-    this.#catalog = options.catalog ?? emptyCatalog;
     this.#pageOrigin =
       options.pageOrigin ??
       (typeof location === "undefined" ? "null" : location.origin);
@@ -147,28 +132,26 @@ export class MediaLoader implements Omit<MediaContext, "live"> {
     });
   }
 
-  /** Brings the elements in step with the table; a table seen before costs nothing. */
-  sync(media: MediaTable): void {
-    if (media === this.#table) return;
-    this.#table = media;
+  /** Brings the elements in step with the sources; the same object seen before costs nothing. */
+  sync(sources: MediaSources): void {
+    if (sources === this.#sources) return;
+    this.#sources = sources;
     for (const [id, entry] of this.#entries)
-      if (sourceOf(media[id]) !== entry.source) {
+      if (sourceOf(sources[id]) !== entry.source) {
         entry.release();
         this.#entries.delete(id);
       }
-    for (const [id, item] of Object.entries(media)) {
+    for (const [id, item] of Object.entries(sources)) {
       const source = sourceOf(item);
-      if (source !== undefined && !this.#entries.has(id)) {
-        const entry = this.#load(id, item, source);
-        if (entry !== undefined) this.#entries.set(id, entry);
-      }
+      if (source !== undefined && !this.#entries.has(id))
+        this.#entries.set(id, this.#load(id, item, source));
     }
   }
 
   /**
    * Starts the video preloads waiting for a turn, as many as there are
-   * turns free, the items `wanted` names first; `wanted` is only asked
-   * while some wait.
+   * turns free, the references `wanted` names first; `wanted` is only
+   * asked while some wait.
    */
   preload(wanted: () => ReadonlySet<string>): void {
     if (this.#queue.waiting > 0) this.#queue.advance(wanted());
@@ -194,8 +177,7 @@ export class MediaLoader implements Omit<MediaContext, "live"> {
   }
 
   beats(id: string): MediaBeats | undefined {
-    const item = this.#table?.[id];
-    return item === undefined ? undefined : mediaBeatsIn(item, this.#catalog);
+    return this.#sources?.[id]?.beats;
   }
 
   videos(): VideoCount {
@@ -211,19 +193,15 @@ export class MediaLoader implements Omit<MediaContext, "live"> {
   dispose(): void {
     for (const entry of this.#entries.values()) entry.release();
     this.#entries.clear();
-    this.#table = undefined;
+    this.#sources = undefined;
   }
 
-  #load(id: string, item: Media, source: string): Entry | undefined {
-    const type = mediaItemTypeIn(item, this.#catalog);
-    const base = this.#options.mediaUrl(id);
-    if (type === undefined || type === "live" || base === undefined)
-      return undefined;
+  #load(id: string, item: MediaSource, source: string): Entry {
     const loads = (this.#loads.get(id) ?? 0) + 1;
     this.#loads.set(id, loads);
-    const url = withLoad(base, loads);
+    const url = withLoad(item.url, loads);
     const crossOrigin = needsCrossOrigin(url, this.#pageOrigin);
-    return type === "image"
+    return item.type === "image"
       ? this.#loadImage(id, source, url, crossOrigin)
       : this.#loadVideo(id, source, url, crossOrigin);
   }

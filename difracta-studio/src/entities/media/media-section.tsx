@@ -1,121 +1,116 @@
 import type { DocumentView } from "@difracta/client";
-import { childMedia, generateId, type Media, type Table } from "@difracta/core";
-import { FilePlus } from "lucide-react";
-import { useState } from "react";
+import {
+  BUNDLED_PACK_ID,
+  generateId,
+  orderedEntries,
+  type PackAttachment,
+  type Share,
+  type Table,
+} from "@difracta/core";
+import type { LiveState } from "@difracta/protocol";
+import { FolderOpen } from "lucide-react";
 
-import { NameDialog, type NameRequest } from "@/components/name-dialog";
+import { useKnownPacks } from "@/entities/pack/known-packs";
+import { usePackActions } from "@/entities/pack/pack-actions";
+import { PackRow, type PackRowItem } from "@/entities/pack/pack-rows";
+import { packRowStatus } from "@/entities/pack/pack-status";
+import { ShareRows } from "@/entities/share/share-rows";
+import { shareLive } from "@/entities/share/share-slots";
 import { useCommand, useDocumentPath } from "@/lib/client";
-import { useBrowser } from "@/library/browser-state";
 import type { CreateItem } from "@/navigator/navigator-row";
 import { NavigatorSection } from "@/navigator/navigator-section";
 import { useSelection } from "@/selection/selection";
 
-import {
-  bundledMediaIcon,
-  mediaGroupIcon,
-  mediaTypeIcons,
-} from "./media-icons";
-import { MediaRows } from "./media-rows";
-import { mediaWarningCount, type MediaLiveTable } from "./media-status";
-import {
-  hasBundledMedia,
-  NO_BUNDLED_MEDIA,
-  useCreateMedia,
-} from "./use-create-media";
+import { mediaTypeIcons, packIcon } from "./media-icons";
 
 /**
- * Navigator section listing the Media items as a tree of Media Groups:
- * each file with its type's icon and, when the runtime cannot serve it,
- * why. The "+" of the section or of a Group offers File…, which asks for
- * the file first (a native picker in Desktop, a typed path in a browser)
- * since the item takes its name from the file; Bundled…, which adds an
- * item on the first Bundled Media entry at once and opens the Library on
- * it, so picking the clip is previewing it; Screen Share, which adds a slot
- * and selects it, whose inspector says how to share into it; and Group,
- * which asks for a name. A new item lands last in the Group whose "+" was
- * used.
+ * Navigator section "Media": the Packs the Installation has, the Bundled
+ * Pack first and the attached ones by name, each with what the runtime
+ * says of it, then the Screen Shares in their order with who shares into
+ * each. The "+" adds a Pack, from a folder on the runtime's machine where
+ * that is allowed or one the machine already knows, or a Screen Share. The
+ * header counts the missing Packs and interrupted shares while collapsed.
+ * A Pack's entries have no rows: a selected entry keeps its Pack's row
+ * shown as holding the selection.
  */
 export function MediaSection({ view }: { readonly view: DocumentView }) {
   const command = useCommand(view);
   const { select } = useSelection();
-  const media = useDocumentPath<Table<Media>>(view, ["media"]) ?? {};
-  const live = useDocumentPath<MediaLiveTable>(view, ["live", "media"]) ?? {};
-  const { openMedia } = useBrowser();
-  const { create, createBundled, createShare, dialog } = useCreateMedia();
-  const [naming, setNaming] = useState<NameRequest | undefined>(undefined);
-  const roots = childMedia(media, null);
+  const actions = usePackActions(view);
+  const known = useKnownPacks(view);
+  const attached =
+    useDocumentPath<Table<PackAttachment>>(view, ["packs"]) ?? {};
+  const packsLive =
+    useDocumentPath<LiveState["packs"]>(view, ["live", "packs"]) ?? {};
+  const shares = useDocumentPath<Table<Share>>(view, ["shares"]) ?? {};
+  const sharesLive =
+    useDocumentPath<LiveState["shares"]>(view, ["live", "shares"]) ?? {};
 
-  const show = (id: string): void => select({ kind: "media", id });
+  const packs: readonly PackRowItem[] = [
+    { id: BUNDLED_PACK_ID, name: "Bundled", bundled: true },
+    ...Object.values(attached)
+      .map((pack) => ({ id: pack.id, name: pack.name, bundled: false }))
+      .sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+      ),
+  ];
+  const shareRows = orderedEntries(shares);
+  const missing = packs.filter(
+    (pack) => packRowStatus(packsLive[pack.id]).kind === "missing",
+  ).length;
+  const interrupted = shareRows.filter(
+    (share) => shareLive(sharesLive[share.id]).status === "interrupted",
+  ).length;
 
-  function requestGroup(parentId: string | null): void {
-    const siblings = childMedia(media, parentId);
-    setNaming({
-      title: "New Media Group",
-      label: "Name",
-      initial: `Group ${String(siblings.length + 1)}`,
-      submitLabel: "Create",
-      onSubmit: (name) => {
-        const id = generateId("media");
-        void command("media.create", {
-          id,
-          kind: "group",
-          parentId,
-          name,
-        }).then(() => show(id));
-      },
-    });
-  }
-
-  const createItems = (parentId: string | null): readonly CreateItem[] => [
+  const createItems: readonly CreateItem[] = [
     {
-      label: "File…",
-      icon: FilePlus,
-      onSelect: () => create({ parentId, onCreated: (id) => show(id) }),
-    },
-    {
-      label: "Bundled…",
-      icon: bundledMediaIcon,
-      disabled: hasBundledMedia() ? undefined : NO_BUNDLED_MEDIA,
-      onSelect: () =>
-        createBundled({
-          parentId,
-          onCreated: (id) => {
-            show(id);
-            openMedia(id, { created: true });
-          },
-        }),
+      label: "Add Pack",
+      icon: packIcon,
+      onSelect: () => undefined,
+      items: [
+        {
+          label: "From folder…",
+          icon: FolderOpen,
+          onSelect: actions.addFromFolder,
+          disabled: actions.gate,
+        },
+        ...known.map((pack) => ({
+          label: pack.name,
+          icon: packIcon,
+          onSelect: () => actions.attachKnown(pack),
+        })),
+      ],
     },
     {
       label: "Screen Share",
       icon: mediaTypeIcons.live,
-      onSelect: () => createShare({ parentId, onCreated: (id) => show(id) }),
-    },
-    {
-      label: "Group",
-      icon: mediaGroupIcon,
-      onSelect: () => requestGroup(parentId),
+      onSelect: () => {
+        const id = generateId("share");
+        void command("share.create", { id }).then(() =>
+          select({ kind: "share", id }),
+        );
+      },
     },
   ];
 
   return (
-    <>
-      <NavigatorSection
-        storageKey="media"
-        holds={["media"]}
-        label="Media"
-        empty={roots.length === 0 ? "No Media yet." : undefined}
-        warnings={mediaWarningCount(media, live)}
-        createItems={createItems(null)}
-      >
-        <MediaRows
+    <NavigatorSection
+      storageKey="media"
+      holds={["pack", "entry", "share"]}
+      label="Media"
+      warnings={missing + interrupted}
+      createItems={createItems}
+    >
+      {packs.map((pack) => (
+        <PackRow
+          key={pack.id}
           view={view}
-          parentId={null}
-          depth={1}
-          createItems={createItems}
+          pack={pack}
+          live={packsLive[pack.id]}
+          actions={actions}
         />
-      </NavigatorSection>
-      {dialog}
-      <NameDialog request={naming} onClose={() => setNaming(undefined)} />
-    </>
+      ))}
+      <ShareRows view={view} shares={shareRows} live={sharesLive} />
+    </NavigatorSection>
   );
 }

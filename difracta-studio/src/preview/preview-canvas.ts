@@ -3,6 +3,7 @@ import {
   createCompositor,
   type Compositor,
   type CompositorOptions,
+  type PacksView,
   type ViewerClaim,
 } from "@difracta/render";
 import { builtInCatalog } from "@difracta/visuals";
@@ -40,6 +41,7 @@ export class PreviewCanvas {
   readonly #observer: ResizeObserver;
   readonly #onProblem: (message: string | undefined) => void;
   #frame: PreviewFrame | undefined;
+  #packs: PacksView = {};
   #active = false;
   #sized = false;
   #animationFrame: number | undefined;
@@ -65,6 +67,12 @@ export class PreviewCanvas {
   /** A Cue fired on a Layer; the next frame's update sees it. */
   trigger(layerId: string, key: string): void {
     this.#compositor?.trigger(layerId, key);
+  }
+
+  /** The Packs the runtime has loaded, as the view has them now; the compositor reads them from its first frame on. */
+  setPacks(packs: PacksView): void {
+    this.#packs = packs;
+    this.#compositor?.setPacks(packs);
   }
 
   setActive(active: boolean): void {
@@ -115,7 +123,13 @@ export class PreviewCanvas {
 
   #create(): Compositor {
     try {
-      return createCompositor(this.#canvas, builtInCatalog, this.#options);
+      const compositor = createCompositor(
+        this.#canvas,
+        builtInCatalog,
+        this.#options,
+      );
+      compositor.setPacks(this.#packs);
+      return compositor;
     } catch (error: unknown) {
       this.#compositor = null;
       throw error;

@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/resizable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useStoredState } from "@/lib/storage";
+import { cn } from "@/lib/utils";
 import { useBrowser } from "@/library/browser-state";
 import { LibraryView } from "@/library/library-view";
 import { PreviewTab } from "@/preview/preview-tab";
@@ -26,11 +27,13 @@ const isShare = (candidate: unknown): candidate is number =>
 
 /**
  * The center column: the Preview and the Outputs as tabs, the one last used
- * remembered per browser. An open Library takes the place of the Outputs,
- * and sits under the Preview, which stays as it is, when that is the tab:
- * picking applies at once, so every candidate shows in the Preview above.
- * The Preview stays mounted under the other tab too, where it renders
- * nothing, so coming back to it starts no Visual again.
+ * remembered per browser. An open Library takes the place of both tabs,
+ * except while it picks something the Preview shows at once, a Layer's
+ * Visual or Filter or a media Address, and the Preview is the tab: then it
+ * sits under the Preview, which stays as it is, so every candidate shows
+ * above. Browsing a Pack previews nothing, so it takes the whole column.
+ * The Preview stays mounted while hidden, where it renders nothing, so
+ * coming back to it starts no Visual again.
  */
 export function Center({ view }: { readonly view: DocumentView }) {
   const { binding } = useBrowser();
@@ -40,7 +43,9 @@ export function Center({ view }: { readonly view: DocumentView }) {
     binding === undefined ? undefined : (
       <LibraryView view={view} binding={binding} />
     );
-  const split = library !== undefined && tab === "preview";
+  const split =
+    library !== undefined && binding?.kind !== "pack" && tab === "preview";
+  const whole = library !== undefined && !split;
   return (
     <Tabs
       value={tab}
@@ -71,12 +76,15 @@ export function Center({ view }: { readonly view: DocumentView }) {
         }}
       >
         <ResizablePanel id="tabs" minSize={120}>
-          <TabsContent value="preview" keepMounted className="h-full min-h-0">
-            <PreviewTab view={view} active={tab === "preview"} />
-          </TabsContent>
-          <TabsContent value="outputs" className="h-full overflow-auto">
-            {library ?? <OutputsTab view={view} />}
-          </TabsContent>
+          {whole && library}
+          <div className={cn("h-full min-h-0", whole && "hidden")}>
+            <TabsContent value="preview" keepMounted className="h-full min-h-0">
+              <PreviewTab view={view} active={tab === "preview" && !whole} />
+            </TabsContent>
+            <TabsContent value="outputs" className="h-full overflow-auto">
+              <OutputsTab view={view} />
+            </TabsContent>
+          </div>
         </ResizablePanel>
         {split && (
           <>

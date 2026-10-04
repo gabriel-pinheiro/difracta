@@ -234,18 +234,9 @@ export class Stage {
     return this;
   }
 
-  /** A Media item for a file next to the Installation. */
-  media(id: string, path: string): this {
-    this.#document = run(this.#document, "media.create", { id, path });
-    return this;
-  }
-
   /** A Screen Share: a slot somebody shares a screen or a window into. */
   share(id: string): this {
-    this.#document = run(this.#document, "media.create", {
-      id,
-      kind: "share",
-    });
+    this.#document = run(this.#document, "share.create", { id });
     return this;
   }
 

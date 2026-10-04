@@ -3,9 +3,9 @@ import {
   type DifractaClient,
   type DocumentView,
 } from "@difracta/client";
-import { generateId, type Media, type Table } from "@difracta/core";
+import { generateId, type Share, type Table } from "@difracta/core";
 
-import { shareSlots, type ShareSlot } from "@/entities/media/share-slots";
+import { shareSlots, type ShareSlot } from "@/entities/share/share-slots";
 import type { Sharer } from "./sharer";
 
 /** The open Installation, as far as the share window names it. */
@@ -44,17 +44,14 @@ export class ShareInstallation {
   async createSlot(): Promise<string> {
     const installation = this.installation.get();
     if (installation === null) throw new Error("No Installation is open.");
-    const id = generateId("media");
-    await this.#client.command(installation.id, "media.create", {
-      id,
-      kind: "share",
-    });
+    const id = generateId("share");
+    await this.#client.command(installation.id, "share.create", { id });
     return id;
   }
 
   /** Whether the runtime still says this computer shares into any of `slots`. */
   stillShared(slots: readonly string[], sharer: string): boolean {
-    const live = this.#view?.liveState.get().media ?? {};
+    const live = this.#view?.liveState.get().shares ?? {};
     return slots.some((id) => {
       const entry = live[id];
       return (
@@ -65,7 +62,7 @@ export class ShareInstallation {
 
   /** Calls back on every change of who shares into what. Returns the unsubscribe. */
   onLive(listener: () => void): () => void {
-    return this.#view?.subscribePath(["live", "media"], listener) ?? (() => 0);
+    return this.#view?.subscribePath(["live", "shares"], listener) ?? (() => 0);
   }
 
   dispose(): void {
@@ -91,8 +88,8 @@ export class ShareInstallation {
         this.#view === undefined
           ? []
           : [
-              this.#view.subscribePath(["media"], read),
-              this.#view.subscribePath(["live", "media"], read),
+              this.#view.subscribePath(["shares"], read),
+              this.#view.subscribePath(["live", "shares"], read),
             ];
     }
     if (before?.id !== open?.id || before?.name !== open?.name)
@@ -103,8 +100,8 @@ export class ShareInstallation {
   #read(): void {
     const view = this.#view;
     const slots = shareSlots(
-      view?.valueAt<Table<Media>>(["media"]),
-      view?.liveState.get().media ?? {},
+      view?.valueAt<Table<Share>>(["shares"]),
+      view?.liveState.get().shares ?? {},
       new Set(this.#sharer.shares.get().map((share) => share.mediaId)),
     );
     const said = JSON.stringify(slots);

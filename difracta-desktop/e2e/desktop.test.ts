@@ -42,52 +42,37 @@ describe("Difracta Desktop", () => {
     ).toEqual({
       bridge: [
         "onOpenRequest",
-        "pickMediaPath",
         "pickOpenPath",
+        "pickPackFolder",
         "pickSavePath",
       ],
       node: "undefined",
     });
-    // The Media picker is a native dialog over the images and videos Difracta
-    // shows, answered for it here; the page gets the absolute path back.
+    // The Pack picker is a native folder dialog, answered for it here; the
+    // page gets the absolute path back.
     await app?.evaluate(({ dialog }) => {
       dialog.showOpenDialog = (...args: unknown[]) => {
-        const options = args[1] as {
-          title: string;
-          filters: { name: string; extensions: string[] }[];
-        };
-        (globalThis as { mediaDialog?: unknown }).mediaDialog = {
+        const options = args[1] as { title: string; properties: string[] };
+        (globalThis as { packDialog?: unknown }).packDialog = {
           title: options.title,
-          filters: options.filters.map((filter) => filter.name),
-          extensions: options.filters[0]?.extensions,
+          properties: options.properties,
         };
         return Promise.resolve({
           canceled: false,
-          filePaths: ["/shows/tonight/art/logo.png"],
+          filePaths: ["/shows/tonight/clips"],
         });
       };
     });
     expect(
-      await page.evaluate(() => window.difractaDesktop?.pickMediaPath()),
-    ).toBe("/shows/tonight/art/logo.png");
+      await page.evaluate(() => window.difractaDesktop?.pickPackFolder()),
+    ).toBe("/shows/tonight/clips");
     expect(
       await app?.evaluate(
-        () => (globalThis as { mediaDialog?: unknown }).mediaDialog,
+        () => (globalThis as { packDialog?: unknown }).packDialog,
       ),
     ).toEqual({
-      title: "Add Media",
-      filters: ["Images and videos", "Images", "Videos"],
-      extensions: [
-        "png",
-        "jpg",
-        "jpeg",
-        "webp",
-        "gif",
-        "svg",
-        "mp4",
-        "webm",
-        "mov",
-      ],
+      title: "Add Pack",
+      properties: ["openDirectory", "createDirectory"],
     });
     // Main writes the title: the file, the home directory as "~" when inside it.
     expect(await studioTitle()).toBe(

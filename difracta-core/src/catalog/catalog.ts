@@ -1,11 +1,9 @@
-import type { FileMediaType } from "../document/media.ts";
 import type { ParameterSchema } from "./parameters.ts";
 
 /**
  * The Catalog is what a runtime knows it can show: the Visual and Filter
- * definitions Layers are made of, the Bundled Media, the clips Difracta
- * ships, which a Media item of kind `bundled` refers to, and the Bundled
- * Fonts its text Visuals draw with. A definition is
+ * definitions Layers are made of and the Bundled Fonts its text Visuals
+ * draw with. A definition is
  * identified by a stable id the document refers to; Studio picks from the
  * Catalog and commands validate against it. An id the Catalog no longer has
  * stays in the document and shows as unavailable, so a changed Catalog
@@ -60,38 +58,6 @@ export interface FilterDefinition extends DefinitionBase {
 export type Definition = VisualDefinition | FilterDefinition;
 
 /**
- * One entry of the Bundled Media: an image or video Difracta ships, read
- * from the bundle's manifest. It has no backend, Parameters or Cues; a
- * Media item of kind `bundled` shows it through Image or Video. `file` is
- * relative to the bundle's folder.
- */
-export interface MediaDefinition {
-  readonly kind: "media";
-  readonly id: string;
-  readonly name: string;
-  /** One sentence a person reads while choosing. */
-  readonly description: string;
-  /** How it reads on a Surface, what to stack it with, when to use it. */
-  readonly notes?: string;
-  /** Sorted first when picking: a good default. */
-  readonly recommended?: boolean;
-  readonly type: FileMediaType;
-  /** Loops without a visible seam. */
-  readonly loop?: boolean;
-  /** Works as a one-shot on a beat. */
-  readonly hit?: boolean;
-  readonly file: string;
-  readonly width: number;
-  readonly height: number;
-  /** In seconds; videos only. */
-  readonly duration?: number;
-  /** How many beats a video with a steady pulse lasts. */
-  readonly beats?: number;
-  /** The time in seconds of the first beat; zero when left out. */
-  readonly firstBeat?: number;
-}
-
-/**
  * One Bundled Font: a typeface Difracta ships, so text looks the same on
  * every Output. `files` are relative to the fonts' folder, the first the
  * face most text needs and the rest its further character ranges.
@@ -123,18 +89,15 @@ function byName(
 export class Catalog {
   readonly #visuals = new Map<string, VisualDefinition>();
   readonly #filters = new Map<string, FilterDefinition>();
-  readonly #media = new Map<string, MediaDefinition>();
   readonly #fonts = new Map<string, FontDefinition>();
 
   constructor({
     visuals = [],
     filters = [],
-    media = [],
     fonts = [],
   }: {
     readonly visuals?: readonly VisualDefinition[];
     readonly filters?: readonly FilterDefinition[];
-    readonly media?: readonly MediaDefinition[];
     readonly fonts?: readonly FontDefinition[];
   } = {}) {
     const seen = new Map<string, string>();
@@ -156,10 +119,6 @@ export class Catalog {
       claim(filter.id, "Filter");
       this.#filters.set(filter.id, filter);
     }
-    for (const entry of media) {
-      claim(entry.id, "Bundled Media entry");
-      this.#media.set(entry.id, entry);
-    }
     for (const font of fonts) {
       claim(font.id, "Bundled Font");
       this.#fonts.set(font.id, font);
@@ -174,19 +133,8 @@ export class Catalog {
     return this.#filters.get(id);
   }
 
-  /** The Bundled Media entry `id` names. */
-  mediaEntry(id: string): MediaDefinition | undefined {
-    return this.#media.get(id);
-  }
-
-  /** The definition a Layer of `kind`, or a bundled Media item, refers to by `id`. */
-  definition(kind: "media", id: string): MediaDefinition | undefined;
-  definition(kind: "visual" | "filter", id: string): Definition | undefined;
-  definition(
-    kind: "visual" | "filter" | "media",
-    id: string,
-  ): Definition | MediaDefinition | undefined {
-    if (kind === "media") return this.mediaEntry(id);
+  /** The definition a Layer of `kind` refers to by `id`. */
+  definition(kind: "visual" | "filter", id: string): Definition | undefined {
     return kind === "visual" ? this.visual(id) : this.filter(id);
   }
 
@@ -196,11 +144,6 @@ export class Catalog {
 
   filters(): readonly FilterDefinition[] {
     return [...this.#filters.values()].sort(byName);
-  }
-
-  /** The Bundled Media, by name. */
-  media(): readonly MediaDefinition[] {
-    return [...this.#media.values()].sort(byName);
   }
 
   /** The Bundled Font `id` names. */

@@ -10,7 +10,6 @@ import fastifyWebsocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance } from "fastify";
 import { stat } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
-import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { RuntimeConfig } from "./config.ts";
@@ -21,9 +20,13 @@ import {
 import { BonjourAnnouncer } from "./discovery/bonjour-announcer.ts";
 import { registerDocumentRoutes } from "./documents/document-routes.ts";
 import { DocumentStore } from "./documents/document-store.ts";
-import { registerMediaRoutes } from "./documents/media-routes.ts";
 import { LiveServer } from "./live/live-server.ts";
 import { OscServer } from "./osc/osc-server.ts";
+import { registerPackRoutes } from "./packs/pack-routes.ts";
+import { PackStore } from "./packs/pack-store.ts";
+import { packsCacheDir, registryFile } from "./packs/platform-dirs.ts";
+import { PackRegistry } from "./packs/registry.ts";
+import { locateTools } from "./packs/tools.ts";
 
 export const RUNTIME_VERSION = "0.3.1";
 
@@ -31,6 +34,7 @@ export interface Runtime {
   readonly app: FastifyInstance;
   readonly store: DocumentStore;
   readonly live: LiveServer;
+  readonly packs: PackStore;
   listen(): Promise<string>;
   close(): Promise<void>;
 }
@@ -57,7 +61,6 @@ export async function buildRuntime(
   const log = (message: string): void => {
     app.log.warn(message);
   };
-  const bundledDir = config.bundledDir ?? fileURLToPath(bundledRoot);
   const store = new DocumentStore({
     registry: createBuiltInRegistry(builtInCatalog),
     autosaveIntervalMs: config.autosaveIntervalMs,
@@ -67,14 +70,31 @@ export async function buildRuntime(
     config.oscPort === undefined
       ? undefined
       : new OscServer({ store, port: config.oscPort, host: config.host, log });
+  // The Registry and the cache fall back to the user's folders; the Bundled
+  // Pack is read from the fetched bundle, or where Desktop's build put it.
+  const registry = new PackRegistry(
+    config.packsFile ?? registryFile(process.env),
+    log,
+  );
+  const tools = await locateTools();
+  if (tools === undefined)
+    log(
+      "ffmpeg or ffprobe was not found: Packs load without thumbnails, proxies or measurements. Install ffmpeg, or set DIFRACTA_FFMPEG and DIFRACTA_FFPROBE.",
+    );
+  const packs = new PackStore({
+    bundledDir: config.bundledDir ?? fileURLToPath(bundledRoot),
+    registry,
+    cacheRoot: config.packsCacheDir ?? packsCacheDir(process.env),
+    tools,
+    log,
+  });
   const live = new LiveServer({
     store,
     catalog: builtInCatalog,
     runtimeName: "Difracta Runtime",
     runtimeVersion: RUNTIME_VERSION,
     documents: config.documents,
-    mediaAnywhere: config.mediaAnywhere,
-    bundledDir,
+    packs,
     log,
     osc,
   });
@@ -93,24 +113,16 @@ export async function buildRuntime(
     live.accept(socket, request.socket.remoteAddress);
   });
   registerDocumentRoutes(app, store);
-  registerMediaRoutes(app, store, {
-    allowOutsideShowFolder: config.mediaAnywhere,
-    catalog: builtInCatalog,
-    bundledDir,
-  });
+  registerPackRoutes(app, packs);
 
-  // Thumbnails of the Catalog, one per definition, for Studio's browser:
-  // the Visuals' and Filters' own, then the Bundled Media's.
+  // Thumbnails of the Catalog, one per Visual and Filter, for Studio's browser.
   await app.register(fastifyStatic, {
-    root: [
-      config.thumbnailsDir ?? fileURLToPath(thumbnailsRoot),
-      path.join(bundledDir, "thumbnails"),
-    ],
+    root: config.thumbnailsDir ?? fileURLToPath(thumbnailsRoot),
     prefix: "/catalog/",
     decorateReply: false,
   });
 
-  // The Bundled Fonts. Any origin may read them, as it may Media: a page
+  // The Bundled Fonts. Any origin may read them, as it may a Pack's files: a page
   // served from elsewhere loads a font only with that header.
   await app.register(fastifyStatic, {
     root: config.fontsDir ?? fileURLToPath(fontsRoot),
@@ -143,7 +155,10 @@ export async function buildRuntime(
     app,
     store,
     live,
+    packs,
     async listen() {
+      await registry.load();
+      await packs.start(config.packs);
       if (config.openPath !== undefined) {
         const opened =
           config.documents === "pinned"
@@ -182,6 +197,7 @@ export async function buildRuntime(
     },
     async close() {
       live.close();
+      packs.close();
       await osc?.close();
       await advertisement?.close();
       await store.flush();

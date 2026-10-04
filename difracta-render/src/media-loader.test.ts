@@ -1,4 +1,4 @@
-import { Catalog, id as brand } from "@difracta/core";
+import { mediaTypeOf } from "@difracta/core";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -6,6 +6,7 @@ import {
   needsCrossOrigin,
   withLoad,
   type MediaElements,
+  type MediaSource,
 } from "./media-loader.ts";
 
 /**
@@ -91,20 +92,6 @@ class FakeVideo extends FakeElement {
   }
 }
 
-const bundle = new Catalog({
-  media: (["flash", "grid"] as const).map((id) => ({
-    kind: "media" as const,
-    id,
-    name: id,
-    description: id,
-    type: id === "flash" ? ("video" as const) : ("image" as const),
-    file: `clips/${id}.${id === "flash" ? "webm" : "png"}`,
-    width: 16,
-    height: 9,
-    ...(id === "flash" ? { duration: 7.5, beats: 16 } : {}),
-  })),
-});
-
 /** Timers the test fires by hand. */
 function fakeTimers() {
   const pending = new Map<number, () => void>();
@@ -129,10 +116,7 @@ function fakeTimers() {
 
 const NONE: ReadonlySet<string> = new Set();
 
-function loader(
-  mediaUrl = (id: string): string | undefined => `/media/${id}`,
-  poster?: MediaElements["poster"],
-) {
+function loader(poster?: MediaElements["poster"]) {
   const images: FakeImage[] = [];
   const videos: FakeVideo[] = [];
   const timers = fakeTimers();
@@ -150,8 +134,6 @@ function loader(
     },
   };
   const instance = new MediaLoader({
-    mediaUrl,
-    catalog: bundle,
     elements,
     pageOrigin: "http://tv.local:4801",
     timers,
@@ -159,17 +141,21 @@ function loader(
   return { instance, images, videos, timers };
 }
 
-const item = (id: string, path: string) => ({
-  id: brand("media", id),
-  kind: "file" as const,
-  name: id,
-  parentId: null,
-  path,
-  order: "a",
+/** A source served at `/media/<id>`, whose file is `path`: its type from the extension, the path as its revision. */
+const item = (
+  id: string,
+  path: string,
+  origin = "",
+  beats?: MediaSource["beats"],
+): MediaSource => ({
+  type: mediaTypeOf(path) ?? "image",
+  url: `${origin}/media/${id}`,
+  revision: path,
+  ...(beats === undefined ? {} : { beats }),
 });
 
 describe("MediaLoader", () => {
-  it("loads every item of the table once, decodes images and preloads videos muted", () => {
+  it("loads every source once, decodes images and preloads videos muted", () => {
     const { instance, images, videos } = loader();
     const table = {
       logo: item("logo", "logo.png"),
@@ -201,7 +187,7 @@ describe("MediaLoader", () => {
     expect(instance.get("nope")).toBeUndefined();
   });
 
-  it("drops removed items, reloads a changed path and keeps the rest", () => {
+  it("drops removed sources, reloads a changed revision and keeps the rest", () => {
     const { instance, images } = loader();
     instance.sync({ a: item("a", "a.png"), b: item("b", "b.png") });
     const a = instance.get("a");
@@ -218,83 +204,23 @@ describe("MediaLoader", () => {
     expect(images[0]?.src).toBe("");
   });
 
-  it("loads a bundled item by its entry's type, reloads it on a new entry and skips one the Catalog lacks", () => {
-    const { instance, images, videos } = loader();
-    const bundled = (id: string, entry: string) => ({
-      id: brand("media", id),
-      kind: "bundled" as const,
-      name: id,
-      parentId: null,
-      order: "a",
-      bundled: entry,
-    });
-    instance.sync({
-      flash: bundled("flash", "flash"),
-      old: bundled("old", "retired"),
-    });
-    instance.preload(() => NONE);
-    expect(videos).toHaveLength(1);
-    expect(videos[0]?.src).toBe("/media/flash");
-    expect(instance.get("old")).toBeUndefined();
-    instance.sync({ flash: bundled("flash", "grid") });
-    expect(videos[0]?.src).toBe("");
-    expect(images[0]?.src).toBe("/media/flash?v=2");
-  });
-
-  it("answers an item's beats as the table has them now, a bundled item's from its entry", () => {
+  it("answers a source's beats as the sources have them now, loading nothing again", () => {
     const { instance } = loader();
     const clip = item("clip", "clip.webm");
     instance.sync({
       clip,
-      flash: {
-        id: brand("media", "flash"),
-        kind: "bundled",
-        name: "flash",
-        parentId: null,
-        order: "b",
-        bundled: "flash",
-      },
+      flash: item("flash", "flash.webm", "", { beats: 16, firstBeat: 0 }),
     });
     expect(instance.beats("clip")).toBeUndefined();
     expect(instance.beats("flash")).toEqual({ beats: 16, firstBeat: 0 });
     expect(instance.beats("nope")).toBeUndefined();
     const before = instance.get("clip");
-    instance.sync({ clip: { ...clip, beats: 8, firstBeat: 0.25 } });
-    expect(instance.beats("clip")).toEqual({ beats: 8, firstBeat: 0.25 });
-    // Beats are not what the item shows: nothing is loaded again.
-    expect(instance.get("clip")).toBe(before);
-  });
-
-  it("skips Groups, Screen Shares and items with no URL or an extension it cannot show", () => {
-    const asked: string[] = [];
-    const { instance, images, videos } = loader((id) => {
-      asked.push(id);
-      return id === "far" ? undefined : `/media/${id}`;
-    });
     instance.sync({
-      far: item("far", "far.png"),
-      odd: item("odd", "odd.txt"),
-      art: {
-        id: brand("media", "art"),
-        kind: "group",
-        name: "Art",
-        parentId: null,
-        order: "a",
-      },
-      slides: {
-        id: brand("media", "slides"),
-        kind: "share",
-        name: "Slides",
-        parentId: null,
-        order: "b",
-      },
+      clip: { ...clip, beats: { beats: 8, firstBeat: 0.25 } },
     });
-    expect(images).toHaveLength(0);
-    expect(videos).toHaveLength(0);
-    expect(asked).not.toContain("slides");
-    expect(instance.get("slides")).toBeUndefined();
-    expect(instance.get("art")).toBeUndefined();
-    expect(instance.get("far")).toBeUndefined();
+    expect(instance.beats("clip")).toEqual({ beats: 8, firstBeat: 0.25 });
+    // Beats are not what the source shows: nothing is loaded again.
+    expect(instance.get("clip")).toBe(before);
   });
 
   it("gives a Layer its own video playback over the same file, counting presented frames", () => {
@@ -340,7 +266,7 @@ describe("MediaLoader", () => {
 
   it("hands a playback the warm element once the poster is cut, and warms another", async () => {
     const posters: { closed: boolean; close(): void }[] = [];
-    const { instance, videos } = loader(undefined, () => {
+    const { instance, videos } = loader(() => {
       const poster = {
         closed: false,
         close() {
@@ -485,10 +411,8 @@ describe("MediaLoader", () => {
     expect(needsCrossOrigin("http://stage:4800/media/a", page)).toBe(true);
     expect(needsCrossOrigin("data:image/png;base64,AA==", page)).toBe(false);
     expect(needsCrossOrigin("blob:http://tv.local:4801/x", page)).toBe(false);
-    const { instance, images } = loader(
-      (id) => `http://stage:4800/media/${id}`,
-    );
-    instance.sync({ a: item("a", "a.png") });
+    const { instance, images } = loader();
+    instance.sync({ a: item("a", "a.png", "http://stage:4800") });
     expect(images[0]?.crossOrigin).toBe("anonymous");
   });
 

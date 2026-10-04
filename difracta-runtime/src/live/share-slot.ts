@@ -37,7 +37,7 @@ export interface Share {
  * One Screen Share slot: its share, if any, and its Viewers, waiting ones
  * included. It tells the Sharer of each Viewer that joins or leaves, tells
  * each Viewer when the share changes, relays payloads between them and
- * replicates its state under `["media", id]`, one patch per property.
+ * replicates its state under `["shares", id]`, one patch per property.
  * Whether a declaration or a Viewer is taken is `screen-shares.ts`'s call.
  */
 export class ShareSlot {
@@ -237,11 +237,11 @@ export class ShareSlot {
 
   #set(): void {
     this.#context.emit([
-      { op: "set", path: ["media", this.id], value: this.live() },
+      { op: "set", path: ["shares", this.id], value: this.live() },
     ]);
   }
 
   #patch(key: string, value: unknown): void {
-    this.#context.emit([{ op: "set", path: ["media", this.id, key], value }]);
+    this.#context.emit([{ op: "set", path: ["shares", this.id, key], value }]);
   }
 }

@@ -11,6 +11,7 @@ import type { Command } from "commander";
 
 import type { Cli } from "../cli.ts";
 import { fetchCatalog, parseText, parseValue } from "../connection.ts";
+import type { Packs } from "../media-references.ts";
 import {
   inTypedTerms,
   resolveAddressNames,
@@ -64,7 +65,8 @@ export function firedDetail(outcome: TriggerOutcome): string {
 /**
  * What `set` and `edit` send for the value as it was typed: text for a text
  * Address, whatever it looks like; otherwise true, false, a number or JSON,
- * a Media item's name turned into its id. Without the Catalog a Parameter's
+ * a Media reference with its Pack's name or the file's path turned into
+ * ids, a Screen Share's name into its id. Without the Catalog a Parameter's
  * type is unknown and the value is read by its looks alone.
  */
 export function writtenValue(
@@ -72,13 +74,14 @@ export function writtenValue(
   catalog: Catalog | undefined,
   address: string,
   typed: string,
+  packs: Packs = {},
 ): unknown {
   if (resolveAddress(document, address, catalog)?.type === "text")
     return parseText(typed);
   const parsed = parseValue(typed);
   return catalog === undefined
     ? parsed
-    : resolveMediaValue(document, catalog, address, parsed);
+    : resolveMediaValue(document, catalog, address, parsed, packs);
 }
 
 export function registerAddress(program: Command, cli: Cli): void {
@@ -99,7 +102,7 @@ export function registerAddress(program: Command, cli: Cli): void {
       .description(purpose)
       .action((address: string, value: string) =>
         cli.withDocument(async (client, summary) => {
-          const { document } = await cli.replica(client, summary.id);
+          const { document, view } = await cli.replica(client, summary.id);
           const resolved = resolveAddressNames(document, address);
           // Only a Parameter's type comes from the Catalog.
           const written = writtenValue(
@@ -109,6 +112,7 @@ export function registerAddress(program: Command, cli: Cli): void {
               : undefined,
             resolved,
             value,
+            view.liveState.get().packs,
           );
           const result = await client
             .command<CommandResult>(summary.id, command, {

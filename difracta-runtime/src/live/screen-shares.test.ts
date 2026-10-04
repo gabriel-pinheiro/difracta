@@ -14,34 +14,20 @@ const desktop = (id: string, actor = id): ShareClient => ({
 });
 const output = (id: string): ShareClient => ({ id, kind: "output", actor: id });
 
-function withMedia(media: Document["media"]): Pick<Document, "media"> {
-  return { media };
+function withShares(shares: Document["shares"]): Pick<Document, "shares"> {
+  return { shares };
 }
 
 const slides = {
-  m_slides: {
-    id: "m_slides",
-    kind: "share",
-    name: "Slides",
-    parentId: null,
-    order: "a0",
-  },
-  m_logo: {
-    id: "m_logo",
-    kind: "file",
-    name: "Logo",
-    parentId: null,
-    order: "a1",
-    path: "logo.png",
-  },
-} as unknown as Document["media"];
+  m_slides: { id: "m_slides", name: "Slides", order: "a0" },
+} as unknown as Document["shares"];
 
 /** A ScreenShares over a document that holds Slides, with every message and patch kept. */
 function setup(options: { maxViewers?: number } = {}) {
-  let document: Pick<Document, "media"> | undefined = withMedia(slides);
+  let document: Pick<Document, "shares"> | undefined = withShares(slides);
   const sent: [string, ServerMessage][] = [];
   const patches: Patch[] = [];
-  let live: { media: Record<string, unknown> } = { media: {} };
+  let live: { shares: Record<string, unknown> } = { shares: {} };
   const follow = (emitted: readonly Patch[]): void => {
     live = applyPatches(live, emitted);
   };
@@ -68,8 +54,8 @@ function setup(options: { maxViewers?: number } = {}) {
         if (sent[i]?.[0] === sessionId) sent.splice(i, 1);
       return mine;
     },
-    slot: () => live.media.m_slides,
-    setDocument: (next: Pick<Document, "media"> | undefined): void => {
+    slot: () => live.shares.m_slides,
+    setDocument: (next: Pick<Document, "shares"> | undefined): void => {
       document = next;
       shares.reconcile();
     },
@@ -97,10 +83,8 @@ describe("Screen Shares in the runtime", () => {
           "Only a connection of kind “desktop” can share into a Screen Share; this one is “output”.",
       },
     ]);
-    shares.declare(desktop("d1"), "m_logo", laptop, false);
     shares.declare(desktop("d1"), "m_gone", laptop, false);
     expect(to("d1").map((m) => m.type === "share-ended" && m.message)).toEqual([
-      "“Logo” is not a Screen Share; only a Media item of kind share can be shared into.",
       "No Screen Share “m_gone” in the open Installation.",
     ]);
     shares.declare(desktop("d1"), "m_slides", laptop, false);
@@ -140,7 +124,7 @@ describe("Screen Shares in the runtime", () => {
       false,
     );
     expect(patches).toEqual([
-      { op: "set", path: ["media", "m_slides", "source"], value: "screen" },
+      { op: "set", path: ["shares", "m_slides", "source"], value: "screen" },
     ]);
     shares.declare(desktop("d2"), "m_slides", null, false);
     expect(slot()).toMatchObject({ status: "live" });
@@ -254,15 +238,14 @@ describe("Screen Shares in the runtime", () => {
       },
     ]);
     expect(to("v1").at(-1)).toMatchObject({ viewing: { status: "idle" } });
-    shares.view(output("v4"), "m_logo", true);
+    shares.view(output("v4"), "m_gone", true);
     expect(to("v4")).toEqual([
       {
         type: "share-viewing",
-        mediaId: "m_logo",
+        mediaId: "m_gone",
         viewing: {
           status: "refused",
-          error:
-            "“Logo” is not a Screen Share; only a Media item of kind share can be shared into.",
+          error: "No Screen Share “m_gone” in the open Installation.",
         },
       },
     ]);
@@ -315,7 +298,7 @@ describe("Screen Shares in the runtime", () => {
       ok: false,
       error: "Nobody shares into “Slides”.",
     });
-    expect(shares.stop("m_logo")).toMatchObject({ ok: false });
+    expect(shares.stop("m_gone")).toMatchObject({ ok: false });
     shares.declare(desktop("d1"), "m_slides", laptop, false);
     shares.view(output("v1"), "m_slides", true);
     to("d1");
@@ -349,12 +332,14 @@ describe("Screen Shares in the runtime", () => {
     to("d1");
     to("v1");
     // Another document holding a share item with the same id: the share goes on.
-    setDocument(withMedia({ m_slides: slides.m_slides } as Document["media"]));
+    setDocument(
+      withShares({ m_slides: slides.m_slides } as Document["shares"]),
+    );
     expect(to("d1")).toEqual([]);
     expect(slot()).toMatchObject({ status: "live" });
     patches.length = 0;
-    setDocument(withMedia({}));
-    expect(patches).toEqual([{ op: "remove", path: ["media", "m_slides"] }]);
+    setDocument(withShares({}));
+    expect(patches).toEqual([{ op: "remove", path: ["shares", "m_slides"] }]);
     expect(to("d1")).toEqual([
       {
         type: "share-ended",
@@ -373,9 +358,6 @@ describe("Screen Shares in the runtime", () => {
         },
       },
     ]);
-    // A file under the same id is no slot.
-    setDocument(withMedia({ m_slides: slides.m_logo } as Document["media"]));
-    expect(shares.state()).toEqual({});
   });
 
   it("drops a Viewer whose socket closed and tells the Sharer", () => {

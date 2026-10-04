@@ -30,7 +30,7 @@ describe("Video synced to a tempo", () => {
     expect(clip().rate).toBe(0.6);
   });
 
-  it("plays at Speed when the Media item has no beats or its length is not known", () => {
+  it("plays at Speed when the entry has no beats or its length is not known", () => {
     const bare = stage({ sync: true, tempo: 140, speed: 0.6 });
     bare.frame();
     bare.clip().duration = 7.5;

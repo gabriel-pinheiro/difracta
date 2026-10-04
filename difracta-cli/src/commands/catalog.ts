@@ -1,5 +1,5 @@
 import {
-  aMediaType,
+  mediaValueExpectation,
   settings,
   type Catalog,
   type Definition,
@@ -10,32 +10,21 @@ import type { Command } from "commander";
 
 import type { Cli } from "../cli.ts";
 import { fetchCatalog } from "../connection.ts";
-import { bundledFlags, describeBundled } from "./media-bundled.ts";
 
 export function registerCatalog(program: Command, cli: Cli): void {
   program
     .command("catalog [id]")
     .description(
-      "List the Visuals and Filters the runtime renders, its Bundled Media and its Bundled Fonts, or describe one: notes, Parameters, Cues; for a Bundled Media entry, notes, size, duration and flags; for a Bundled Font, its files.",
+      "List the Visuals and Filters the runtime renders and its Bundled Fonts, or describe one: notes, Parameters, Cues; for a Bundled Font, its files.",
     )
     .action((id: string | undefined) =>
       cli.withClient(async (client) => {
         const catalog = await fetchCatalog(client);
         if (id === undefined) {
           cli.print(
-            [
-              ...catalog.visuals(),
-              ...catalog.filters(),
-              ...catalog.media(),
-              ...catalog.fonts(),
-            ],
+            [...catalog.visuals(), ...catalog.filters(), ...catalog.fonts()],
             () => formatCatalog(catalog),
           );
-          return;
-        }
-        const entry = catalog.mediaEntry(id);
-        if (entry !== undefined) {
-          cli.print(entry, () => describeBundled(entry));
           return;
         }
         const font = catalog.font(id);
@@ -53,25 +42,14 @@ export function registerCatalog(program: Command, cli: Cli): void {
     );
 }
 
-/** The listing: Visuals and Filters, then the Bundled Media and the Bundled Fonts under their own headings. */
+/** The listing: Visuals and Filters, then the Bundled Fonts under their own heading. */
 export function formatCatalog(catalog: Catalog): string {
-  const media = catalog.media();
   const fonts = catalog.fonts();
   return [
     ...[...catalog.visuals(), ...catalog.filters()].map(
       (item) =>
         `${item.id.padEnd(20)} ${item.kind.padEnd(8)} ${item.backend.padEnd(8)} ${item.recommended === true ? "★ " : "  "}${item.description}`,
     ),
-    ...(media.length === 0
-      ? []
-      : [
-          "",
-          "Bundled Media",
-          ...media.map((entry) => {
-            const flags = bundledFlags(entry);
-            return `${entry.id.padEnd(28)} ${entry.type.padEnd(6)} ${entry.recommended === true ? "★ " : "  "}${entry.name}${flags === "" ? "" : ` (${flags})`}: ${entry.description}`;
-          }),
-        ]),
     ...(fonts.length === 0
       ? []
       : [
@@ -139,7 +117,7 @@ export function describeParameter(parameter: ParameterDefinition): string {
     case "boolean":
       return `${parameter.label.padEnd(16)} boolean  default ${String(parameter.default)}${tail}`;
     case "media":
-      return `${parameter.label.padEnd(16)} media    default "" (none)  the id of ${aMediaType(parameter.accepts)} Media item (\`difracta media list\`)${tail}`;
+      return `${parameter.label.padEnd(16)} media    default "" (none)  ${mediaValueExpectation(parameter.accepts)}${tail}`;
     case "text":
       return `${parameter.label.padEnd(16)} text     default ${JSON.stringify(parameter.default)}  ${parameter.multiline === true ? "line breaks allowed" : "a single line"}${tail}`;
   }

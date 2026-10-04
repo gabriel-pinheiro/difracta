@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeUrl } from "./url.ts";
+import { isLocalUrl, normalizeUrl } from "./url.ts";
 
 describe("normalizeUrl", () => {
   it("keeps a live websocket URL as typed", () => {
@@ -33,5 +33,15 @@ describe("normalizeUrl", () => {
     expect(() => normalizeUrl("ftp://rig:21")).toThrow("Not a runtime URL");
     expect(() => normalizeUrl("http://")).toThrow("Not a runtime URL");
     expect(() => normalizeUrl("  ")).toThrow("empty");
+  });
+});
+
+describe("isLocalUrl", () => {
+  it("is true for loopback hosts only", () => {
+    expect(isLocalUrl(normalizeUrl("localhost"))).toBe(true);
+    expect(isLocalUrl(normalizeUrl("127.0.0.1:4899"))).toBe(true);
+    expect(isLocalUrl(normalizeUrl("ws://[::1]:4800/live"))).toBe(true);
+    expect(isLocalUrl(normalizeUrl("rig.local"))).toBe(false);
+    expect(isLocalUrl(normalizeUrl("192.168.1.20"))).toBe(false);
   });
 });

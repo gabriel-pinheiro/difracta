@@ -46,25 +46,20 @@ async function connect(
   return { client, drop: () => socket?.close() };
 }
 
-/** A Studio with an Installation holding a Screen Share `m_slides` and a file, watching the live state. */
+/** A Studio with an Installation holding a Screen Share `m_slides`, watching the live state. */
 async function studio() {
   const { client } = await connect("studio");
   const created = await client.request<DocumentSummary>("documents.new", {
     name: "Living",
     blank: true,
   });
-  await client.command(created.id, "media.create", {
+  await client.command(created.id, "share.create", {
     id: "m_slides",
-    kind: "share",
     name: "Slides",
-  });
-  await client.command(created.id, "media.create", {
-    id: "m_logo",
-    path: "logo.png",
   });
   const view = client.openDocument(created.id, { live: true });
   await waitFor(() => view.get() !== undefined);
-  const slot = () => view.liveState.get().media.m_slides;
+  const slot = () => view.liveState.get().shares.m_slides;
   return { client, view, documentId: created.id, slot };
 }
 
@@ -105,7 +100,9 @@ beforeEach(async () => {
     autosaveIntervalMs: 60_000,
     oscPort: undefined,
     discovery: false,
-    mediaAnywhere: false,
+    packs: [],
+    packsFile: undefined,
+    packsCacheDir: undefined,
   });
   address = await runtime.listen();
 });
@@ -117,11 +114,9 @@ afterEach(async () => {
 });
 
 describe("Screen Shares over the live socket", () => {
-  it("relays between a Sharer and two Viewers and shows one status per Media item", async () => {
-    const { slot, view } = await studio();
+  it("relays between a Sharer and two Viewers and shows each Screen Share's status", async () => {
+    const { slot } = await studio();
     expect(slot()).toEqual({ status: "idle" });
-    await waitFor(() => view.liveState.get().media.m_logo !== undefined);
-    expect(view.liveState.get().media.m_logo).toEqual({ status: "unsaved" });
 
     const { client: one } = await connect("output");
     const { client: two } = await connect("studio");
@@ -205,7 +200,7 @@ describe("Screen Shares over the live socket", () => {
 
     desktop.sharing.share("m_slides", { sharer: "Laptop", source: "screen" });
     await waitFor(() => slot()?.status === "live");
-    await owner.command(documentId, "media.remove", { mediaId: "m_slides" });
+    await owner.command(documentId, "share.remove", { shareId: "m_slides" });
     await waitFor(() => sharer.ends.length === 2);
     expect(sharer.ends[1]).toMatchObject({ reason: "removed" });
     await waitFor(() => slot() === undefined);
@@ -233,15 +228,6 @@ describe("Screen Shares over the live socket", () => {
     await owner.request("documents.new", { name: "Foyer", discard: true });
     await waitFor(() => sharer.ends.length === 1);
     expect(sharer.ends[0]).toMatchObject({ reason: "removed" });
-  });
-
-  it("serves no file for a Screen Share", async () => {
-    await studio();
-    const response = await fetch(`${address}/media/m_slides`);
-    expect(response.status).toBe(404);
-    expect(await response.json()).toEqual({
-      error: "“Slides” is a Screen Share, which has no file.",
-    });
   });
 
   it("declares again and views again by itself after a reconnect", async () => {

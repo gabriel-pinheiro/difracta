@@ -1,314 +1,279 @@
-import {
-  describeBeats,
-  emptyCatalog,
-  flattenMedia,
-  mediaBeatsIn,
-  mediaItemTypeIn,
-  type Catalog,
-  type Document,
-  type MediaKind,
-  type MediaType,
-} from "@difracta/core";
-import type { DifractaClient } from "@difracta/client";
-import type {
-  CommandResult,
-  DocumentSummary,
-  LiveState,
-} from "@difracta/protocol";
+import type { CommandResult } from "@difracta/protocol";
 import type { Command } from "commander";
 
 import type { Cli } from "../cli.ts";
-import { fetchCatalog } from "../connection.ts";
-import { storedMediaPath } from "../media-paths.ts";
-import { resolveId } from "../names.ts";
+import {
+  entryOf,
+  resolveMediaReference,
+  resolvePackId,
+  type Packs,
+} from "../media-references.ts";
+import { findId } from "../names.ts";
 import { formatCommandResult, type NamedResult } from "../result.ts";
-import { registerMediaBundled, resolveBundled } from "./media-bundled.ts";
+import {
+  formatEntries,
+  formatPackEntries,
+  listEntries,
+  listingPacks,
+} from "./media-listing.ts";
 import { nameCreated } from "./run.ts";
-import { formatTable } from "./read.ts";
 
-export interface MediaListing {
-  readonly id: string;
-  readonly name: string;
-  readonly kind: MediaKind;
-  /** The Group holding the item, or null at the root. */
-  readonly parentId: string | null;
-  /** How many Groups the item is inside. */
-  readonly depth: number;
-  /** A file's, relative to the Installation file's folder; null for any other kind. */
-  readonly path: string | null;
-  /** A bundled item's Bundled Media entry id; null for any other kind. */
-  readonly bundled: string | null;
-  /**
-   * From the file's extension or the bundled entry, live for a Screen
-   * Share; null for a Group, undefined for a file Difracta cannot show or
-   * an entry the runtime lacks.
-   */
-  readonly type: MediaType | null | undefined;
-  /** How many beats a video lasts, its own or its entry's; null for one without. */
-  readonly beats: number | null;
-  /** The time in seconds of the first beat; null without beats. */
-  readonly firstBeat: number | null;
-  /** From the live state, a Screen Share's too; undefined before the runtime has looked, and for a Group. */
-  readonly status: LiveState["media"][string]["status"] | undefined;
+/** What `media.update` answers. */
+interface UpdateReply {
+  readonly packId: string;
+  readonly entryId: string;
 }
 
-/**
- * Every Media item in navigator order, Groups first-class, with the
- * runtime's word on whether each file is there or who shares into each
- * Screen Share; `catalog` gives bundled items their type.
- */
-export function listMedia(
-  document: Pick<Document, "media">,
-  live: LiveState["media"],
-  catalog: Catalog = emptyCatalog,
-): MediaListing[] {
-  const depthOf = (parentId: string | null): number => {
-    let depth = 0;
-    for (
-      let at = parentId;
-      at !== null;
-      at = document.media[at]?.parentId ?? null
-    )
-      depth += 1;
-    return depth;
-  };
-  return flattenMedia(document.media).map((item) => ({
-    beats: mediaBeatsIn(item, catalog)?.beats ?? null,
-    firstBeat: mediaBeatsIn(item, catalog)?.firstBeat ?? null,
-    id: item.id,
-    name: item.name,
-    kind: item.kind,
-    parentId: item.parentId,
-    depth: depthOf(item.parentId),
-    path: item.kind === "file" ? item.path : null,
-    bundled: item.kind === "bundled" ? item.bundled : null,
-    type: item.kind === "group" ? null : mediaItemTypeIn(item, catalog),
-    status: item.kind === "group" ? undefined : live[item.id]?.status,
-  }));
+/** The tags `tags` become with `added` put in or taken out, compared ignoring case, order kept. */
+export function mergeTags(
+  tags: readonly string[],
+  changes: readonly string[],
+  remove: boolean,
+): string[] {
+  const wanted = changes.map((tag) => tag.trim()).filter((tag) => tag !== "");
+  const folded = (tag: string): string => tag.toLowerCase();
+  if (remove) {
+    const gone = new Set(wanted.map(folded));
+    return tags.filter((tag) => !gone.has(folded(tag)));
+  }
+  const result = [...tags];
+  for (const tag of wanted)
+    if (!result.some((existing) => folded(existing) === folded(tag)))
+      result.push(tag);
+  return result;
 }
 
-/** One row per item, names indented by Group: name, id, kind, type, status, path or bundle entry, beats. */
-export function formatMedia(items: readonly MediaListing[]): string {
-  if (items.length === 0)
-    return "No Media items. `difracta media add <file>` adds one.";
-  return formatTable(
-    items.map((item) => [
-      `${"  ".repeat(item.depth)}${item.name}`,
-      item.id,
-      item.kind,
-      item.kind === "group" ? "" : (item.type ?? "?"),
-      item.kind === "group" ? "" : (item.status ?? "…"),
-      item.path ?? item.bundled ?? "",
-      item.beats === null ? "" : describeBeats(item.beats),
-    ]),
-  );
+/** `16` → 16; `none` → null; anything else is an error. */
+export function parseBeats(text: string): number | null {
+  if (text.trim().toLowerCase() === "none") return null;
+  const beats = Number(text);
+  if (!Number.isFinite(beats) || beats <= 0)
+    throw new Error(
+      `Beats is a positive number of beats the clip lasts, or "none"; not “${text}”.`,
+    );
+  return beats;
 }
-
-/** The Media Group `reference` names, by id or name among every item; anything else is an error. */
-export function mediaGroupId(document: Document, reference: string): string {
-  const id = resolveId(document, "media", reference);
-  const item = document.media[id];
-  if (item?.kind !== "group")
-    throw new Error(`“${item?.name ?? reference}” is not a Media Group.`);
-  return id;
-}
-
-/** The `media.beats` payload from what was typed: a number of beats or `none`, and a first beat in seconds. */
-export function beatsPayload(
-  mediaId: string,
-  beats: string,
-  firstBeat: string | undefined,
-): { mediaId: string; beats: number | null; firstBeat?: number } {
-  const number = (text: string, what: string): number => {
-    const value = Number(text.trim());
-    if (text.trim() === "" || !Number.isFinite(value))
-      throw new Error(`${what} must be a number, not “${text}”.`);
-    return value;
-  };
-  return {
-    mediaId,
-    beats:
-      beats.trim().toLowerCase() === "none" ? null : number(beats, "Beats"),
-    ...(firstBeat === undefined
-      ? {}
-      : { firstBeat: number(firstBeat, "The first beat") }),
-  };
-}
-
-const GROUP_OPTION = [
-  "--group <group>",
-  "the Media Group to add into, by name or id; the root unless given",
-] as const;
 
 export function registerMedia(program: Command, cli: Cli): void {
   const media = program
     .command("media")
     .description(
-      "Images, videos and Screen Shares the Installation shows, arranged in Media Groups. A Media item of kind file is a file next to the Installation file (or elsewhere, stored as a relative path), of type image or video by its extension; one of kind bundled shows a clip Difracta ships (`media bundled`); one of kind share is a Screen Share, of type live, a slot a Difracta Desktop shares a screen or window into (`media screen-share`, `share list`). A Visual's media Parameter names one by id. `difracta run media.move` and `media.ungroup` rearrange them; `run media.bundled` swaps a bundled item's clip.",
+      "Media: the image and video entries of the Installation's Packs (see `packs`), which a Visual's media Parameter names as `<pack>/<entry>`, and its Screen Shares, slots a Difracta Desktop shares a screen or window into (`media screen-share`, `share list`). An entry here is `<pack>/<entry>` by ids, or the Pack's name and the file's path inside it, such as `Neon/tunnels/04.mp4`; listings print both.",
     );
 
-  /** Sends `media.create`, into the Group `group` names if given, and prints what it made with `extra` lines after. */
-  const create = (
-    client: DifractaClient,
-    summary: DocumentSummary,
-    payload: Readonly<Record<string, unknown>>,
-    group: string | undefined,
-    extra: readonly string[],
-  ) =>
-    cli.replica(client, summary.id).then(async ({ document, view }) => {
-      const reply = await client.command<CommandResult>(
-        summary.id,
-        "media.create",
-        {
-          ...payload,
-          ...(group === undefined
-            ? {}
-            : { parentId: mediaGroupId(document, group) }),
-        },
-      );
-      const result: NamedResult =
-        reply.created === undefined
-          ? reply
-          : {
-              ...reply,
-              created: nameCreated(
-                await cli.caughtUp(view, reply.revision),
-                reply.created,
-              ),
-            };
-      cli.print({ ...payload, ...result }, () =>
-        [formatCommandResult(result, "media.create"), ...extra].join("\n"),
-      );
-    });
+  /** The reference and its loaded entry, from what was typed. */
+  const locate = (
+    document: Parameters<typeof resolveMediaReference>[0],
+    packs: Packs,
+    typed: string,
+  ) => {
+    const reference = resolveMediaReference(document, packs, typed);
+    return { reference, ...entryOf(packs, reference) };
+  };
 
   media
-    .command("add [path]")
+    .command("list [pack]")
     .description(
-      "Add an image (png, jpg, jpeg, webp, gif, svg) or video (mp4, webm, mov) file as a Media item, last at the root or in --group. The path is taken from this shell and stored relative to the Installation file's folder, so the Installation must be saved. With --bundled instead of a path, add a clip Difracta ships, by entry id or name (`media bundled` lists them); no save needed.",
+      "List the entries of every Pack (Bundled first, then the attached ones), or of one Pack by id or name: reference, path inside the Pack, type, size, length, Beats with the tempo they make, tags, and `missing` when the file is gone.",
     )
-    .option(
-      "--bundled <entry>",
-      "a Bundled Media entry, by id or name, instead of a file",
-    )
-    .option(
-      "--name <name>",
-      "the item's name; the file name without extension, or the entry's name, unless given",
-    )
-    .option(...GROUP_OPTION)
-    .action(
-      (
-        path: string | undefined,
-        local: { name?: string; group?: string; bundled?: string },
-      ) =>
-        cli.withDocument(async (client, summary) => {
-          const named = local.name === undefined ? {} : { name: local.name };
-          if (local.bundled !== undefined) {
-            if (path !== undefined)
-              throw new Error(
-                "Give a file path or --bundled <entry>, not both.",
-              );
-            const entry = resolveBundled(
-              await fetchCatalog(client),
-              local.bundled,
-            );
-            await create(
-              client,
-              summary,
-              { kind: "bundled", bundled: entry, ...named },
-              local.group,
-              [`Shows Bundled Media ${entry}.`],
-            );
-            return;
-          }
-          if (path === undefined)
-            throw new Error(
-              "Give the file to add, or --bundled <entry> for a clip Difracta ships.",
-            );
-          const stored = storedMediaPath(summary, path);
-          await create(
-            client,
-            summary,
-            { path: stored, ...named },
-            local.group,
-            [`Stored as ${stored}.`],
+    .action((pack: string | undefined) =>
+      cli.withDocument(async (client, summary) => {
+        const { document, view } = await cli.replica(client, summary.id);
+        const packs = view.liveState.get().packs;
+        if (pack === undefined) {
+          const groups = listingPacks(document, packs);
+          const items = groups.flatMap(({ packId, pack: live }) =>
+            live === undefined ? [] : listEntries(packId, live),
           );
-        }),
+          cli.print(items, () => formatPackEntries(groups));
+          return;
+        }
+        const packId = resolvePackId(document, packs, pack);
+        const live = packs[packId];
+        if (live === undefined)
+          throw new Error(
+            `Pack “${packId}” is not loaded by this runtime; \`difracta packs list\` says why.`,
+          );
+        const items = listEntries(packId, live);
+        cli.print(items, () => formatEntries(items));
+      }),
     );
 
   media
-    .command("group <name>")
+    .command("tag <entry> <tag...>")
     .description(
-      "Add a Media Group, a folder arranging Media items and other Groups, last at the root or in --group.",
+      "Add tags to an entry, or take them away with --remove. Tags are free-form words compared ignoring case; Difracta reads `loop` (a seamless loop), `hit` (a one-shot) and `recommended`. Written to the Pack's manifest; refused on a read-only Pack such as the Bundled Pack.",
     )
-    .option(...GROUP_OPTION)
-    .action((name: string, local: { group?: string }) =>
-      cli.withDocument((client, summary) =>
-        create(client, summary, { kind: "group", name }, local.group, []),
-      ),
+    .option("--remove", "take the tags away instead", false)
+    .action((typed: string, tags: string[], local: { remove: boolean }) =>
+      cli.withDocument(async (client, summary) => {
+        const { document, view } = await cli.replica(client, summary.id);
+        const { reference, packId, entry } = locate(
+          document,
+          view.liveState.get().packs,
+          typed,
+        );
+        const next = mergeTags(entry.tags, tags, local.remove);
+        const reply = await client.request<UpdateReply>("media.update", {
+          packId,
+          entryId: entry.id,
+          tags: next,
+        });
+        cli.print({ ...reply, reference, tags: next }, () =>
+          next.length === 0
+            ? `${reference} has no tags.`
+            : `${reference}: ${next.join(", ")}`,
+        );
+      }),
+    );
+
+  media
+    .command("beats <entry> <beats>")
+    .description(
+      "Set how many beats a video entry lasts (16 for a four-bar loop), or `none` to take them away; its tempo follows from its length. --first-beat says when the first beat falls, in seconds, when the clip starts off the beat. Written to the Pack's manifest; refused on a read-only Pack.",
+    )
+    .option("--first-beat <seconds>", "time of the first beat, in seconds")
+    .action((typed: string, beatsText: string, local: { firstBeat?: string }) =>
+      cli.withDocument(async (client, summary) => {
+        const { document, view } = await cli.replica(client, summary.id);
+        const { reference, packId, entry } = locate(
+          document,
+          view.liveState.get().packs,
+          typed,
+        );
+        const beats = parseBeats(beatsText);
+        const firstBeat =
+          local.firstBeat === undefined ? undefined : Number(local.firstBeat);
+        if (firstBeat !== undefined && !(firstBeat >= 0))
+          throw new Error(
+            `--first-beat is a time in seconds, zero or more; not “${local.firstBeat ?? ""}”.`,
+          );
+        const reply = await client.request<UpdateReply>("media.update", {
+          packId,
+          entryId: entry.id,
+          beats,
+          ...(firstBeat === undefined || beats === null ? {} : { firstBeat }),
+        });
+        cli.print({ ...reply, reference, beats, firstBeat }, () =>
+          beats === null
+            ? `${reference} has no Beats.`
+            : `${reference}: ${String(beats)} beats${firstBeat === undefined || firstBeat === 0 ? "" : ` from ${String(firstBeat)} s`}${entry.duration === undefined ? "" : `, ${String(Math.round(((beats * 60) / entry.duration) * 10) / 10)} BPM`}`,
+        );
+      }),
+    );
+
+  media
+    .command("thumbnail <entry> <seconds>")
+    .description(
+      "Take a video entry's thumbnail from the frame at that time, in seconds; the runtime bakes it again. Refused on a read-only Pack.",
+    )
+    .action((typed: string, secondsText: string) =>
+      cli.withDocument(async (client, summary) => {
+        const { document, view } = await cli.replica(client, summary.id);
+        const { reference, packId, entry } = locate(
+          document,
+          view.liveState.get().packs,
+          typed,
+        );
+        const thumbnailAt = Number(secondsText);
+        if (!(thumbnailAt >= 0))
+          throw new Error(
+            `The thumbnail's time is in seconds, zero or more; not “${secondsText}”.`,
+          );
+        const reply = await client.request<UpdateReply>("media.update", {
+          packId,
+          entryId: entry.id,
+          thumbnailAt,
+        });
+        cli.print(
+          { ...reply, reference, thumbnailAt },
+          () =>
+            `${reference}: thumbnail at ${String(thumbnailAt)} s; it is baked again shortly.`,
+        );
+      }),
+    );
+
+  media
+    .command("rename <entry> <name>")
+    .description(
+      "Rename an entry in its Pack's manifest; the reference (`<pack>/<entry>`) and the file do not change. Refused on a read-only Pack.",
+    )
+    .action((typed: string, name: string) =>
+      cli.withDocument(async (client, summary) => {
+        const { document, view } = await cli.replica(client, summary.id);
+        const { reference, packId, entry } = locate(
+          document,
+          view.liveState.get().packs,
+          typed,
+        );
+        const reply = await client.request<UpdateReply>("media.update", {
+          packId,
+          entryId: entry.id,
+          name,
+        });
+        cli.print(
+          { ...reply, reference, name },
+          () => `${reference} is now called “${name}”.`,
+        );
+      }),
+    );
+
+  media
+    .command("replace <from> <to>")
+    .description(
+      "Swap one Media reference for another everywhere it is used: every Layer Parameter and Macro action holding `from` is set to `to`. Both are Pack entries, or both Screen Shares (by id or name). Undoable. The entry `to` names need not be loaded here: a reference into a missing Pack is kept and reads as missing.",
+    )
+    .action((fromTyped: string, toTyped: string) =>
+      cli.withDocument(async (client, summary) => {
+        const { document, view } = await cli.replica(client, summary.id);
+        const packs = view.liveState.get().packs;
+        // A slash makes it a Pack entry; otherwise a Screen Share by name or id.
+        const asReference = (typed: string): string =>
+          typed.includes("/")
+            ? resolveMediaReference(document, packs, typed)
+            : (findId(document, "shares", typed) ?? typed);
+        const from = asReference(fromTyped);
+        const to = asReference(toTyped);
+        const result = await client.command<CommandResult>(
+          summary.id,
+          "media.replace",
+          { from, to },
+        );
+        cli.print({ from, to, ...result }, () =>
+          result.changed
+            ? `Replaced ${from} with ${to} (revision ${String(result.revision)}).`
+            : `Nothing uses ${from}.`,
+        );
+      }),
     );
 
   media
     .command("screen-share [name]")
     .description(
-      "Add a Screen Share, a slot a Difracta Desktop shares a screen or window into, last at the root or in --group; named Screen Share unless a name is given. A share starts only from the Sharer's own Desktop; `share list` shows who shares into each, `share stop` stops one.",
+      "Add a Screen Share, a slot a Difracta Desktop shares a screen or window into, named Screen Share unless a name is given. A share starts only from the Sharer's own Desktop; `share list` shows who shares into each, `share stop` stops one.",
     )
-    .option(...GROUP_OPTION)
-    .action((name: string | undefined, local: { group?: string }) =>
-      cli.withDocument((client, summary) =>
-        create(
-          client,
-          summary,
-          { kind: "share", ...(name === undefined ? {} : { name }) },
-          local.group,
-          [],
-        ),
-      ),
-    );
-
-  media
-    .command("list")
-    .description(
-      "List the Media items in navigator order, indented by Group: name, id, kind (file, bundled, share or group), type (image, video, or live for a Screen Share), status (ok, missing, outside the Installation's folder, unsaved while the Installation has no file, or unavailable for a bundled clip this runtime lacks; for a Screen Share idle, live or interrupted), the file's path or the bundled entry's id, and the beats of a video that has them.",
-    )
-    .action(() =>
+    .action((name: string | undefined) =>
       cli.withDocument(async (client, summary) => {
-        const { document, view } = await cli.replica(client, summary.id);
-        const items = listMedia(
-          document,
-          view.liveState.get().media,
-          await fetchCatalog(client),
-        );
-        cli.print(items, () => formatMedia(items));
-      }),
-    );
-
-  media
-    .command("beats <media> <beats>")
-    .description(
-      "Say how many beats a video Media file lasts, by name or id: 16 for a four-bar loop, so a 7.5 second loop is at 128 BPM. A Video with Sync to Tempo on then plays it at the Tempo it is given and chases the beat Cue. `none` removes them. Bundled items have theirs already (`media bundled`).",
-    )
-    .option(
-      "--first-beat <seconds>",
-      "the time of the clip's first beat, when it does not start on one; kept as it is unless given",
-    )
-    .action((reference: string, beats: string, local: { firstBeat?: string }) =>
-      cli.withDocument(async (client, summary) => {
-        const { document } = await cli.replica(client, summary.id);
-        const payload = beatsPayload(
-          resolveId(document, "media", reference),
-          beats,
-          local.firstBeat,
-        );
-        const result = await client.command<CommandResult>(
+        const { view } = await cli.replica(client, summary.id);
+        const payload = name === undefined ? {} : { name };
+        const reply = await client.command<CommandResult>(
           summary.id,
-          "media.beats",
+          "share.create",
           payload,
         );
+        const result: NamedResult =
+          reply.created === undefined
+            ? reply
+            : {
+                ...reply,
+                created: nameCreated(
+                  await cli.caughtUp(view, reply.revision),
+                  reply.created,
+                ),
+              };
         cli.print({ ...payload, ...result }, () =>
-          formatCommandResult(result, "media.beats"),
+          formatCommandResult(result, "share.create"),
         );
       }),
     );
-
-  registerMediaBundled(media, cli);
 }

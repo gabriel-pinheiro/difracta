@@ -10,7 +10,7 @@ import type { WebSocket } from "ws";
 
 import { DocumentStore } from "../documents/document-store.ts";
 import { buildRuntime } from "../server.ts";
-import { documentsModeFor } from "./documents-mode.ts";
+import { documentsModeFor, pinnedRefusal } from "./documents-mode.ts";
 import { FakeSocket } from "./fake-socket.ts";
 import { LiveServer } from "./live-server.ts";
 
@@ -35,7 +35,6 @@ async function connect(mode: DocumentsMode, remoteAddress: string | undefined) {
   const live = new LiveServer({
     store,
     catalog: emptyCatalog,
-    bundledDir: "",
     runtimeName: "test",
     runtimeVersion: "0",
     documents: mode,
@@ -137,6 +136,43 @@ describe("document modes", () => {
     live.close();
   });
 
+  it("names folders only for loopback peers of a free runtime: packs.add and packs.locate are refused, the other Pack requests not", async () => {
+    const store = new DocumentStore({
+      registry: createBuiltInRegistry(builtInCatalog),
+    });
+    for (const name of ["packs.add", "packs.locate"])
+      expect(pinnedRefusal(store, name, {})).toContain("--documents free");
+    for (const name of [
+      "packs.known",
+      "packs.rescan",
+      "packs.rename",
+      "media.update",
+    ])
+      expect(pinnedRefusal(store, name, {})).toBeUndefined();
+    const pinned = await connect("pinned", "127.0.0.1");
+    const refused = await pinned.request("packs.add", { folder: dir });
+    expect(refused.ok).toBe(false);
+    expect(!refused.ok && refused.error).toContain(
+      "folder on the runtime's disk",
+    );
+    const remote = await connect("free", "192.168.1.20");
+    expect(
+      (
+        await remote.request("packs.locate", {
+          packId: "neon-aaaa",
+          folder: dir,
+        })
+      ).ok,
+    ).toBe(false);
+    // Without a Pack store these runtimes have no Packs to list, but the request itself is allowed.
+    expect(await remote.request("packs.known", {})).toEqual({
+      ok: true,
+      result: [],
+    });
+    pinned.live.close();
+    remote.live.close();
+  });
+
   it("a free runtime treats a peer from elsewhere as pinned", async () => {
     const { live, socket, request, documentId } = await connect(
       "free",
@@ -166,7 +202,9 @@ describe("document modes", () => {
       autosaveIntervalMs: 60_000,
       oscPort: undefined,
       discovery: false,
-      mediaAnywhere: false,
+      packs: [],
+      packsFile: undefined,
+      packsCacheDir: undefined,
     });
     const address = await runtime.listen();
     expect(runtime.store.current()).toMatchObject({
@@ -210,7 +248,9 @@ describe("document modes", () => {
       autosaveIntervalMs: 60_000,
       oscPort: undefined,
       discovery: false,
-      mediaAnywhere: false,
+      packs: [],
+      packsFile: undefined,
+      packsCacheDir: undefined,
     });
     await expect(runtime.listen()).rejects.toThrow(/broken\.difracta/);
     await runtime.close();

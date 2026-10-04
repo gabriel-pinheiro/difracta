@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { Catalog, Definition } from "../catalog/catalog.ts";
+import type { Definition } from "../catalog/catalog.ts";
 import {
   defaultParameterValues,
   ParameterValuesSchema,
@@ -70,7 +70,7 @@ function pick(
   if (next !== undefined) {
     const problem =
       validateParameterValues(next.parameters, parameters) ??
-      mediaValuesProblem(document, catalog, next, parameters);
+      mediaValuesProblem(document, next, parameters);
     if (problem !== undefined)
       return rejected(`${problem} ${catalogHint(next.id)}`);
   } else if (Object.keys(parameters).length > 0) {
@@ -149,10 +149,9 @@ function pick(
   return accepted(patches);
 }
 
-/** A media Parameter's value must be an existing file of the type it accepts; the schema alone cannot tell. */
+/** A media Parameter's value must be a Media reference of the shape it accepts; the schema alone cannot tell. */
 function mediaValuesProblem(
   document: CommandContext<unknown>["document"],
-  catalog: Catalog,
   definition: Definition,
   values: ParameterValues,
 ): string | undefined {
@@ -160,7 +159,6 @@ function mediaValuesProblem(
     if (parameter.kind !== "media") continue;
     const problem = mediaValueProblem(
       document,
-      catalog,
       parameter.accepts,
       values[name],
     );

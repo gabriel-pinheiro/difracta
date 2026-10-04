@@ -7,19 +7,16 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { resolveId } from "../names.ts";
-import { formatMedia, listMedia } from "./media.ts";
 import { elapsed, formatShares, listShares } from "./share.ts";
 
 const registry = createBuiltInRegistry();
 
-/** Slides at the root, a logo, and Stage { Camera } in a Group. */
+/** Slides, then a Screen Share with the default name. */
 function stage(): Document {
   let document = emptyDocument("Living");
   for (const [name, payload] of [
-    ["media.create", { id: "m_slides", kind: "share", name: "Slides" }],
-    ["media.create", { id: "m_logo", path: "logo.png" }],
-    ["media.create", { id: "g_stage", kind: "group", name: "Stage" }],
-    ["media.create", { id: "m_cam", kind: "share", parentId: "g_stage" }],
+    ["share.create", { id: "m_slides", name: "Slides" }],
+    ["share.create", { id: "m_cam" }],
   ] as const) {
     const result = executeCommand(registry, document, name, payload);
     if (!result.ok) throw new Error(result.error);
@@ -29,7 +26,6 @@ function stage(): Document {
 }
 
 const live = {
-  m_logo: { status: "ok" },
   m_slides: {
     status: "live",
     sharer: "Laptop",
@@ -78,26 +74,6 @@ describe("share list", () => {
   });
 
   it("finds a Screen Share by name for share stop", () => {
-    expect(resolveId(stage(), "media", "slides")).toBe("m_slides");
-  });
-});
-
-describe("media list with Screen Shares", () => {
-  it("shows a Screen Share's kind, type and status", () => {
-    const items = listMedia(stage(), live);
-    expect(items[0]).toMatchObject({
-      kind: "share",
-      type: "live",
-      status: "live",
-      path: null,
-      bundled: null,
-      beats: null,
-    });
-    expect(formatMedia(items).split("\n")).toEqual([
-      "Slides          m_slides  share  live   live",
-      "logo            m_logo    file   image  ok    logo.png",
-      "Stage           g_stage   group",
-      "  Screen Share  m_cam     share  live   idle",
-    ]);
+    expect(resolveId(stage(), "shares", "slides")).toBe("m_slides");
   });
 });

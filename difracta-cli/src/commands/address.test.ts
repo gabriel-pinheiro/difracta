@@ -7,6 +7,7 @@ import {
 } from "@difracta/core";
 import { describe, expect, it } from "vitest";
 
+import { packs } from "../media-fixtures.ts";
 import { firedDetail, writtenValue } from "./address.ts";
 
 describe("firedDetail", () => {
@@ -86,6 +87,7 @@ describe("writtenValue", () => {
           title: { kind: "text", label: "Title", default: "Text" },
           size: { kind: "number", label: "Size", default: 1, min: 0, max: 4 },
           logo: { kind: "media", label: "Logo", accepts: "image", default: "" },
+          feed: { kind: "media", label: "Feed", accepts: "live", default: "" },
         },
       },
     ],
@@ -100,7 +102,7 @@ describe("writtenValue", () => {
       ["layer.visual", { layerId: "a", visual: "caption" }],
       ["controller.create", { id: "words", kind: "text", name: "Words" }],
       ["controller.create", { id: "energy", kind: "number", name: "Energy" }],
-      ["media.create", { id: "m", kind: "file", name: "Logo", path: "l.png" }],
+      ["share.create", { id: "m", name: "Laptop" }],
     ] as const) {
       const result = executeCommand(registry, document, name, payload);
       if (!result.ok) throw new Error(result.error);
@@ -118,7 +120,7 @@ describe("writtenValue", () => {
     expect(writtenValue(document, catalog, title, "42")).toBe("42");
     expect(writtenValue(document, catalog, title, "true")).toBe("true");
     expect(writtenValue(document, catalog, title, "")).toBe("");
-    expect(writtenValue(document, catalog, title, "Logo")).toBe("Logo");
+    expect(writtenValue(document, catalog, title, "Laptop")).toBe("Laptop");
     // A Controller's type needs no Catalog.
     const words = "controller/words/value";
     expect(writtenValue(document, undefined, words, "2026")).toBe("2026");
@@ -130,12 +132,36 @@ describe("writtenValue", () => {
     );
   });
 
-  it("reads any other value by its looks, a Media item's name becoming its id", () => {
+  it("reads any other value by its looks, a Screen Share's name becoming its id and a Pack entry reference resolved against the loaded Packs", () => {
     const document = stage();
     expect(writtenValue(document, catalog, "layer/a/param/size", "2")).toBe(2);
-    expect(writtenValue(document, catalog, "layer/a/param/logo", "Logo")).toBe(
-      "m",
-    );
+    expect(
+      writtenValue(document, catalog, "layer/a/param/feed", "Laptop"),
+    ).toBe("m");
+    expect(
+      writtenValue(document, catalog, "layer/a/param/logo", "bundled/beam"),
+    ).toBe("bundled/beam");
+    expect(
+      writtenValue(document, catalog, "layer/a/param/logo", "Laptop"),
+    ).toBe("Laptop");
+    expect(
+      writtenValue(
+        document,
+        catalog,
+        "layer/a/param/logo",
+        "Bundled/clips/beam-scan-loop.webm",
+        packs,
+      ),
+    ).toBe("bundled/beam-scan-loop");
+    expect(() =>
+      writtenValue(
+        document,
+        catalog,
+        "layer/a/param/logo",
+        "Neon/tunnels/04",
+        packs,
+      ),
+    ).toThrow("matches 2 entries of Pack Neon (neon-k7f3)");
     expect(writtenValue(document, undefined, "layer/a/enabled", "false")).toBe(
       false,
     );

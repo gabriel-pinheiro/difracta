@@ -9,7 +9,6 @@ import path from "node:path";
 
 import { channels } from "./bridge-contract.ts";
 import { isFromOrigin } from "./local-origin.ts";
-import { mediaDialogFilters } from "./media-dialog.ts";
 
 const filters = [{ name: "Difracta Installation", extensions: ["difracta"] }];
 
@@ -52,16 +51,15 @@ export async function pickSavePath(
   return canceled || filePath === "" ? null : filePath;
 }
 
-/** An image or video for a Media item; the dialog starts where the Installation is. */
-export async function pickMediaPath(
+/** A folder of images and videos to make a Pack; the dialog starts where the Installation is. */
+export async function pickPackFolder(
   window: BrowserWindow,
   currentFile: string | undefined,
 ): Promise<string | null> {
   const { canceled, filePaths } = await dialog.showOpenDialog(window, {
-    title: "Add Media",
+    title: "Add Pack",
     defaultPath: startingFolder(currentFile),
-    filters: mediaDialogFilters(),
-    properties: ["openFile"],
+    properties: ["openDirectory", "createDirectory"],
   });
   return canceled ? null : (filePaths[0] ?? null);
 }
@@ -93,11 +91,11 @@ export function registerFileDialogs(options: {
       ? null
       : pickOpenPath(window, options.currentFile());
   });
-  ipcMain.handle(channels.pickMediaPath, (event) => {
+  ipcMain.handle(channels.pickPackFolder, (event) => {
     const window = trusted(event);
     return window === undefined
       ? null
-      : pickMediaPath(window, options.currentFile());
+      : pickPackFolder(window, options.currentFile());
   });
   ipcMain.handle(channels.pickSavePath, (event, suggestedName: unknown) => {
     const window = trusted(event);

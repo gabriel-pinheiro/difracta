@@ -59,8 +59,7 @@ function installation(): Document {
     name: "Corner",
   });
   for (const id of ["m_laptop", "m_booth"])
-    document = run(document, "media.create", { id, kind: "share", name: id });
-  document = run(document, "media.create", { id: "m_logo", path: "logo.png" });
+    document = run(document, "share.create", { id, name: id });
   document = run(document, "scene.create", { id: "sc_one", name: "One" });
   document = run(document, "scene.create", { id: "sc_two", name: "Two" });
   return run(document, "scene.play", { sceneId: "sc_one" });
@@ -139,7 +138,7 @@ describe("The Screen Shares an Output views", () => {
     let document = installation();
     document = layer(document, "l_logo", {
       visual: "picture",
-      media: "m_logo",
+      media: "bundled/logo",
     });
     expect(ids(document)).toEqual([]);
     const idle = emptyDocument("Empty");

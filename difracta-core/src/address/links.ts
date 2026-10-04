@@ -171,7 +171,7 @@ export function linkProblem(
 ): string | undefined {
   if (controller.kind === "group") return "A Group has no value to link.";
   if (resolved.type === "media")
-    return `“${resolved.label}” picks a Media item; it cannot be linked to a Controller.`;
+    return `“${resolved.label}” picks Media; it cannot be linked to a Controller.`;
   if (!linkable(resolved, controller.kind))
     return `“${resolved.label}” cannot be driven by a ${CONTROLLER_LABELS[controller.kind]}.`;
   return undefined;

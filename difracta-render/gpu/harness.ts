@@ -31,7 +31,7 @@ export interface Frame {
 
 export interface Renderer {
   /**
-   * With `media` (data URLs by Media item id) or `fonts` (data URLs by a
+   * With `media` (data URLs by Media reference) or `fonts` (data URLs by a
    * Bundled Font's file name) the frames are paced by the browser and wait
    * for a first draw, and so with `shares` (a picture's data URL by Screen
    * Share id), each shared from inside the page.

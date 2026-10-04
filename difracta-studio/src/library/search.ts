@@ -7,7 +7,7 @@ import { hasCues, usesPath, type Definition } from "@difracta/core";
  * name merely containing its letters in order, and any name match beats a
  * description with a word starting with the query. Letters in order are
  * only tried on names: over a description they match nearly everything.
- * Bundled Media searches its notes too, after descriptions.
+ * The notes are searched too when asked, after descriptions.
  * Recommended entries break ties, then the name. Without a query the
  * recommended entries come first, then names.
  */
@@ -56,7 +56,7 @@ export function matchTier(
   return undefined;
 }
 
-/** What ranking reads of a Catalog entry: a Visual, a Filter or a Bundled Media entry. */
+/** What ranking reads of a Catalog entry: a Visual or a Filter. */
 export interface Rankable {
   readonly id: string;
   readonly name: string;

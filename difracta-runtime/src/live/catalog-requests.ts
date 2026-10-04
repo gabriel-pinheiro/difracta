@@ -4,7 +4,7 @@ import type { RequestHandlers } from "./runtime-requests.ts";
 
 /**
  * `catalog.list`: what this runtime can render, as metadata: its Visuals,
- * Filters, Bundled Media and Bundled Fonts. Definitions carry their implementation: JSON
+ * Filters and Bundled Fonts. Definitions carry their implementation: JSON
  * drops the functions, and a Filter's shader source is left out here.
  */
 export function catalogRequests(
@@ -20,7 +20,6 @@ export function catalogRequests(
             filter as FilterDefinition & { fragment?: unknown };
           return metadata;
         }),
-        media: catalog.media(),
         fonts: catalog.fonts(),
       },
     }),

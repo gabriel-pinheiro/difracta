@@ -14,13 +14,15 @@ import { pinnedRefusal } from "./documents-mode.ts";
 export type RequestHandlers<TName extends RuntimeRequestName> = {
   readonly [TKey in TName]: (
     payload: RuntimeRequestPayload<TKey>,
+    session: ClientSession,
   ) => ReplyOutcome | Promise<ReplyOutcome>;
 };
 
 /**
  * Answers a `request`: the payload is checked against the request's schema
  * in `@difracta/protocol`, a pinned connection is refused what its mode
- * forbids, and the request's handler does the rest. A handler that throws
+ * forbids, and the request's handler does the rest with the payload and the
+ * connection it came from. A handler that throws
  * becomes a failed reply. Each feature brings its own handlers
  * (`document-requests.ts`, `catalog-requests.ts`, `display-requests.ts`);
  * the table's type makes a request without one a compile error.
@@ -70,9 +72,10 @@ export class RuntimeRequests {
     }
     const handler = this.#handlers[known] as (
       payload: unknown,
+      session: ClientSession,
     ) => ReplyOutcome | Promise<ReplyOutcome>;
     void Promise.resolve(parsed.data)
-      .then(handler)
+      .then((payload) => handler(payload, session))
       .catch((error: unknown): ReplyOutcome => ({
         ok: false,
         error: error instanceof Error ? error.message : String(error),

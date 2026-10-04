@@ -9,22 +9,28 @@ import {
 import { FrameCanvas } from "./frame-canvas.ts";
 import { chooseOutput } from "./output-choice.ts";
 
+/** Where the loaded Packs sit in the view: the one section of the live state this page asks for. */
+const PACKS_PATH = ["live", "packs"];
+
 interface OutputPageOptions {
   readonly client: DifractaClient;
   readonly canvas: HTMLCanvasElement;
   readonly overlay: HTMLDivElement;
   /** The `?output=` value: an Output id or name, or null to pick one. */
   readonly output: string | null;
-  /** Where a Media item's file is fetched from, by id, on the runtime this page talks to. */
-  readonly mediaUrl: (id: string) => string;
+  /** Where a Media reference's file is fetched from, on the runtime this page talks to. */
+  readonly mediaUrl: (reference: string) => string;
   /** Where a Bundled Font's file is fetched from, by file name, on the same runtime. */
   readonly fontUrl: (file: string) => string;
 }
 
 /**
  * One Output: waits for the runtime's open Installation to contain the
- * Output its `?output=` id or name picks, subscribes to the document (without live state, which this page
- * never needs), attaches as an Output Session and drives the frame. Without
+ * Output its `?output=` id or name picks, subscribes to the document with
+ * the `packs` section of the live state and nothing else of it (the Packs
+ * say which entries the Layers can load, and an edit to an entry's beats
+ * reaches a playing clip through them), attaches as an Output Session and
+ * drives the frame. Without
  * an id it lists every Output of the Installation so a display can be paired
  * by clicking, and it lists them under the message too when the value names
  * no Output or several. Everything shown is built as DOM nodes and text,
@@ -110,8 +116,12 @@ export class OutputPage {
     this.#outputId = outputId;
     if (this.#view?.documentId !== summary.id) {
       this.#detach();
-      const view = client.openDocument(summary.id);
+      const view = client.openDocument(summary.id, { live: ["packs"] });
       this.#view = view;
+      const packs = (): void => {
+        this.#frame.setPacks(view.valueAt(PACKS_PATH) ?? {});
+      };
+      const unsubscribePacks = view.subscribePath(PACKS_PATH, packs);
       const unsubscribeRender = view.subscribePath([], () => this.#render());
       const unsubscribeEvents = view.subscribeEvents((address) => {
         const [entity, layerId, field, key] = address.split("/");
@@ -119,9 +129,11 @@ export class OutputPage {
           this.#frame.trigger(layerId, key);
       });
       this.#unsubscribeView = () => {
+        unsubscribePacks();
         unsubscribeRender();
         unsubscribeEvents();
       };
+      packs();
       this.#render();
     } else if (moved) this.#render();
     client.attach(outputId);

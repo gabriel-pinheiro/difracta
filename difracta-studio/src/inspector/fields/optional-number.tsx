@@ -14,6 +14,7 @@ export function OptionalNumber({
   placeholder,
   accepts = (number) => number > 0,
   className,
+  disabled,
   onCommit,
 }: {
   /** What a screen reader says the field is. */
@@ -23,6 +24,8 @@ export function OptionalNumber({
   readonly placeholder: string;
   readonly accepts?: (value: number) => boolean;
   readonly className?: string;
+  /** Why the field is off, shown on hover; undefined when it is on. */
+  readonly disabled?: string | undefined;
   readonly onCommit: (value: number | undefined) => void;
 }) {
   const shown = value === undefined ? "" : String(value);
@@ -48,6 +51,8 @@ export function OptionalNumber({
     <Input
       aria-label={label}
       placeholder={placeholder}
+      title={disabled}
+      disabled={disabled !== undefined}
       inputMode="decimal"
       className={cn(
         "h-5 min-w-0 flex-1 px-1 text-right text-[0.6875rem] tabular-nums",

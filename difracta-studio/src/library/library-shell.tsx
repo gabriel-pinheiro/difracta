@@ -34,12 +34,12 @@ export function LibraryShell<TEntry extends { readonly id: string }>({
   readonly query: string;
   readonly onQuery: (query: string) => void;
   readonly facets: ReactNode;
-  readonly description: ReactNode;
+  readonly description?: ReactNode;
   /** The ranked entries, in grid order. */
   readonly entries: readonly TEntry[];
   readonly currentId: string | null;
-  /** Shown when nothing matches, before the reset link. */
-  readonly empty: string;
+  /** Shown when nothing matches, before the reset link; a node replaces both. */
+  readonly empty: ReactNode;
   readonly onApply: (id: string) => void;
   /** Enter, with the tile that had keyboard focus if one did. */
   readonly onEnter: (focusedId: string | undefined) => void;
@@ -157,16 +157,20 @@ export function LibraryShell<TEntry extends { readonly id: string }>({
       </div>
       {description}
       {entries.length === 0 ? (
-        <p className="p-3 text-muted-foreground">
-          {empty}{" "}
-          <button
-            type="button"
-            className="underline underline-offset-2 hover:text-foreground"
-            onClick={reset}
-          >
-            Reset the search and facets
-          </button>
-        </p>
+        typeof empty === "string" ? (
+          <p className="flex-1 p-3 text-muted-foreground">
+            {empty}{" "}
+            <button
+              type="button"
+              className="underline underline-offset-2 hover:text-foreground"
+              onClick={reset}
+            >
+              Reset the search and facets
+            </button>
+          </p>
+        ) : (
+          <div className="min-h-0 flex-1 overflow-auto">{empty}</div>
+        )
       ) : (
         <div
           ref={gridRef}

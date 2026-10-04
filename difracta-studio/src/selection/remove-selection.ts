@@ -33,6 +33,7 @@ export function removableEntity(
 ): Removable {
   if (document === undefined) return { state: "none" };
   const { removal } = entities[kind];
+  if (removal === undefined) return { state: "none" };
   const entity = removal.find(document, id);
   if (entity === undefined) return { state: "none" };
   const reason = removal.refusal?.(document, id);
@@ -54,51 +55,73 @@ export function removableSelection(
  * row's context menu. It runs the kind's own remove command without asking,
  * since Ctrl+Z brings it back, says so in a quiet toast, and selects the row
  * that was next to it, or with none left, focuses the section's header. A
- * refusal, such as the active Scene's, is said instead.
+ * refusal, such as the active Scene's, is said instead; a kind whose
+ * removal asks first, such as a Pack's, gets its question.
  */
 export function useRemoveEntity(): (kind: EntityKind, id: string) => void {
   const client = useClient();
-  const { view } = useDocumentCommands();
+  const { view, confirm } = useDocumentCommands();
   const { select } = useSelection();
   return useCallback(
     (kind, id) => {
       if (view === undefined) return;
-      const target = removableEntity(view.get(), kind, id);
+      const document = view.get();
+      const target = removableEntity(document, kind, id);
       if (target.state === "refused") {
         toast.message(target.reason);
         return;
       }
       if (target.state !== "ready") return;
       const { removal } = entities[kind];
-      const neighbour = neighbourRow(id);
-      const header = sectionHeader(id);
-      client
-        .command<CommandResult>(
-          view.documentId,
-          removal.command,
-          removal.payload(id),
-        )
-        .then(
-          (result) => {
-            toast.message(
-              `Removed ${removal.noun} “${target.name}”. ${shortcuts.undo.label} undoes.`,
-            );
-            showWarnings(result.warnings ?? []);
-            if (neighbour !== undefined) {
-              selectNavigatorRow(neighbour);
-              return;
-            }
-            select(undefined);
-            requestAnimationFrame(() => header?.focus());
-          },
-          (failure: unknown) => {
-            toast.error(
-              failure instanceof Error ? failure.message : String(failure),
-            );
-          },
-        );
+      if (removal === undefined) return;
+      // Named apart, so `remove` below, a hoisted function, sees it defined.
+      const action = removal;
+      const question =
+        document === undefined ? undefined : removal.confirm?.(document, id);
+      if (question !== undefined) {
+        confirm({
+          title: `Remove “${target.name}”?`,
+          description: question,
+          actionLabel: "Remove",
+          onConfirm: () => remove(),
+        });
+        return;
+      }
+      remove();
+
+      function remove(): void {
+        if (view === undefined) return;
+        const neighbour = neighbourRow(id);
+        const header = sectionHeader(id);
+        client
+          .command<CommandResult>(
+            view.documentId,
+            action.command,
+            action.payload(id),
+          )
+          .then(
+            (result) => {
+              if (target.state === "ready")
+                toast.message(
+                  `Removed ${action.noun} “${target.name}”. ${shortcuts.undo.label} undoes.`,
+                );
+              showWarnings(result.warnings ?? []);
+              if (neighbour !== undefined) {
+                selectNavigatorRow(neighbour);
+                return;
+              }
+              select(undefined);
+              requestAnimationFrame(() => header?.focus());
+            },
+            (failure: unknown) => {
+              toast.error(
+                failure instanceof Error ? failure.message : String(failure),
+              );
+            },
+          );
+      }
     },
-    [client, view, select],
+    [client, view, confirm, select],
   );
 }
 

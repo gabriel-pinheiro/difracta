@@ -1,4 +1,4 @@
-import type { Media, Table } from "@difracta/core";
+import type { Share, Table } from "@difracta/core";
 
 import type { LiveViewerOptions } from "./live-peer.ts";
 import { LiveViewer, type ShareCount } from "./live-viewer.ts";
@@ -11,7 +11,7 @@ import type { MediaLive } from "./sdk/media.ts";
  * none any more.
  */
 export interface LiveSource {
-  sync(wanted: ReadonlySet<string>, media: Table<Media>): void;
+  sync(wanted: ReadonlySet<string>, shares: Table<Share>): void;
   live(id: string): MediaLive | undefined;
   shares(): ShareCount;
   dispose(): void;
@@ -39,7 +39,7 @@ export class SharedViewer {
   readonly #viewer: LiveViewer;
   readonly #claims = new Map<object, ReadonlySet<string>>();
   #wanted: ReadonlySet<string> = NONE;
-  #media: Table<Media> = {};
+  #shares: Table<Share> = {};
   #disposed = false;
 
   constructor(options: LiveViewerOptions = {}) {
@@ -59,17 +59,20 @@ export class SharedViewer {
   claim(): ViewerClaim {
     const key = {};
     this.#claims.set(key, NONE);
-    const set = (wanted: ReadonlySet<string>, media?: Table<Media>): void => {
+    const set = (wanted: ReadonlySet<string>, shares?: Table<Share>): void => {
       if (!this.#claims.has(key)) return;
       const before = this.#claims.get(key);
-      if (before === wanted && (media === undefined || media === this.#media))
+      if (
+        before === wanted &&
+        (shares === undefined || shares === this.#shares)
+      )
         return;
       this.#claims.set(key, wanted);
-      if (media !== undefined) this.#media = media;
+      if (shares !== undefined) this.#shares = shares;
       this.#update();
     };
     return {
-      sync: (wanted, media) => set(wanted, media),
+      sync: (wanted, shares) => set(wanted, shares),
       pause: () => set(NONE),
       live: (id) => this.#viewer.live(id),
       shares: () => this.#viewer.shares(),
@@ -98,7 +101,7 @@ export class SharedViewer {
       for (const id of wanted) union.add(id);
     // The same slots keep their set, so the Viewer sees no change.
     if (!same(union, this.#wanted)) this.#wanted = union;
-    this.#viewer.sync(this.#wanted, this.#media);
+    this.#viewer.sync(this.#wanted, this.#shares);
   }
 }
 

@@ -25,8 +25,8 @@ import { requestFilePath } from "./file-path-request";
 /**
  * Every document-level action Studio exposes (menu items, shortcuts): new,
  * open, save, save as, revert, download a copy, replace from file, close,
- * undo, redo. Owns the dialogs those
- * actions need and reports failures as toasts. The runtime holds one
+ * undo, redo. Owns the dialogs those actions need, lends them to other
+ * features (`confirm`, `askName`) and reports failures as toasts. The runtime holds one
  * Installation; `selected` is its summary and `view` its live document,
  * opened with live state so the Outputs monitor sees sessions.
  *
@@ -50,6 +50,10 @@ export interface DocumentCommands {
   readonly close: () => void;
   readonly undo: () => void;
   readonly redo: () => void;
+  /** Asks a destructive yes/no question in the shared dialog, for actions outside this provider. */
+  readonly confirm: (request: ConfirmRequest) => void;
+  /** Asks for one line of text in the shared dialog: a typed path, a name. */
+  readonly askName: (request: NameRequest) => void;
 }
 
 const Context = createContext<DocumentCommands | undefined>(undefined);
@@ -233,6 +237,8 @@ export function DocumentCommandsProvider({
       },
       undo: () => history("undo"),
       redo: () => history("redo"),
+      confirm: (request) => setDialog({ kind: "confirm", request }),
+      askName: showNameDialog,
     };
   }, [client, selected, free]);
 

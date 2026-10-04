@@ -44,40 +44,44 @@ Working from a shell
              <display> <Output>" puts an Output on one, "displays hide <host>
              <display>" takes it off. Works from any machine.
 
-  Media      Images (png, jpg, jpeg, webp, gif, svg) and videos (mp4, webm,
-             mov) are Media items of kind file, stored by a path relative to
-             the Installation file's folder; their type, image or video,
-             comes from the extension. "media add <file> [--name N]
-             [--group G]" adds one from a path on this machine (the
-             Installation must be saved; ".." paths are fine, and served
-             only with the runtime's --media-anywhere). "media group <name>
-             [--group G]" adds a Media Group to arrange them; media.move and
-             media.ungroup rearrange. "media list" shows the tree with each
-             file's status: ok, missing, outside, unsaved (a Screen Share's:
-             idle, live, interrupted). A Visual's media
-             Parameter takes a file's id or name, or "" for none:
-             edit layer/Wall/param/media Logo. Names are unique within a
-             Group, so a name used in two Groups is ambiguous: give the id.
-             The runtime serves a file at GET /media/<id>.
-             Bundled Media are clips Difracta ships: "media bundled" lists
-             them (id, name, type, loop, hit, recommended, beats),
-             "catalog <id>" describes one, "media add --bundled <id|name>"
-             adds one as a Media item of kind bundled (no save needed), and
-             run media.bundled '{"mediaId":…,"bundled":…}' swaps its clip.
-             A video with a steady pulse has beats, how many it lasts, from
-             which its tempo follows: bundled loops have theirs, and
-             "media beats <media> 16" gives a file its own. Video's Sync to
-             Tempo plays such a clip at the Tempo it is given and chases the
-             beat Cue, so the pulse lands on the beat without a jump.
-             A Screen Share is a Media item of kind share, type live: a
-             slot a Difracta Desktop (the Sharer) shares a screen or window
-             into. "media screen-share [name] [--group G]" adds one; a share
+  Packs      A Pack is a folder of images and videos on the runtime's
+             machine, scanned once, with thumbnails and proxies baked into
+             its .difracta/ folder. "packs list" shows the Installation's:
+             the Bundled Pack (id "bundled", the clips Difracta ships,
+             attached to every Installation, read-only) and the attached
+             ones, each ok, preparing n/m, or missing. "packs add <folder>"
+             makes a folder a Pack and attaches it (from the runtime's own
+             machine only); "packs known" lists the Packs this machine
+             knows and "packs attach <pack>" attaches one from anywhere;
+             "packs detach", "packs locate <pack> <folder>" for a missing
+             one, "packs rescan" after files changed.
+
+  Media      An image or video is an entry of a Pack. A Visual's media
+             Parameter holds a Media reference, "<pack>/<entry>" by ids, or
+             "" for none; at this shell the Pack's name and the file's path
+             inside it work too: edit layer/Wall/param/media
+             bundled/beam-scan-loop, or Neon/tunnels/04.mp4. "media list
+             [pack]" prints every entry with its reference, path, size,
+             length, beats and tags. "media tag <entry> <tag…> [--remove]",
+             "media beats <entry> <beats|none> [--first-beat <s>]", "media
+             thumbnail <entry> <seconds>" and "media rename <entry> <name>"
+             edit an entry's metadata in its Pack's manifest (refused on the
+             Bundled Pack); "media replace <from> <to>" swaps a reference
+             everywhere it is used. Whether an entry exists and has its file
+             is live status: a reference into a Pack the machine lacks reads
+             as missing and the Layer waits. An entry with a steady pulse has
+             beats, how many it lasts, from which its tempo follows; Video's
+             Sync to Tempo plays such a clip at the Tempo it is given and
+             chases the beat Cue.
+             A Screen Share is a slot a Difracta Desktop (the Sharer) shares
+             a screen or window into; a Live Layer's media Parameter takes
+             its id or name. "media screen-share [name]" adds one; a share
              starts only from the Sharer's own Desktop. "share list" shows
              each slot's status (idle, live, interrupted), Sharer, screen or
-             window and Viewers; "share stop <media>" stops one.
+             window and Viewers; "share stop <share>" stops one.
 
-  Order      A create lands first in its Group (a Layer: on top; a Media
-             item: last). Pass "after": <sibling id|name> to place it below
+  Order      A create lands first in its Group (a Layer: on top; a Screen
+             Share: last). Pass "after": <sibling id|name> to place it below
              that sibling, or null for first; entity.move, layer.move and the
              others rearrange. A Layer's "parentId" is a Group, or, for a
              Filter Layer, a Visual Layer: nested there, the Filter treats

@@ -1,9 +1,9 @@
 import type { MediaBeats } from "@difracta/core";
 
 /**
- * How a Visual reaches the Installation's Media. The engine loads every
- * item of the open document ahead of use; an instance asks `media.get(id)`
- * for the shared picture, or `media.video(id)` for a playback of its own,
+ * How a Visual reaches Media. The engine loads every Pack entry the open
+ * document names ahead of use; an instance asks `media.get(reference)` for
+ * the shared picture, or `media.video(reference)` for a playback of its own,
  * and hands the handle back from `update` under `textures`, where the
  * engine binds it as `u_<name>` with `u_<name>_size`. A handle never
  * loads anything itself: `image` is null until the file is decoded, and
@@ -22,7 +22,7 @@ export type MediaImage =
   | OffscreenCanvas;
 
 export interface MediaHandle {
-  /** The Media item's id; a text picture's names what it shows. */
+  /** The Media reference; a text picture's names what it shows. */
   readonly id: string;
   /** What to upload, or null while loading, missing or before the first frame. */
   readonly image: MediaImage | null;
@@ -83,19 +83,18 @@ export interface MediaLive {
 export interface MediaContext {
   /**
    * The item's shared picture: an image once decoded, or a video's first
-   * frame; undefined when no item has this id (`""` included).
+   * frame; undefined when no entry has this reference (`""` included).
    */
   get(id: string): MediaHandle | undefined;
-  /** A playback of the video item, to dispose with the instance; undefined for anything else. */
+  /** A playback of the video entry, to dispose with the instance; undefined for anything else. */
   video(id: string): MediaVideo | undefined;
   /**
-   * The item's beats as they are now, a file's own or its Bundled Media
-   * entry's; undefined for an item without them. Asked every frame, so a
-   * change reaches a clip that is playing.
+   * The entry's beats as they are now; undefined for one without them.
+   * Asked every frame, so a change reaches a clip that is playing.
    */
   beats(id: string): MediaBeats | undefined;
   /**
-   * The Screen Share item as this Output receives it; undefined for
+   * The Screen Share as this Output receives it; undefined for
    * anything else, and where nothing views shares, as in a Preview.
    */
   live(id: string): MediaLive | undefined;

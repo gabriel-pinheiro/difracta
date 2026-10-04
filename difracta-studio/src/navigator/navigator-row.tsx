@@ -17,6 +17,8 @@ export interface CreateItem {
   readonly onSelect: () => void;
   /** Why the entry cannot be used now; the entry shows disabled with this on hover. */
   readonly disabled?: string | undefined;
+  /** Entries of a submenu under this one; `onSelect` is then not called. */
+  readonly items?: readonly CreateItem[] | undefined;
 }
 
 /** Left edge of a row's content at `depth`, leaving room for the chevron slot on nested rows. */
@@ -37,6 +39,7 @@ export function NavigatorRow({
   icon: Icon,
   label,
   selected,
+  holdsSelection = false,
   depth = 1,
   expanded,
   onToggle,
@@ -53,6 +56,8 @@ export function NavigatorRow({
   readonly icon: LucideIcon;
   readonly label: string;
   readonly selected: boolean;
+  /** Shown as the row the selection is inside, without the selection's ring: a Pack whose entry is selected. */
+  readonly holdsSelection?: boolean;
   /** Indentation level; 0 for the Installation root. */
   readonly depth?: number;
   /** Whether the row's children show; only meaningful with `onToggle`. */
@@ -85,6 +90,9 @@ export function NavigatorRow({
           "has-[[data-row-select]:focus-visible]:bg-sidebar-accent/60 has-[[data-row-select]:focus-visible]:text-sidebar-accent-foreground has-[[data-row-select]:focus-visible]:ring-1 has-[[data-row-select]:focus-visible]:ring-ring has-[[data-row-select]:focus-visible]:ring-inset",
         selected &&
           "bg-sidebar-accent text-sidebar-accent-foreground ring-1 ring-selection ring-inset",
+        holdsSelection &&
+          !selected &&
+          "bg-sidebar-accent/60 text-sidebar-accent-foreground",
         dimmed && "opacity-55",
       )}
       style={{ paddingLeft: indent(depth) }}

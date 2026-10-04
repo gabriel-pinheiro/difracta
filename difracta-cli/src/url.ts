@@ -37,3 +37,14 @@ export function normalizeUrl(input: string): string {
       : url.pathname;
   return `${protocol}://${url.hostname}:${port}${path}`;
 }
+
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
+
+/**
+ * Whether a normalized live URL names this machine: then a folder or file
+ * path typed at this shell is a path on the runtime's disk too, and the CLI
+ * resolves it against its own working directory before sending it.
+ */
+export function isLocalUrl(normalized: string): boolean {
+  return LOOPBACK_HOSTS.has(new URL(normalized).hostname.toLowerCase());
+}

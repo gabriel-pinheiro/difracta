@@ -1,6 +1,11 @@
 import type { ReactNode } from "react";
 
-import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
@@ -30,14 +35,23 @@ export function DisabledHint({
   );
 }
 
-/** The entries of a "+" dropdown; one that cannot be used now says why. */
+/** The entries of a "+" dropdown; one that cannot be used now says why, and one with `items` opens them as a submenu. */
 export function CreateMenuItems({
   items,
 }: {
   readonly items: readonly CreateItem[];
 }) {
   return items.map((item) =>
-    item.disabled === undefined ? (
+    item.items !== undefined ? (
+      <DropdownMenuSub key={item.label}>
+        <DropdownMenuSubTrigger>
+          <item.icon /> {item.label}
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent>
+          <CreateMenuItems items={item.items} />
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+    ) : item.disabled === undefined ? (
       <DropdownMenuItem key={item.label} onClick={item.onSelect}>
         <item.icon /> {item.label}
       </DropdownMenuItem>

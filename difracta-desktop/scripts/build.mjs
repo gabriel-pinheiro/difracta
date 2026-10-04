@@ -8,7 +8,7 @@
 //   dist/share-preload.cjs    the share window's preload script
 //   dist/runtime.mjs   difracta-runtime and all it depends on, in one file, forked by main
 //   dist/studio, dist/output, dist/thumbnails   what that runtime serves
-//   dist/bundled       the Bundled Media's clips and thumbnails, served too
+//   dist/bundled       the Bundled Pack's clips, manifest, thumbnails and proxies (.difracta/), served too
 //   dist/fonts         the Bundled Fonts, served too
 //
 // Studio and the Output page are built by their own packages first

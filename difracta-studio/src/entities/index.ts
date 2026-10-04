@@ -5,14 +5,16 @@ import type { ComponentType } from "react";
 import type { RowParent } from "@/navigator/ancestor-rows";
 
 import { controllerEntity } from "./controller/controller-entity";
+import { entryEntity } from "./entry/entry-entity";
 import { layerEntity } from "./layer/layer-entity";
 import { macroEntity } from "./macro/macro-entity";
 import { maskEntity } from "./mask/mask-entity";
-import { mediaEntity } from "./media/media-entity";
 import { outputEntity } from "./output/output-entity";
+import { packEntity } from "./pack/pack-entity";
 import { pathEntity } from "./path/path-entity";
 import { regionEntity } from "./region/region-entity";
 import { sceneEntity } from "./scene/scene-entity";
+import { shareEntity } from "./share/share-entity";
 import { surfaceEntity } from "./surface/surface-entity";
 
 /**
@@ -31,6 +33,8 @@ export interface Removal {
   ) => { readonly name: string } | undefined;
   /** Why this one may not go now, worded as its context menu words it. */
   readonly refusal?: (document: Document, id: string) => string | undefined;
+  /** What to confirm before removing, for a removal worth a question; undefined removes at once. */
+  readonly confirm?: (document: Document, id: string) => string | undefined;
 }
 
 /**
@@ -48,7 +52,8 @@ export interface EntityModule {
     readonly view: DocumentView;
     readonly id: string;
   }>;
-  readonly removal: Removal;
+  /** Absent for a kind nothing removes, such as a Pack entry; Remove then does nothing on it. */
+  readonly removal?: Removal;
   /** The row this kind's row is nested under; absent for a kind whose rows never nest. */
   readonly parent?: RowParent;
 }
@@ -59,7 +64,9 @@ export const entities = {
   region: regionEntity,
   mask: maskEntity,
   path: pathEntity,
-  media: mediaEntity,
+  pack: packEntity,
+  entry: entryEntity,
+  share: shareEntity,
   scene: sceneEntity,
   layer: layerEntity,
   controller: controllerEntity,

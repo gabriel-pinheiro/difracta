@@ -19,7 +19,7 @@ export interface PreloadTurn {
 }
 
 export interface PreloadQueue {
-  /** Asks for a turn for the Media item `id`; `start` makes the element that loads. */
+  /** Asks for a turn for the entry `id`; `start` makes the element that loads. */
   request(id: string, start: () => HTMLVideoElement): PreloadTurn;
   /** How many are waiting for a turn. */
   readonly waiting: number;

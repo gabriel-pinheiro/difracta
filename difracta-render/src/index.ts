@@ -33,6 +33,13 @@ export {
   type MediaLoaderOptions,
 } from "./media-loader.ts";
 export {
+  packSources,
+  type PackEntryView,
+  type PackView,
+  type PacksView,
+} from "./pack-sources.ts";
+export { dataUrlMediaType, fakePacks } from "./pack-fakes.ts";
+export {
   planFrame,
   type FilterDraw,
   type FramePlan,

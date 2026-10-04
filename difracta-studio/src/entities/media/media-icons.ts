@@ -2,7 +2,6 @@ import type { MediaType } from "@difracta/core";
 import {
   FileImage,
   FileVideoCamera,
-  Folder,
   Package,
   ScreenShare,
   type LucideIcon,
@@ -20,7 +19,5 @@ export const mediaTypeLabels: Record<MediaType, string> = {
   live: "Live",
 };
 
-export const mediaGroupIcon: LucideIcon = Folder;
-
-/** "Bundled…" in the "+" menus: a clip Difracta ships. */
-export const bundledMediaIcon: LucideIcon = Package;
+/** A Pack, in the navigator and the "+" menu. */
+export const packIcon: LucideIcon = Package;

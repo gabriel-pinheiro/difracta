@@ -4,7 +4,6 @@ import {
   settings,
   type FilterDefinition,
   type FontDefinition,
-  type MediaDefinition,
   type VisualDefinition,
 } from "@difracta/core";
 import type { DocumentSummary } from "@difracta/protocol";
@@ -64,20 +63,14 @@ export function currentDocument(client: DifractaClient): DocumentSummary {
   return summary;
 }
 
-/** The runtime's Catalog, as metadata: what its Visual, Filter, Bundled Media and Bundled Font ids mean. */
+/** The runtime's Catalog, as metadata: what its Visual, Filter and Bundled Font ids mean. */
 export async function fetchCatalog(client: DifractaClient): Promise<Catalog> {
-  const { visuals, filters, media, fonts } = await client.request<{
+  const { visuals, filters, fonts } = await client.request<{
     visuals: VisualDefinition[];
     filters: FilterDefinition[];
-    media?: MediaDefinition[];
     fonts?: FontDefinition[];
   }>("catalog.list", {});
-  return new Catalog({
-    visuals,
-    filters,
-    media: media ?? [],
-    fonts: fonts ?? [],
-  });
+  return new Catalog({ visuals, filters, fonts: fonts ?? [] });
 }
 
 export function parseJsonArgument(text: string | undefined): unknown {

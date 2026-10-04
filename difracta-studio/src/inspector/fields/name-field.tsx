@@ -7,6 +7,8 @@ interface NameFieldProps {
   readonly label: string;
   readonly value: string;
   readonly onCommit: (value: string) => void;
+  /** Whether an emptied field commits `""`; a name never does. */
+  readonly allowEmpty?: boolean;
 }
 
 /**
@@ -14,7 +16,12 @@ interface NameFieldProps {
  * commits, Escape cancels: the text goes back to the current value and
  * nothing is sent. While the field is not focused it follows remote changes.
  */
-export function NameField({ label, value, onCommit }: NameFieldProps) {
+export function NameField({
+  label,
+  value,
+  onCommit,
+  allowEmpty = false,
+}: NameFieldProps) {
   const [text, setText] = useState(value);
   const [editing, setEditing] = useState(false);
   const [seenValue, setSeenValue] = useState(value);
@@ -30,7 +37,7 @@ export function NameField({ label, value, onCommit }: NameFieldProps) {
     setEditing(false);
     const next = cancelled.current ? value : text.trim();
     cancelled.current = false;
-    if (next !== "" && next !== value) onCommit(next);
+    if ((next !== "" || allowEmpty) && next !== value) onCommit(next);
     else setText(value);
   }
 

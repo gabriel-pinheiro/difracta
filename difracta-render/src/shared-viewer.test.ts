@@ -1,12 +1,11 @@
-import { settings, type Media, type Table } from "@difracta/core";
+import { settings, type Share, type Table } from "@difracta/core";
 import { describe, expect, it } from "vitest";
 
 import { fakeLivePage, settle } from "./live-fakes.ts";
 import { SharedViewer } from "./shared-viewer.ts";
 
-const slot = (id: string): Media =>
-  ({ id, kind: "share", name: id, parentId: null, order: "a" }) as Media;
-const table = (...ids: string[]): Table<Media> =>
+const slot = (id: string): Share => ({ id, name: id, order: "a" }) as Share;
+const table = (...ids: string[]): Table<Share> =>
   Object.fromEntries(ids.map((id) => [id, slot(id)]));
 const media = table("m_a", "m_b");
 

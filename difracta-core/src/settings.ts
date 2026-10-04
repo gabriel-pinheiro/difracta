@@ -17,10 +17,11 @@ export const settings = {
     documentPath: "/document",
     /** The largest `.difracta` file a PUT there may carry. */
     maxDocumentBytes: 64 * 1024 * 1024,
-    /** Where a Media item's file is served, by id: `GET /media/<id>`. */
-    mediaPath: "/media",
-    /** Where a Bundled Media entry's file is served, by entry id: `GET /bundled/<id>`. */
-    bundledPath: "/bundled",
+    /**
+     * Where a Pack entry's files are served: `GET /packs/<packId>/<entryId>`
+     * streams the original, `/thumb` and `/proxy` under it the baked ones.
+     */
+    packsPath: "/packs",
     /** Where a Bundled Font's files are served, by file name: `GET /fonts/<file>`. */
     fontsPath: "/fonts",
     /**
@@ -69,15 +70,9 @@ export const settings = {
     stepTolerance: 1e-9,
   },
   media: {
-    /** File extensions a Media file may have; the type is read from the extension, never stored. */
+    /** File extensions a Pack's files may have; a file with any other is not media. */
     imageExtensions: ["png", "jpg", "jpeg", "webp", "gif", "svg"],
     videoExtensions: ["mp4", "webm", "mov"],
-    /**
-     * Whether the runtime serves a Media file whose path leaves the
-     * Installation file's folder. Off, such an item is `outside` and its
-     * file is refused; `--media-anywhere` turns it on for one runtime.
-     */
-    allowOutsideShowFolder: false,
     video: {
       /**
        * How many video preloads an Output loads to their first frame at the
@@ -110,21 +105,46 @@ export const settings = {
         maxSpeed: 4,
       },
     },
-    /** The most beats a Media item lasts. */
+    /** The most beats a Pack entry lasts. */
     maxBeats: 4_096,
     /**
      * The release of the difracta-media repository whose clips are the
-     * Bundled Media: `npm run media:fetch` downloads
+     * Bundled Pack: `npm run media:fetch` downloads
      * `difracta-media-<version>.tar.gz` from that release and refuses it
      * unless its SHA-256 is `sha256`. An empty `sha256` pins nothing: the
      * script then writes an empty manifest unless `DIFRACTA_MEDIA_DIR`
      * names a local copy.
      */
     bundle: {
-      version: "0.1.1",
+      version: "0.2.0",
       sha256:
-        "3e37de35fd4136e49087f08cfae911f0d6c9ada9c9fd91d9940f3d2c8b0c1f25",
+        "ab6efc8a24e5116e334147bb3322dbd83bb02bffe95bffe5fe02657d316a3484",
       url: "https://github.com/gabriel-pinheiro/difracta-media/releases/download/v<version>/difracta-media-<version>.tar.gz",
+    },
+  },
+  packs: {
+    /** How many folder levels below a Pack's folder a scan walks. */
+    maxDepth: 5,
+    /** How many media files a Pack holds at most; past it the first in path order are taken and the Pack carries a warning. */
+    maxMedia: 1000,
+    /** How many bytes from the start of a file its fingerprint hashes, with the file's size. */
+    fingerprintBytes: 1024 * 1024,
+    thumbnail: {
+      /** The baked thumbnail's size, WebP. */
+      width: 640,
+      height: 360,
+      /** Where in a video the thumbnail is taken, as a fraction of its duration, unless `thumbnailAt` says. */
+      defaultAt: 0.25,
+    },
+    proxy: {
+      /** The baked proxy's height, H.264 without audio, and its bitrate. */
+      height: 480,
+      bitrateKbps: 1500,
+    },
+    bake: {
+      /** How many ffmpeg jobs run at once, and at which `nice` priority. */
+      concurrency: 1,
+      nice: 19,
     },
   },
   text: {

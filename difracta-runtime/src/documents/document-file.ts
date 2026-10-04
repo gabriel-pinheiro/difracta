@@ -15,9 +15,15 @@ import {
 import path from "node:path";
 import { z } from "zod";
 
+import { sharesFromMedia } from "./document-upgrade.ts";
+
 /**
  * The `.difracta` file: one Installation, versioned JSON with sorted keys so
- * diffs stay readable. Operational state is never written.
+ * diffs stay readable. Operational state is never written. Format 1 held a
+ * `media` table of items; format 2 holds `packs` and `shares`. A format 1
+ * file still opens: its Screen Shares move to `shares`, the rest of its
+ * `media` table is dropped, and a Parameter holding an old item's id stays
+ * as it is and reads as not found (`document-upgrade.ts`).
  *
  * A dirty document is autosaved to a sibling
  * `<name>.<timestamp>.autosave.difracta`, timestamped in ISO 8601 basic
@@ -27,12 +33,16 @@ import { z } from "zod";
 export const DOCUMENT_FILE_EXTENSION = ".difracta";
 export const AUTOSAVE_EXTENSION = ".autosave.difracta";
 const FILE_KIND = "difracta-installation";
-const FORMAT_VERSION = 1;
+const FORMAT_VERSION = 2;
+/** Formats this runtime still reads. */
+const READABLE_VERSIONS = [1, FORMAT_VERSION] as const;
 
 const DocumentFileSchema = z
   .object({
     kind: z.literal(FILE_KIND),
-    formatVersion: z.literal(FORMAT_VERSION),
+    formatVersion: z.union(
+      READABLE_VERSIONS.map((version) => z.literal(version)),
+    ),
     installation: DocumentSchema.shape.installation,
     outputs: DocumentSchema.shape.outputs,
     /** Absent in files written before Surfaces existed. */
@@ -40,7 +50,10 @@ const DocumentFileSchema = z
     regions: DocumentSchema.shape.regions.default({}),
     masks: DocumentSchema.shape.masks.default({}),
     paths: DocumentSchema.shape.paths.default({}),
-    media: DocumentSchema.shape.media.default({}),
+    /** Format 1's Media items; only its Screen Shares are kept. */
+    media: z.record(z.string(), z.unknown()).optional(),
+    packs: DocumentSchema.shape.packs.default({}),
+    shares: DocumentSchema.shape.shares.default({}),
     scenes: DocumentSchema.shape.scenes.default({}),
     layers: DocumentSchema.shape.layers.default({}),
     controllers: DocumentSchema.shape.controllers.default({}),
@@ -69,7 +82,8 @@ export function serializeDocument(document: Document): string {
     regions: document.regions,
     masks: document.masks,
     paths: document.paths,
-    media: document.media,
+    packs: document.packs,
+    shares: document.shares,
     scenes: document.scenes,
     layers: document.layers,
     controllers: document.controllers,
@@ -108,7 +122,11 @@ export function parseDocumentFile(text: string): ParsedDocumentFile {
       regions: parsed.data.regions as Document["regions"],
       masks: parsed.data.masks as Document["masks"],
       paths: parsed.data.paths as Document["paths"],
-      media: parsed.data.media as Document["media"],
+      packs: parsed.data.packs,
+      shares: {
+        ...sharesFromMedia(parsed.data.media),
+        ...parsed.data.shares,
+      } as Document["shares"],
       scenes: parsed.data.scenes as Document["scenes"],
       layers: parsed.data.layers as Document["layers"],
       controllers: parsed.data.controllers as Document["controllers"],

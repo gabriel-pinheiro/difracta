@@ -2,6 +2,8 @@ import type { Document } from "@difracta/core";
 
 import {
   createCompositor,
+  dataUrlMediaType,
+  fakePacks,
   loopbackShares,
   type FrameReport,
 } from "../src/index.ts";
@@ -13,7 +15,8 @@ import { testCatalog } from "./test-catalog.ts";
  * the last frame back with `gl.readPixels` before this task ends, since
  * the canvas keeps no drawing buffer past it. The pixels leave the page
  * as base64 RGBA, bottom row first as WebGL reads them; every frame's
- * report comes along. With Media (data URLs by item id) the frames are
+ * report comes along. With Media (data URLs by Media reference, each made
+ * an entry of a loaded Pack of the type its data URL says) the frames are
  * paced by the browser's, since the files load on its clock, they go on
  * until a Layer has drawn, and the last one is forced by a new revision so
  * the picture is in the buffer when it is read. With fonts (data URLs by
@@ -98,6 +101,16 @@ export async function render(
           ),
         }),
   });
+  compositor.setPacks(
+    fakePacks(
+      Object.fromEntries(
+        Object.entries(media ?? {}).flatMap(([reference, url]) => {
+          const type = dataUrlMediaType(url);
+          return type === undefined ? [] : [[reference, type] as const];
+        }),
+      ),
+    ),
+  );
   const reports: FrameReport[] = [];
   const paced =
     media !== undefined || fonts !== undefined || shares !== undefined;

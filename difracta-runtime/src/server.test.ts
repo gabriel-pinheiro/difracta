@@ -26,7 +26,9 @@ async function runtimeWith(config: Partial<RuntimeConfig>): Promise<Runtime> {
     autosaveIntervalMs: 60_000,
     oscPort: undefined,
     discovery: false,
-    mediaAnywhere: false,
+    packs: [],
+    packsFile: undefined,
+    packsCacheDir: undefined,
     ...config,
   });
   runtimes.push(runtime);

@@ -1,40 +1,56 @@
 import type { DocumentView } from "@difracta/client";
 import {
-  namedAfter,
-  type Media,
-  type MediaBundled,
+  parseMediaReference,
+  type PackAttachment,
   type Table,
 } from "@difracta/core";
-import { useEffect, useMemo, useRef, useState } from "react";
+import type { LiveState } from "@difracta/protocol";
+import { Package } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
-import { catalog } from "@/lib/catalog";
-import { useCommand, useDocumentPath } from "@/lib/client";
-import {
-  focusNavigatorRow,
-  removeFocusingNeighbour,
-} from "@/navigator/focus-row";
+import { Button } from "@/components/ui/button";
+import { usePackActions } from "@/entities/pack/pack-actions";
+import { useDocumentPath } from "@/lib/client";
+import { focusNavigatorRow } from "@/navigator/focus-row";
 import { useSelection, type Selection } from "@/selection/selection";
 
 import { useBrowser, type LibraryBinding } from "./browser-state";
-import { FacetControl } from "./facet-control";
 import { LibraryShell } from "./library-shell";
-import { LibraryTile } from "./library-tile";
 import { MediaDescription } from "./media-description";
-import { ANY_MEDIA_FACETS, rankMedia, type MediaFacets } from "./media-search";
+import { MediaFacets } from "./media-facets";
+import {
+  mediaRows,
+  rankMediaRows,
+  WHOLE_LIBRARY,
+  type MediaScope,
+} from "./media-search";
+import { MediaTile } from "./media-tile";
 
-type MediaBinding = Extract<LibraryBinding, { readonly kind: "media" }>;
+type MediaBinding = Exclude<LibraryBinding, { readonly kind: "layer" }>;
+
+const NO_PACKS: LiveState["packs"] = {};
+
+/** The Pack an entry selection belongs to, or undefined for any other selection. */
+const selectedEntryPack = (
+  selection: Selection | undefined,
+): string | undefined =>
+  selection?.kind === "entry"
+    ? parseMediaReference(selection.id)?.packId
+    : undefined;
 
 /**
- * The Library bound to one bundled Media item: the Bundled Media as a grid
- * of tiles. Clicking a tile or moving with the arrow keys points the item
- * at that entry at once, so anything showing it on the Outputs is the
- * preview. Enter keeps the pick; Escape puts back the entry the item had
- * when the Library opened, or, when creating the item opened the Library
- * and its name still follows the entries, removes it again, putting back
- * what the media Parameter held when the browse was opened from one.
- * Selecting another bundled item rebinds the Library to it; selecting
- * anything else closes it, except the Layer or Macro a Parameter browse
- * began from.
+ * The Library over the Packs' entries, in one of two modes. Browsing a Pack
+ * (selected in the navigator): the grid is that Pack's, clicking a tile or
+ * moving with the arrow keys selects the entry, so the inspector shows and
+ * edits it, and sets nothing; the Library stays while the selection is the
+ * Pack or one of its entries, rebinds when another Pack or another Pack's
+ * entry is selected, and closes when the selection leaves Packs. Picking
+ * for a media Address (a Layer's Parameter, a Macro action's value): the
+ * grid is every loaded Pack's entries of the accepted type, clicking a tile
+ * sets the Address at once so the Outputs are the preview, Enter keeps,
+ * Escape puts back what it held, and the Library closes when the selection
+ * leaves the Layer or Macro it began from; a strip above the grid describes
+ * the entry the Address holds.
  */
 export function MediaLibraryView({
   view,
@@ -43,167 +59,204 @@ export function MediaLibraryView({
   readonly view: DocumentView;
   readonly binding: MediaBinding;
 }) {
-  const { openMedia, close } = useBrowser();
+  const { openPack, close } = useBrowser();
   const { selection } = useSelection();
-  const media = useDocumentPath<Table<Media>>(view, ["media"]);
-  const item = media?.[binding.id];
-  const bound = item?.kind === "bundled" ? item : undefined;
-  const anchor = binding.parameter?.anchor;
+  const attached =
+    useDocumentPath<Table<PackAttachment>>(view, ["packs"]) ?? {};
+  const packId = binding.kind === "pack" ? binding.packId : undefined;
+  const bundled = packId === "bundled";
+  const present = packId === undefined || bundled || packId in attached;
 
   useEffect(() => {
-    if (selection?.kind === "media") {
-      if (selection.id === binding.id) return;
-      if (media?.[selection.id]?.kind === "bundled") {
-        openMedia(selection.id);
+    if (binding.kind === "pack") {
+      const selectedPack =
+        selection?.kind === "pack"
+          ? selection.id
+          : selectedEntryPack(selection);
+      if (selectedPack === undefined) {
+        close();
         return;
       }
+      if (selectedPack !== binding.packId) openPack(selectedPack);
+      return;
     }
-    if (anchor !== undefined && sameSelection(selection, anchor)) return;
-    close();
-  }, [selection, media, binding.id, anchor, openMedia, close]);
+    if (!sameSelection(selection, binding.anchor)) close();
+  }, [binding, selection, openPack, close]);
 
   useEffect(() => {
-    if (bound === undefined) close();
-  }, [bound, close]);
+    if (!present) close();
+  }, [present, close]);
 
-  if (bound === undefined) return null;
-  return (
-    <MediaBrowser
-      key={`${binding.id}:${String(binding.created)}`}
-      view={view}
-      item={bound}
-      binding={binding}
-    />
-  );
+  if (!present) return null;
+  const key =
+    binding.kind === "pack"
+      ? `pack:${binding.packId}`
+      : `parameter:${binding.address}`;
+  return <MediaBrowser key={key} view={view} binding={binding} />;
 }
 
 function MediaBrowser({
   view,
-  item,
   binding,
 }: {
   readonly view: DocumentView;
-  readonly item: MediaBundled;
   readonly binding: MediaBinding;
 }) {
-  const command = useCommand(view);
   const { close } = useBrowser();
-  const parameter = binding.parameter;
-  const accepts = parameter?.accepts;
+  const { selection, select } = useSelection();
+  const actions = usePackActions(view);
+  const packs =
+    useDocumentPath<LiveState["packs"]>(view, ["live", "packs"]) ?? NO_PACKS;
+  const rows = useMemo(() => mediaRows(packs), [packs]);
+  const browsing = binding.kind === "pack";
   const [query, setQuery] = useState("");
-  const [facets, setFacets] = useState<MediaFacets>(ANY_MEDIA_FACETS);
-  // Captured once per binding: the entry before browsing.
-  const restore = useRef(item.bundled);
-  const current = catalog.mediaEntry(item.bundled);
-  // A new item whose name still follows the entries is as creation made it.
-  const untouched =
-    binding.created &&
-    current !== undefined &&
-    namedAfter(item.name, current.name);
-  const ranked = useMemo(
-    () => rankMedia(catalog.media(), query, facets, accepts),
-    [query, facets, accepts],
+  const initialScope = (): MediaScope =>
+    binding.kind === "pack"
+      ? { ...WHOLE_LIBRARY, packId: binding.packId, folder: binding.folder }
+      : { ...WHOLE_LIBRARY, type: binding.accepts };
+  const [scope, setScope] = useState<MediaScope>(initialScope);
+  // Opened again on the same Pack with a folder: the grid scopes to it.
+  const [seen, setSeen] = useState(binding);
+  if (seen !== binding) {
+    setSeen(binding);
+    const folder = binding.kind === "pack" ? binding.folder : undefined;
+    if (folder !== undefined)
+      setScope((previous) => ({
+        ...previous,
+        folder: folder === "" ? undefined : folder,
+      }));
+  }
+  // Picking: the reference the Address holds now. Browsing: the selected entry.
+  const [picked, setPicked] = useState<string | null>(
+    binding.kind === "parameter" && binding.initial !== ""
+      ? binding.initial
+      : null,
   );
+  const current =
+    binding.kind === "pack"
+      ? selection?.kind === "entry" &&
+        selectedEntryPack(selection) === binding.packId
+        ? selection.id
+        : null
+      : picked;
+  const ranked = useMemo(
+    () => rankMediaRows(rows, query, scope),
+    [rows, query, scope],
+  );
+  const packList = Object.entries(packs)
+    .filter(([, pack]) => pack.status !== "missing")
+    .map(([id, pack]) => ({ id, name: pack.name }));
 
-  const apply = (bundled: string): void => {
-    if (bundled !== item.bundled)
-      void command("media.bundled", { mediaId: item.id, bundled });
-  };
-
-  const returnFocus = (): void => {
-    if (parameter?.returnFocus === undefined)
-      focusNavigatorRow(
-        item.id,
-        `[data-library-open="${CSS.escape(item.id)}"]`,
-      );
-    else
-      requestAnimationFrame(() =>
-        document
-          .querySelector<HTMLElement>(parameter.returnFocus ?? "")
-          ?.focus(),
-      );
-  };
-
-  const leave = (): void => {
-    close();
-    returnFocus();
-  };
-
-  const onEscape = (): void => {
-    if (!untouched) {
-      apply(restore.current);
-      leave();
+  const apply = (reference: string): void => {
+    if (binding.kind === "pack") {
+      select({ kind: "entry", id: reference });
       return;
     }
+    setPicked(reference);
+    if (reference !== current) binding.apply(reference);
+  };
+  const leave = (): void => {
     close();
-    parameter?.restore();
-    const remove = () => command("media.remove", { mediaId: item.id });
-    if (parameter === undefined) removeFocusingNeighbour(item.id, remove);
-    else void remove().then(returnFocus);
+    if (binding.kind === "pack") focusNavigatorRow(binding.packId);
+    else if (binding.returnFocus !== undefined)
+      requestAnimationFrame(() =>
+        document.querySelector<HTMLElement>(binding.returnFocus ?? "")?.focus(),
+      );
+  };
+  const onEscape = (): void => {
+    if (binding.kind === "parameter" && (current ?? "") !== binding.initial)
+      binding.apply(binding.initial);
+    leave();
   };
 
-  const noun =
-    accepts === "image" ? "images" : accepts === "video" ? "videos" : "";
+  const packName =
+    binding.kind === "pack" ? (packs[binding.packId]?.name ?? "Pack") : "";
+  const noun = binding.kind === "parameter" ? `${binding.accepts}s` : "media";
+  const empty =
+    rows.length === 0 ? (
+      <div className="grid h-full place-items-center p-6">
+        <Button
+          size="lg"
+          variant="outline"
+          disabled={actions.gate !== undefined}
+          title={actions.gate ?? "Make a folder of images and videos a Pack"}
+          onClick={actions.addFromFolder}
+        >
+          <Package /> Add Pack…
+        </Button>
+      </div>
+    ) : (
+      `No ${noun} match.`
+    );
+
   return (
     <LibraryShell
       title={
-        <>
-          <span className="font-medium">Bundled Media for</span>
-          <span className="min-w-0 truncate">{item.name}</span>
-        </>
+        binding.kind === "pack" ? (
+          <>
+            <span className="font-medium">Browsing</span>
+            <span className="min-w-0 truncate">{packName}</span>
+          </>
+        ) : (
+          <>
+            <span className="font-medium">{binding.label} for</span>
+            <span className="min-w-0 truncate">
+              {binding.owner ?? binding.address}
+            </span>
+          </>
+        )
       }
-      hint={`Enter keeps, ${untouched ? "Esc removes the new item" : "Esc discards"}`}
-      searchLabel="Search Bundled Media"
+      hint={browsing ? "Esc closes" : "Enter keeps, Esc discards"}
+      searchLabel={`Search ${browsing ? packName : noun}`}
       query={query}
       onQuery={setQuery}
       facets={
-        <>
-          <FacetControl
-            label="Loop"
-            value={facets.loop}
-            options={[
-              { value: "any", label: "Any" },
-              { value: "yes", label: "Yes" },
-            ]}
-            onChange={(loop) => setFacets({ ...facets, loop })}
-          />
-          <FacetControl
-            label="Hit"
-            value={facets.hit}
-            options={[
-              { value: "any", label: "Any" },
-              { value: "yes", label: "Yes" },
-            ]}
-            onChange={(hit) => setFacets({ ...facets, hit })}
-          />
-          {noun !== "" && (
-            <span className="text-[0.6875rem] text-muted-foreground">
-              Only {noun}: the Parameter takes{" "}
-              {noun === "images" ? "an image" : "a video"}.
-            </span>
-          )}
-        </>
+        <MediaFacets
+          rows={rows}
+          ranked={ranked}
+          scope={scope}
+          packs={packList}
+          fixedPack={browsing}
+          typed={!browsing}
+          onScope={setScope}
+        />
       }
       description={
-        <MediaDescription current={current} currentId={item.bundled} />
+        browsing ? undefined : (
+          <MediaDescription
+            current={rows.find((row) => row.reference === current)}
+            currentId={current}
+            noun={noun}
+          />
+        )
       }
-      entries={ranked}
-      currentId={item.bundled}
-      empty="No Bundled Media match."
+      entries={ranked.map((row) => ({ id: row.reference, row }))}
+      currentId={current}
+      empty={empty}
       onApply={apply}
-      onEnter={() => leave()}
+      onEnter={(focusedId) => {
+        if (binding.kind === "parameter" && current === null) {
+          const pick = focusedId ?? ranked[0]?.reference;
+          if (pick !== undefined) apply(pick);
+        }
+        if (binding.kind === "parameter") leave();
+      }}
       onEscape={onEscape}
       onClose={close}
       onReset={() => {
         setQuery("");
-        setFacets(ANY_MEDIA_FACETS);
+        setScope(
+          binding.kind === "pack"
+            ? { ...WHOLE_LIBRARY, packId: binding.packId }
+            : { ...WHOLE_LIBRARY, type: binding.accepts },
+        );
       }}
-      renderTile={(entry, isCurrent) => (
-        <LibraryTile
-          key={entry.id}
-          definition={entry}
+      renderTile={({ row }, isCurrent) => (
+        <MediaTile
+          key={row.reference}
+          row={row}
           current={isCurrent}
-          onPick={() => apply(entry.id)}
+          onPick={() => apply(row.reference)}
         />
       )}
     />
@@ -212,8 +265,9 @@ function MediaBrowser({
 
 function sameSelection(
   selection: Selection | undefined,
-  anchor: Selection,
+  anchor: Selection | undefined,
 ): boolean {
+  if (anchor === undefined) return selection === undefined;
   if (selection?.kind !== anchor.kind) return false;
   if (!("id" in anchor)) return true;
   return "id" in selection && selection.id === anchor.id;

@@ -8,12 +8,17 @@ import {
 import {
   createCompositor,
   defineVisual,
+  fakePacks,
   loopbackShares,
 } from "@difracta/render";
 
 import { builtInCatalog } from "../src/index.ts";
 import { sharedScreen } from "./thumbnail-screen.ts";
-import { THUMBNAIL_VIDEO_ENTRY, thumbnailSetups } from "./thumbnail-setups.ts";
+import {
+  THUMBNAIL_IMAGE,
+  THUMBNAIL_VIDEO,
+  thumbnailSetups,
+} from "./thumbnail-setups.ts";
 
 /**
  * The browser half of `npm run thumbnails`: renders one definition the
@@ -25,7 +30,8 @@ import { THUMBNAIL_VIDEO_ENTRY, thumbnailSetups } from "./thumbnail-setups.ts";
  * carries a ring, since a displaced checkerboard would look like the
  * checkerboard itself.
  * A Visual with a Media Parameter gets a picture or a clip of the Bundled
- * Media as a Media item, served from the data URL the script passes, and
+ * Pack as an entry of a Pack made up for the page (`fakePacks`), served
+ * from the data URL the script passes under its Media reference, and
  * its frames are paced by the browser's own, since the file loads and a
  * video plays on the browser's clock. A Visual with a Parameter for a
  * Screen Share gets a slot a screen is shared into from inside the page
@@ -37,9 +43,9 @@ import { THUMBNAIL_VIDEO_ENTRY, thumbnailSetups } from "./thumbnail-setups.ts";
  */
 export type ThumbnailKind = "visual" | "filter";
 
-/** The picture and the clip as data URLs, by the Media item id they get. */
+/** The picture and the clip as data URLs, by the Media reference the Layers name. */
 export type ThumbnailMedia = Readonly<
-  Record<"thumbnail_image" | "thumbnail_video", string>
+  Record<typeof THUMBNAIL_IMAGE | typeof THUMBNAIL_VIDEO, string>
 >;
 
 /** The Bundled Fonts' files as data URLs, by file name. */
@@ -111,7 +117,6 @@ const colorBars = defineVisual({
 const catalog = new Catalog({
   visuals: [...builtInCatalog.visuals(), checkerboard, colorBars],
   filters: builtInCatalog.filters(),
-  media: builtInCatalog.media(),
   fonts: builtInCatalog.fonts(),
 });
 const registry = createBuiltInRegistry(catalog);
@@ -125,19 +130,7 @@ function run(document: Document, name: string, payload: unknown): Document {
 function installation(kind: ThumbnailKind, id: string): Document {
   let document = emptyDocument("Thumbnail");
   document = run(document, "output.create", { id: "out", name: "Thumbnail" });
-  document = run(document, "media.create", {
-    id: "thumbnail_image",
-    path: "thumbnail.png",
-  });
-  document = run(document, "media.create", {
-    id: "thumbnail_video",
-    kind: "bundled",
-    bundled: THUMBNAIL_VIDEO_ENTRY,
-  });
-  document = run(document, "media.create", {
-    id: THUMBNAIL_SHARE,
-    kind: "share",
-  });
+  document = run(document, "share.create", { id: THUMBNAIL_SHARE });
   document = run(document, "surface.create", {
     id: "sur",
     name: "Frame",
@@ -171,10 +164,10 @@ function installation(kind: ThumbnailKind, id: string): Document {
           address: `layer/${layerId}/param/${name}`,
           value:
             parameter.accepts === "image"
-              ? "thumbnail_image"
+              ? THUMBNAIL_IMAGE
               : parameter.accepts === "live"
                 ? THUMBNAIL_SHARE
-                : "thumbnail_video",
+                : THUMBNAIL_VIDEO,
         });
     for (const [name, value] of Object.entries(
       thumbnailSetups[visualId]?.parameters ?? {},
@@ -212,7 +205,7 @@ function installation(kind: ThumbnailKind, id: string): Document {
   return run(document, "scene.play", { sceneId: "scene" });
 }
 
-/** Whether the Visual shows something that loads: a Media item, or text in a Bundled Font. */
+/** Whether the Visual shows something that loads: Media, or text in a Bundled Font. */
 function loads(kind: ThumbnailKind, id: string): boolean {
   return (
     kind === "visual" &&
@@ -242,10 +235,13 @@ export async function renderThumbnail(
   canvas.height = height;
   const screen = sharedScreen();
   const compositor = createCompositor(canvas, catalog, {
-    mediaUrl: (mediaId) => media[mediaId as keyof ThumbnailMedia],
+    mediaUrl: (reference) => media[reference as keyof ThumbnailMedia],
     fontUrl: (file) => fonts[file],
     shares: loopbackShares({ [THUMBNAIL_SHARE]: screen.stream }),
   });
+  compositor.setPacks(
+    fakePacks({ [THUMBNAIL_IMAGE]: "image", [THUMBNAIL_VIDEO]: "video" }),
+  );
   const scene = installation(kind, id);
   const setup = thumbnailSetups[id];
   const frames = Math.round(

@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 
 import { captureSource } from "./share-capture";
 import type { SharePageProps } from "./share-page";
-import { slotStatus, type ShareSlot } from "@/entities/media/share-slots";
+import { slotStatus, type ShareSlot } from "@/entities/share/share-slots";
 import { SourcePicker } from "./source-picker";
 
 const QUALITIES: readonly {
@@ -98,7 +98,7 @@ export function StartFlow({
         {slots.length === 0 ? (
           <p className="text-xs text-muted-foreground">
             This Installation has no Screen Share yet. A Screen Share is the
-            Media item a Layer with the Live Visual shows; add one here, or with
+            Media a Layer with the Live Visual shows; add one here, or with
             Studio or <code>difracta media screen-share</code>.
           </p>
         ) : (

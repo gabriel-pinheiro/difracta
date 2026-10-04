@@ -1,4 +1,4 @@
-import { flattenMedia, type Document } from "@difracta/core";
+import { orderedEntries, type Document } from "@difracta/core";
 import type {
   LiveState,
   ShareSource,
@@ -27,24 +27,22 @@ export interface ShareListing {
 
 /** Every Screen Share of the Installation in navigator order, with who shares into it. */
 export function listShares(
-  document: Pick<Document, "media">,
-  live: LiveState["media"],
+  document: Pick<Document, "shares">,
+  live: LiveState["shares"],
 ): ShareListing[] {
-  return flattenMedia(document.media)
-    .filter((item) => item.kind === "share")
-    .map((item) => {
-      const entry = live[item.id];
-      const shared = entry !== undefined && "sharer" in entry;
-      return {
-        id: item.id,
-        name: item.name,
-        status: entry?.status as ShareStatus | undefined,
-        sharer: shared ? entry.sharer : null,
-        source: shared ? entry.source : null,
-        since: shared ? entry.since : null,
-        viewers: shared ? entry.viewers : null,
-      };
-    });
+  return orderedEntries(document.shares).map((item) => {
+    const entry = live[item.id];
+    const shared = entry !== undefined && "sharer" in entry;
+    return {
+      id: item.id,
+      name: item.name,
+      status: entry?.status,
+      sharer: shared ? entry.sharer : null,
+      source: shared ? entry.source : null,
+      since: shared ? entry.since : null,
+      viewers: shared ? entry.viewers : null,
+    };
+  });
 }
 
 /** `3 min`, `45 s`, `2 h 5 min`: how long ago `since` was. */
@@ -82,7 +80,7 @@ export function registerShare(program: Command, cli: Cli): void {
   const share = program
     .command("share")
     .description(
-      "Screen Shares: Media items of kind share, slots a Difracta Desktop (the Sharer) shares a screen or window into, and any page (Output, Studio) views. A share starts only from the Sharer's own Desktop; from here you see and stop them. `media screen-share [name]` adds a slot.",
+      "Screen Shares: slots a Difracta Desktop (the Sharer) shares a screen or window into, and any page (Output, Studio) views. A share starts only from the Sharer's own Desktop; from here you see and stop them. `media screen-share [name]` adds a slot.",
     );
 
   share
@@ -93,24 +91,24 @@ export function registerShare(program: Command, cli: Cli): void {
     .action(() =>
       cli.withDocument(async (client, summary) => {
         const { document, view } = await cli.replica(client, summary.id);
-        const items = listShares(document, view.liveState.get().media);
+        const items = listShares(document, view.liveState.get().shares);
         cli.print(items, () => formatShares(items));
       }),
     );
 
   share
-    .command("stop <media>")
+    .command("stop <share>")
     .description(
       "Stop the share into a Screen Share, by name or id, whoever shares into it; its Sharer is told another client stopped it. Fails when nobody shares into it.",
     )
     .action((reference: string) =>
       cli.withDocument(async (client, summary) => {
         const { document } = await cli.replica(client, summary.id);
-        const mediaId = resolveId(document, "media", reference);
+        const mediaId = resolveId(document, "shares", reference);
         const result = await client.request<ShareStopResult>("shares.stop", {
           mediaId,
         });
-        const name = document.media[mediaId]?.name ?? mediaId;
+        const name = document.shares[mediaId]?.name ?? mediaId;
         cli.print(
           result,
           () => `Stopped ${result.sharer}'s share into ${name}.`,

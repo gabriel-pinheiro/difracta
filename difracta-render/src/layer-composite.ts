@@ -71,7 +71,7 @@ export function drawTexture(
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 }
 
-/** The Media items the planned Layers name in a Parameter that takes one. */
+/** The Media references the planned Layers name in a Parameter that takes one. */
 export function plannedMedia(
   layers: readonly LayerDraw[],
   catalog: Catalog,

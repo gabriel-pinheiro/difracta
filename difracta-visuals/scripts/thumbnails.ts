@@ -10,6 +10,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
+import { mediaExtension, parsePackManifest } from "@difracta/core";
 import { build } from "esbuild";
 import { chromium } from "playwright";
 
@@ -26,7 +27,9 @@ import type {
   ThumbnailMedia,
 } from "./thumbnail-page.ts";
 import {
+  THUMBNAIL_IMAGE,
   THUMBNAIL_IMAGE_ENTRY,
+  THUMBNAIL_VIDEO,
   THUMBNAIL_VIDEO_ENTRY,
 } from "./thumbnail-setups.ts";
 
@@ -74,24 +77,41 @@ const bundle = await build({
 const script = bundle.outputFiles[0]?.text;
 if (script === undefined) throw new Error("The page did not bundle.");
 
-/** The Bundled Media shown and the Bundled Fonts, as data URLs the page can load without a server. */
+/** The Bundled Pack's clip and picture shown and the Bundled Fonts, as data URLs the page can load without a server. */
 async function dataUrl(file: URL, type: string): Promise<string> {
   const bytes = await readFile(file);
   return `data:${type};base64,${bytes.toString("base64")}`;
 }
-const clip = builtInCatalog.mediaEntry(THUMBNAIL_VIDEO_ENTRY);
-if (clip === undefined) {
-  console.error(
-    `The Bundled Media has no “${THUMBNAIL_VIDEO_ENTRY}”; run npm run media:fetch.`,
-  );
+/** The Bundled Pack's manifest, `.difracta/pack.json` where `npm run media:fetch` put it. */
+const manifest = parsePackManifest(
+  JSON.parse(
+    await readFile(new URL(".difracta/pack.json", bundledRoot), "utf8"),
+  ),
+);
+if (!manifest.ok) {
+  console.error(manifest.error);
   process.exit(1);
 }
+const bundledEntry = (id: string) => {
+  const entry = manifest.manifest.entries.find((entry) => entry.id === id);
+  if (entry === undefined) {
+    console.error(`The Bundled Pack has no “${id}”; run npm run media:fetch.`);
+    process.exit(1);
+  }
+  return entry;
+};
+const clip = bundledEntry(THUMBNAIL_VIDEO_ENTRY);
+const picture = bundledEntry(THUMBNAIL_IMAGE_ENTRY);
 const media: ThumbnailMedia = {
-  thumbnail_image: await dataUrl(
-    new URL(`thumbnails/${thumbnailFile(THUMBNAIL_IMAGE_ENTRY)}`, bundledRoot),
-    "image/png",
+  // The Pack has clips only: the picture is the baked thumbnail of one.
+  [THUMBNAIL_IMAGE]: await dataUrl(
+    new URL(`.difracta/thumbs/${picture.fingerprint}.webp`, bundledRoot),
+    "image/webp",
   ),
-  thumbnail_video: await dataUrl(new URL(clip.file, bundledRoot), "video/webm"),
+  [THUMBNAIL_VIDEO]: await dataUrl(
+    new URL(clip.file, bundledRoot),
+    `video/${mediaExtension(clip.file) ?? "webm"}`,
+  ),
 };
 const fonts: FontFiles = Object.fromEntries(
   await Promise.all(

@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
-import type { ShareSlot } from "@/entities/media/share-slots";
+import type { ShareSlot } from "@/entities/share/share-slots";
 import type { RunningShare } from "./sharer";
 
 /** A small picture of what is captured, as the Viewers get it. */

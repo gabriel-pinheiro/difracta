@@ -6,7 +6,11 @@ import {
   DisplayHostReportSchema,
   DisplayOutcomeSchema,
 } from "./display-hosts.ts";
-import { LiveStateSchema, OutputTelemetrySchema } from "./live.ts";
+import {
+  LiveRequestSchema,
+  LiveStateSchema,
+  OutputTelemetrySchema,
+} from "./live.ts";
 import {
   SHARE_CLIENT_MESSAGES,
   SHARE_SERVER_MESSAGES,
@@ -18,8 +22,9 @@ import {
  *
  * - State: `subscribe` the document, receive one `snapshot`, then `delta`
  *   messages with per-path patches and a revision. A gap means resubscribe.
- *   Subscribing with `live: true` adds the live state to the snapshot and
- *   `live` messages afterwards; Output pages never ask for it.
+ *   Subscribing with `live: true`, or a list of its sections, adds the live
+ *   state to the snapshot and `live` messages afterwards; an Output page
+ *   asks for `["packs"]` alone.
  * - Input: `input` messages are unacknowledged latest-wins writes to an
  *   Address; the runtime coalesces them per tick and replicates the result
  *   as ordinary deltas. A fired trigger Address goes out as an `event` to
@@ -86,8 +91,8 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
     .object({
       type: z.literal("subscribe"),
       documentId: DocumentIdSchema,
-      /** Also receive the live state and its changes. */
-      live: z.boolean().optional(),
+      /** Also receive the live state and its changes: all of it, or the sections named. */
+      live: LiveRequestSchema.optional(),
     })
     .strict(),
   z

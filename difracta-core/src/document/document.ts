@@ -9,7 +9,7 @@ import {
   type LayerId,
   type MacroId,
   type MaskId,
-  type MediaId,
+  type ShareId,
   type PathId,
   type RegionId,
   type SceneId,
@@ -249,59 +249,37 @@ export const PathSchema = z
   .strict();
 export type Path = Entity<typeof PathSchema, PathId>;
 
-/** Fields every Media item has, whatever its kind. */
-const MediaBase = {
-  id: z.string().min(1),
-  name: EntityName,
-  /** The Group containing the item, or null at the section's root; absent in older files. */
-  parentId: z.string().min(1).nullable().default(null),
-  /** Position among the Media items of the same parent; see `order.ts`. */
-  order: z.string().min(1).default(DEFAULT_ORDER_KEY),
-};
-
-export const MEDIA_KINDS = ["file", "bundled", "share", "group"] as const;
-export type MediaKind = (typeof MEDIA_KINDS)[number];
+/**
+ * A Pack attached to the Installation, keyed by the Pack's id. `name` is a
+ * copy of the manifest's, so a Pack this machine lacks can still be named.
+ * `relativePath` is a hint written when the Pack sat inside or beside the
+ * Installation's folder at attach time (relative, POSIX, `..` allowed), so a
+ * show folder carrying its Packs opens elsewhere with no Registry. The
+ * Bundled Pack is attached to every Installation and never in this table.
+ */
+export const PackAttachmentSchema = z
+  .object({
+    id: z.string().min(1),
+    name: EntityName,
+    relativePath: z.string().min(1).optional(),
+  })
+  .strict();
+export type PackAttachment = z.infer<typeof PackAttachmentSchema>;
 
 /**
- * A Media item is one image or video the Installation refers to, a Screen
- * Share, or a Group arranging items in the navigator. A `file` item's
- * `path` is relative to the Installation file's folder, POSIX separators,
- * `..` allowed; a `bundled` item names a Bundled Media entry of the Catalog
- * by id, and one the Catalog lacks stays, unavailable; a `share` item is a
- * Screen Share, a named slot a Sharer shares into, holding no file and
- * nothing about who shares. The type (image or video) is read from the
- * file's extension or the entry, a Screen Share's is always live
- * (`document/media.ts`), and it is never stored. Names are unique among
- * siblings.
- * An item without a `kind`, as older files hold, is a file. A video file
- * may say how many `beats` it lasts and when its first one falls; a bundled
- * item's come from its entry.
+ * A Screen Share: a named slot a Sharer shares a screen or window into,
+ * holding no file and nothing about who shares. A Live Layer's `media`
+ * Parameter names it by id. Names are unique among the Screen Shares.
  */
-export const MediaSchema = z.discriminatedUnion("kind", [
-  z
-    .object({
-      ...MediaBase,
-      kind: z.literal("file").default("file"),
-      path: z.string().min(1),
-      /** How many beats the video lasts; absent for one without a tempo. */
-      beats: z.number().positive().max(settings.media.maxBeats).optional(),
-      /** The time in seconds of the first beat; absent for zero. */
-      firstBeat: z.number().positive().optional(),
-    })
-    .strict(),
-  z
-    .object({
-      ...MediaBase,
-      kind: z.literal("bundled"),
-      bundled: z.string().min(1),
-    })
-    .strict(),
-  z.object({ ...MediaBase, kind: z.literal("share") }).strict(),
-  z.object({ ...MediaBase, kind: z.literal("group") }).strict(),
-]);
-export type Media = Entity<typeof MediaSchema, MediaId>;
-export type MediaFile = Extract<Media, { kind: "file" }>;
-export type MediaBundled = Extract<Media, { kind: "bundled" }>;
+export const ShareSchema = z
+  .object({
+    id: z.string().min(1),
+    name: EntityName,
+    /** Position among the Screen Shares; see `order.ts`. */
+    order: z.string().min(1).default(DEFAULT_ORDER_KEY),
+  })
+  .strict();
+export type Share = Entity<typeof ShareSchema, ShareId>;
 
 export const CALIBRATION_VIEWS = ["selected", "outlines", "patterns"] as const;
 export const CalibrationViewSchema = z.enum(CALIBRATION_VIEWS);
@@ -492,7 +470,7 @@ const MacroBase = {
 export const MACRO_KINDS = ["macro", "group"] as const;
 export type MacroKind = (typeof MACRO_KINDS)[number];
 
-/** What an Address can hold: a number, a switch, a color, or a string (a choice's value, a Media item's id, text). */
+/** What an Address can hold: a number, a switch, a color, or a string (a choice's value, a Media reference, text). */
 export const AddressValueSchema = z.union([
   z.number(),
   z.boolean(),
@@ -590,7 +568,8 @@ export const DocumentSchema = z
     regions: z.record(z.string(), RegionSchema),
     masks: z.record(z.string(), MaskSchema),
     paths: z.record(z.string(), PathSchema),
-    media: z.record(z.string(), MediaSchema),
+    packs: z.record(z.string(), PackAttachmentSchema),
+    shares: z.record(z.string(), ShareSchema),
     scenes: z.record(z.string(), SceneSchema),
     layers: z.record(z.string(), LayerSchema),
     controllers: z.record(z.string(), ControllerSchema),
@@ -607,7 +586,8 @@ export interface Document {
   readonly regions: Table<Region>;
   readonly masks: Table<Mask>;
   readonly paths: Table<Path>;
-  readonly media: Table<Media>;
+  readonly packs: Table<PackAttachment>;
+  readonly shares: Table<Share>;
   readonly scenes: Table<Scene>;
   readonly layers: Table<Layer>;
   readonly controllers: Table<Controller>;
@@ -623,7 +603,8 @@ export const TABLE_SCHEMAS = {
   regions: RegionSchema,
   masks: MaskSchema,
   paths: PathSchema,
-  media: MediaSchema,
+  packs: PackAttachmentSchema,
+  shares: ShareSchema,
   scenes: SceneSchema,
   layers: LayerSchema,
   controllers: ControllerSchema,
@@ -639,7 +620,7 @@ export const ORDERED_TABLES = [
   "regions",
   "masks",
   "paths",
-  "media",
+  "shares",
   "scenes",
   "layers",
   "controllers",
@@ -658,7 +639,6 @@ export const PARENT_FIELDS: Partial<
   masks: ["surfaceId"],
   paths: ["surfaceId"],
   layers: ["sceneId", "parentId"],
-  media: ["parentId"],
   controllers: ["parentId"],
   macros: ["parentId"],
 };
@@ -696,7 +676,8 @@ export function emptyDocument(name: string): Document {
     regions: {},
     masks: {},
     paths: {},
-    media: {},
+    packs: {},
+    shares: {},
     scenes: {},
     layers: {},
     controllers: {},

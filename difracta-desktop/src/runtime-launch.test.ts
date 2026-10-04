@@ -2,7 +2,6 @@ import { settings } from "@difracta/core";
 import { describe, expect, it } from "vitest";
 
 import {
-  mediaAnywhereFromArgv,
   runtimeArguments,
   runtimeEnvironment,
   runtimeLocations,
@@ -24,25 +23,6 @@ describe("runtime launch", () => {
     expect(
       runtimeArguments({ port: 4811, file: "/shows/a.difracta" }).slice(-3),
     ).toEqual(["--port", "4811", "/shows/a.difracta"]);
-  });
-
-  it("passes --media-anywhere on when Desktop was given it", () => {
-    expect(mediaAnywhereFromArgv(["electron", ".", "--media-anywhere"])).toBe(
-      true,
-    );
-    expect(mediaAnywhereFromArgv(["electron", ".", "show.difracta"])).toBe(
-      false,
-    );
-    expect(
-      runtimeArguments({
-        port: 4800,
-        file: "/shows/a.difracta",
-        mediaAnywhere: true,
-      }).slice(-2),
-    ).toEqual(["--media-anywhere", "/shows/a.difracta"]);
-    expect(
-      runtimeArguments({ port: 4800, file: undefined, mediaAnywhere: false }),
-    ).not.toContain("--media-anywhere");
   });
 
   it("takes its port from DIFRACTA_PORT when that is a port", () => {

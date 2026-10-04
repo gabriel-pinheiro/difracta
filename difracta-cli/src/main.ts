@@ -6,6 +6,7 @@ import { registerCatalog } from "./commands/catalog.ts";
 import { registerDisplays } from "./commands/displays.ts";
 import { registerDocuments } from "./commands/documents.ts";
 import { registerMedia } from "./commands/media.ts";
+import { registerPacks } from "./commands/packs.ts";
 import { registerRead } from "./commands/read.ts";
 import { registerRun } from "./commands/run.ts";
 import { registerRuntimes } from "./commands/runtimes.ts";
@@ -50,6 +51,7 @@ registerAddress(program, cli);
 registerCatalog(program, cli);
 registerDocuments(program, cli);
 registerDisplays(program, cli);
+registerPacks(program, cli);
 registerMedia(program, cli);
 registerShare(program, cli);
 

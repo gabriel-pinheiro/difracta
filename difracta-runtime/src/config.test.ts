@@ -53,19 +53,27 @@ describe("runtime config", () => {
     ).toMatchObject({ oscPort: undefined, discovery: true });
   });
 
-  it("serves Media only under the show folder unless --media-anywhere or DIFRACTA_MEDIA_ANYWHERE=1", () => {
-    expect(configFromEnvironment(["show.difracta"], {}).mediaAnywhere).toBe(
-      false,
+  it("loads Pack folders for the run from --pack and DIFRACTA_PACKS, and takes the Registry and cache overrides", () => {
+    expect(configFromEnvironment(["show.difracta"], {})).toMatchObject({
+      packs: [],
+      packsFile: undefined,
+      packsCacheDir: undefined,
+    });
+    const config = configFromEnvironment(
+      ["show.difracta", "--pack", "/media/neon", "--pack", "rel/pack"],
+      {
+        DIFRACTA_PACKS: ["/media/env", ""].join(path.delimiter),
+        DIFRACTA_PACKS_FILE: "/etc/difracta/packs.json",
+        DIFRACTA_CACHE_DIR: "/var/cache/difracta",
+      },
     );
-    expect(
-      configFromEnvironment(["show.difracta", "--media-anywhere"], {})
-        .mediaAnywhere,
-    ).toBe(true);
-    expect(
-      configFromEnvironment(["show.difracta"], {
-        DIFRACTA_MEDIA_ANYWHERE: "1",
-      }).mediaAnywhere,
-    ).toBe(true);
+    expect(config.packs).toEqual([
+      "/media/neon",
+      path.resolve("rel/pack"),
+      "/media/env",
+    ]);
+    expect(config.packsFile).toBe("/etc/difracta/packs.json");
+    expect(config.packsCacheDir).toBe("/var/cache/difracta");
   });
 
   it("rejects an unknown mode and a second file", () => {

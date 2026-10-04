@@ -1,5 +1,9 @@
 import { emptyDocument } from "@difracta/core";
-import type { ClientMessage, ServerMessage } from "@difracta/protocol";
+import type {
+  ClientMessage,
+  PackLive,
+  ServerMessage,
+} from "@difracta/protocol";
 import { describe, expect, it, vi } from "vitest";
 
 import { DifractaClient } from "./client.ts";
@@ -138,7 +142,8 @@ describe("DifractaClient subscriptions", () => {
         osc: { port: null, listeners: 0 },
         outputs: {},
         displayHosts: {},
-        media: {},
+        packs: {},
+        shares: {},
       },
     });
     const seen: unknown[] = [];
@@ -154,6 +159,72 @@ describe("DifractaClient subscriptions", () => {
     });
     expect(seen).toEqual([{ s2: {} }]);
     expect(view.revision.get()).toBe(1);
+  });
+
+  it("asks for the live sections named and reads the Packs under their path", () => {
+    const { client, sockets, subscribes } = connectedClient();
+    const socket = sockets[0]!;
+    const view = client.openDocument("doc", { live: ["packs"] });
+    expect(subscribes(socket)).toEqual([
+      { type: "subscribe", documentId: "doc", live: ["packs"] },
+    ]);
+    const pack: PackLive = {
+      name: "Neon",
+      readOnly: false,
+      status: "ok",
+      folder: "/shows/neon",
+      ffmpeg: true,
+      prepared: { done: 1, total: 1 },
+      entries: {
+        logo: {
+          id: "logo",
+          file: "logo.png",
+          type: "image",
+          name: "Logo",
+          tags: [],
+          fingerprint: "aaaaaaaaaaaaaaaa-1",
+          status: "ok",
+          hasThumbnail: true,
+          hasProxy: false,
+        },
+      },
+    };
+    socket.receive({
+      type: "snapshot",
+      documentId: "doc",
+      revision: 1,
+      document: emptyDocument("Living"),
+      live: {
+        osc: { port: null, listeners: 0 },
+        outputs: {},
+        displayHosts: {},
+        packs: { "neon-k7f3": pack },
+        shares: {},
+      },
+    });
+    expect(view.valueAt(["live", "packs"])).toEqual({ "neon-k7f3": pack });
+    expect(view.valueAt(["live", "outputs"])).toEqual({});
+    const packsSeen: unknown[] = [];
+    const outputsSeen: unknown[] = [];
+    view.subscribePath(["live", "packs"], () =>
+      packsSeen.push(
+        view.valueAt(["live", "packs", "neon-k7f3", "entries", "logo", "tags"]),
+      ),
+    );
+    view.subscribePath(["live", "outputs"], () => outputsSeen.push(true));
+    socket.receive({
+      type: "live",
+      documentId: "doc",
+      patches: [
+        {
+          op: "set",
+          path: ["packs", "neon-k7f3", "entries", "logo", "tags"],
+          value: ["loop"],
+        },
+      ],
+    });
+    expect(packsSeen).toEqual([["loop"]]);
+    expect(outputsSeen).toEqual([]);
   });
 
   it("drops views of a replaced document and re-attaches after reconnect", () => {

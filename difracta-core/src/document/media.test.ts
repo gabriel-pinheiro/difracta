@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 
+import type { Document } from "./document.ts";
+
 import {
   isAbsoluteMediaPath,
   mediaExtension,
   mediaTypeOf,
   mediaNameOf,
+  mediaValueProblem,
   installationFolder,
-  mediaPathProblem,
   normalizeMediaPath,
   relativeMediaPath,
   resolveMediaPath,
@@ -26,15 +28,9 @@ describe("Media kinds", () => {
     expect(mediaTypeOf("noext")).toBeUndefined();
   });
 
-  it("names an item after its file and refuses what it cannot show", () => {
+  it("names an entry after its file", () => {
     expect(mediaNameOf("art/My Logo.png")).toBe("My Logo");
     expect(mediaNameOf("noext")).toBe("noext");
-    expect(mediaPathProblem("art/logo.png")).toBeUndefined();
-    expect(mediaPathProblem("notes.txt")).toContain("not an image or video");
-    expect(mediaPathProblem("notes.txt")).toContain("png, jpg");
-    expect(mediaPathProblem("notes.txt")).toContain("or mov");
-    expect(mediaPathProblem("")).toContain("must name a file");
-    expect(mediaPathProblem("art/")).toContain("not an image or video");
   });
 });
 
@@ -115,5 +111,48 @@ describe("Media paths", () => {
     expect(withinFolder("/shows/living", "/shows/shared/x.png")).toBe(false);
     expect(withinFolder("/shows/living", "/shows/living-2/x.png")).toBe(false);
     expect(withinFolder("/shows/living", "/shows/living")).toBe(false);
+  });
+});
+
+describe("Media references", () => {
+  const document = {
+    shares: { share_a: { id: "share_a", name: "Laptop", order: "a" } },
+  } as unknown as Pick<Document, "shares">;
+
+  it("take none, or a well-formed <pack>/<entry> for an image or video", () => {
+    expect(mediaValueProblem(document, "image", "")).toBeUndefined();
+    expect(mediaValueProblem(document, "video", "neon-k7f3/tunnels-04")).toBe(
+      undefined,
+    );
+    expect(mediaValueProblem(document, "image", "bundled/beam-scan")).toBe(
+      undefined,
+    );
+    expect(mediaValueProblem(document, "image", "no-slash")).toContain(
+      "is not one",
+    );
+    expect(mediaValueProblem(document, "image", "a/b/c")).toContain(
+      "is not one",
+    );
+    expect(mediaValueProblem(document, "image", "Neon/Clip")).toContain(
+      "is not one",
+    );
+    expect(mediaValueProblem(document, "image", "neon-/clip")).toContain(
+      "is not one",
+    );
+    expect(mediaValueProblem(document, "image", 3)).toContain(
+      "must be a Media reference",
+    );
+    expect(mediaValueProblem(document, "video", "x/y")).toBeUndefined();
+  });
+
+  it("take a Screen Share the Installation has for live", () => {
+    expect(mediaValueProblem(document, "live", "")).toBeUndefined();
+    expect(mediaValueProblem(document, "live", "share_a")).toBeUndefined();
+    expect(mediaValueProblem(document, "live", "share_b")).toContain(
+      "no Screen Share “share_b”",
+    );
+    expect(mediaValueProblem(document, "live", "neon/clip")).toContain(
+      "no Screen Share",
+    );
   });
 });

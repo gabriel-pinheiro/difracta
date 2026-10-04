@@ -2,8 +2,8 @@
  * What the preload script exposes to Studio as `window.difractaDesktop`, and
  * the IPC channels behind it. The bridge is the only thing a page can reach in
  * Desktop, so it carries only what needs the operating system: native file
- * pickers (the Installation's, and a Media file's), and files the OS asks the
- * app to open. Everything else Studio does goes to the runtime, where the CLI
+ * pickers (the Installation's, and a Pack's folder), and files the OS asks
+ * the app to open. Everything else Studio does goes to the runtime, where the CLI
  * can do it too.
  *
  * Studio declares the same shape in
@@ -15,11 +15,11 @@ export interface DifractaDesktop {
   /** A native Save dialog, its file name filled in with `<suggestedName>.difracta`. */
   pickSavePath(suggestedName?: string): Promise<string | null>;
   /**
-   * A native Open dialog filtered to the images and videos Difracta shows;
-   * the absolute path picked, or null when cancelled. Studio relativizes it
-   * against the Installation file's folder before `media.create`.
+   * A native folder picker for a Pack, a folder of images and videos the
+   * runtime scans; the absolute path picked, or null when cancelled. Studio
+   * hands it to the runtime's `packs.add` or `packs.locate`.
    */
-  pickMediaPath(): Promise<string | null>;
+  pickPackFolder(): Promise<string | null>;
   /**
    * Calls back with a file the OS asked Desktop to open while it was already
    * running (a double click, a second launch). Returns the unsubscribe.
@@ -30,7 +30,7 @@ export interface DifractaDesktop {
 export const channels = {
   pickOpenPath: "difracta:pick-open-path",
   pickSavePath: "difracta:pick-save-path",
-  pickMediaPath: "difracta:pick-media-path",
+  pickPackFolder: "difracta:pick-pack-folder",
   openRequest: "difracta:open-request",
 } as const;
 

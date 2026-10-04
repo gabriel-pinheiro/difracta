@@ -11,6 +11,7 @@ import {
   type RuntimeRequestName,
   type RuntimeRequestPayload,
   type ServerMessage,
+  type LiveRequest,
 } from "@difracta/protocol";
 
 import { DocumentView } from "./document-view.ts";
@@ -106,7 +107,7 @@ export class DifractaClient {
    */
   openDocument(
     documentId: string,
-    options: { readonly live?: boolean } = {},
+    options: { readonly live?: LiveRequest } = {},
   ): DocumentView {
     const existing = this.#views.get(documentId);
     if (existing !== undefined) return existing;
@@ -201,7 +202,7 @@ export class DifractaClient {
     this.#send({
       type: "subscribe",
       documentId: view.documentId,
-      ...(view.live ? { live: true } : {}),
+      ...(view.live === false ? {} : { live: view.live }),
     });
   }
 

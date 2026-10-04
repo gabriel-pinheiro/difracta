@@ -110,7 +110,7 @@ export function shader(visual: ShaderVisual, media: MediaContext) {
   };
 }
 
-/** One Media item: its shared first frame, and the playbacks opened on it, in order. */
+/** One Pack entry: its shared first frame, and the playbacks opened on it, in order. */
 export function stage(
   values: Record<string, unknown> = {},
   beats: Record<string, MediaBeats> = {},

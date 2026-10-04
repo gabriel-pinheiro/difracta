@@ -25,8 +25,8 @@ new OutputPage({
   canvas,
   overlay,
   output,
-  mediaUrl: (id) =>
-    `${origin}${settings.runtime.mediaPath}/${encodeURIComponent(id)}`,
+  mediaUrl: (reference) =>
+    `${origin}${settings.runtime.packsPath}/${reference.split("/").map(encodeURIComponent).join("/")}`,
   fontUrl: (file) =>
     `${origin}${settings.runtime.fontsPath}/${encodeURIComponent(file)}`,
 });

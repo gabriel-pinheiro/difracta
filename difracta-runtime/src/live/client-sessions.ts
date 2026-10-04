@@ -1,5 +1,5 @@
 import type { Patch } from "@difracta/core";
-import type { ServerMessage } from "@difracta/protocol";
+import type { LiveRequest, ServerMessage } from "@difracta/protocol";
 
 import type {
   DocumentDelta,
@@ -10,7 +10,8 @@ import type { ClientSession } from "./client-session.ts";
 /**
  * Every open connection, and who among them hears what: deltas and events go
  * to the subscribers of their document, live patches only to those that
- * subscribed with `live`, the document summary to everyone past `hello`.
+ * subscribed with `live` and only of the sections they asked for, the
+ * document summary to everyone past `hello`.
  */
 export class ClientSessions {
   readonly #sessions = new Set<ClientSession>();
@@ -23,10 +24,10 @@ export class ClientSessions {
     this.#sessions.delete(session);
   }
 
-  /** The sessions subscribed to `documentId`, with whether each asked for live state. */
+  /** The sessions subscribed to `documentId`, with what of the live state each asked for. */
   *subscribedTo(
     documentId: string,
-  ): Generator<{ session: ClientSession; live: boolean }> {
+  ): Generator<{ session: ClientSession; live: LiveRequest }> {
     for (const session of this.#sessions) {
       const subscription = session.subscriptions.get(documentId);
       if (subscription !== undefined)
@@ -48,7 +49,7 @@ export class ClientSessions {
   fanOutLive(documentId: string | undefined, patches: readonly Patch[]): void {
     if (documentId === undefined) return;
     for (const { session, live } of this.subscribedTo(documentId))
-      if (live) session.queueLive(patches);
+      if (live !== false) session.queueLive(patches, live);
   }
 
   broadcast(message: ServerMessage): void {

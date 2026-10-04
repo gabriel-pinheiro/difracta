@@ -2,15 +2,16 @@ import { settings } from "@difracta/core";
 import { z } from "zod";
 
 import { DisplayHostLiveSchema } from "./display-hosts.ts";
-import { SHARE_STATUSES, ShareLiveSchema } from "./screen-shares.ts";
+import { PackLiveSchema } from "./packs.ts";
+import { ShareLiveSchema } from "./screen-shares.ts";
 
 /**
  * Live state: what is happening right now around a document, replicated to
  * subscribers that ask for it (`subscribe` with `live: true`) but never
  * written to the file, never in undo history, and never versioned by the
  * document revision. Today it holds the OSC door, the Output Sessions, the
- * connected Display Hosts, whether each Media item's file is there and who
- * shares into each Screen Share.
+ * connected Display Hosts, the Packs the runtime has loaded with their
+ * entries, and who shares into each Screen Share.
  */
 const Count = z
   .object({
@@ -23,7 +24,7 @@ export type WorkloadCount = z.infer<typeof Count>;
 
 /**
  * Video on an Output: the video elements playing, the ones it holds (one
- * kept ready per video Media item and one per playback a Layer holds, a
+ * kept ready per video entry in use and one per playback a Layer holds, a
  * decoder each), and the planned Layers whose Visual takes a video.
  */
 const VideoCount = z
@@ -126,39 +127,36 @@ export const OscLiveSchema = z
   .strict();
 export type OscLive = z.infer<typeof OscLiveSchema>;
 
-export const FILE_STATUSES = [
-  "ok",
-  "missing",
-  "outside",
-  "unsaved",
-  "unavailable",
+/**
+ * The sections of the live state. A subscriber asks for all of them
+ * (`live: true`) or names the ones it reads: an Output page asks for
+ * `packs` alone, so it never pays for telemetry or Display Hosts.
+ */
+export const LIVE_SECTIONS = [
+  "osc",
+  "outputs",
+  "displayHosts",
+  "packs",
+  "shares",
 ] as const;
-export type FileStatus = (typeof FILE_STATUSES)[number];
+export const LiveSectionSchema = z.enum(LIVE_SECTIONS);
+export type LiveSection = z.infer<typeof LiveSectionSchema>;
 
-/** Every status a Media item can show: a file's or bundled item's, or a Screen Share's. */
-export const MEDIA_STATUSES = [...FILE_STATUSES, ...SHARE_STATUSES] as const;
-export type MediaStatus = (typeof MEDIA_STATUSES)[number];
+/** What `subscribe` asks of the live state: all of it, or the sections named; false or absent for none. */
+export const LiveRequestSchema = z.union([
+  z.boolean(),
+  z.array(LiveSectionSchema),
+]);
+export type LiveRequest = z.infer<typeof LiveRequestSchema>;
 
-/**
- * Whether a Media item's file can be served: `ok`, `missing` on disk,
- * `outside` the Installation file's folder while the runtime refuses that,
- * `unsaved` because the Installation has no file yet, so nothing resolves,
- * or, for a bundled item, `unavailable` because the runtime's Catalog lacks
- * its Bundled Media entry. The first four are about files; a bundled item
- * is `ok` or `unavailable`, or `missing` if the bundle's file is gone.
- */
-export const FileLiveSchema = z
-  .object({ status: z.enum(FILE_STATUSES) })
-  .strict();
-export type FileLive = z.infer<typeof FileLiveSchema>;
-
-/**
- * A Media item's status: a file's or bundled item's, or a Screen Share's
- * (`screen-shares.ts`), which also says who shares into it. One path per
- * item, so a reader shows one status whatever the kind.
- */
-export const MediaLiveSchema = z.union([FileLiveSchema, ShareLiveSchema]);
-export type MediaLive = z.infer<typeof MediaLiveSchema>;
+/** Whether `request` includes `section`. */
+export function liveSectionWanted(
+  request: LiveRequest | undefined,
+  section: LiveSection,
+): boolean {
+  if (request === undefined || request === false) return false;
+  return request === true || request.includes(section);
+}
 
 export const LiveStateSchema = z
   .object({
@@ -171,8 +169,10 @@ export const LiveStateSchema = z
     ),
     /** Connected Display Hosts by id; they belong to connections, not to the document. */
     displayHosts: z.record(z.string(), DisplayHostLiveSchema),
-    /** Each Media item of the open document by id: whether its file is there, or a Screen Share's state. */
-    media: z.record(z.string(), MediaLiveSchema),
+    /** The Packs the runtime has loaded, by Pack id: the Bundled Pack and the open Installation's attached ones. */
+    packs: z.record(z.string(), PackLiveSchema),
+    /** Each Screen Share of the open document by id: who shares into it. */
+    shares: z.record(z.string(), ShareLiveSchema),
   })
   .strict();
 export type LiveState = z.infer<typeof LiveStateSchema>;
@@ -181,5 +181,18 @@ export const EMPTY_LIVE_STATE: LiveState = {
   osc: { port: null, listeners: 0 },
   outputs: {},
   displayHosts: {},
-  media: {},
+  packs: {},
+  shares: {},
 };
+
+/** `state` with only the sections `request` asks for; the rest as empty as `EMPTY_LIVE_STATE` has them. */
+export function liveStateFor(
+  state: LiveState,
+  request: LiveRequest,
+): LiveState {
+  if (request === true) return state;
+  const picked: Record<string, unknown> = { ...EMPTY_LIVE_STATE };
+  if (request !== false)
+    for (const section of request) picked[section] = state[section];
+  return picked as LiveState;
+}

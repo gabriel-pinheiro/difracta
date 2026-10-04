@@ -1,4 +1,4 @@
-import { settings, type Media, type Table } from "@difracta/core";
+import { settings, type Share, type Table } from "@difracta/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fakeLivePage, settle } from "./live-fakes.ts";
@@ -6,9 +6,8 @@ import { LiveViewer } from "./live-viewer.ts";
 
 const { viewer: tuning } = settings.shares;
 
-const slot = (id: string): Media =>
-  ({ id, kind: "share", name: id, parentId: null, order: "a" }) as Media;
-const table = (...ids: string[]): Table<Media> =>
+const slot = (id: string): Share => ({ id, name: id, order: "a" }) as Share;
+const table = (...ids: string[]): Table<Share> =>
   Object.fromEntries(ids.map((id) => [id, slot(id)]));
 const wanted = (...ids: string[]): ReadonlySet<string> => new Set(ids);
 
@@ -84,7 +83,7 @@ describe("The engine's Viewer", () => {
     expect(viewer.shares()).toEqual({ viewed: 0, connected: 0 });
   });
 
-  it("leaves at once a slot the Media table lost", async () => {
+  it("leaves at once a slot the Installation lost", async () => {
     const { page, viewer } = await showing();
     viewer.sync(wanted(), table());
     expect(page.calls.at(-1)).toBe("leave m_screen");

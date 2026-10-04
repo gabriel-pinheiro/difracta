@@ -1,10 +1,10 @@
 import type { DocumentView } from "@difracta/client";
-import type { Media, Table } from "@difracta/core";
+import type { Share, Table } from "@difracta/core";
 import type { LiveState } from "@difracta/protocol";
 
 import { mediaTypeIcons } from "@/entities/media/media-icons";
-import { activeShares } from "@/entities/media/share-slots";
-import { shareStatusTone } from "@/entities/media/share-status";
+import { activeShares } from "@/entities/share/share-slots";
+import { shareStatusTone } from "@/entities/share/share-status";
 import { useDocumentPath } from "@/lib/client";
 import { cn } from "@/lib/utils";
 import { useSelection } from "@/selection/selection";
@@ -18,9 +18,9 @@ const ShareIcon = mediaTypeIcons.live;
  */
 export function ActiveShares({ view }: { readonly view: DocumentView }) {
   const { select } = useSelection();
-  const media = useDocumentPath<Table<Media>>(view, ["media"]);
-  const live = useDocumentPath<LiveState["media"]>(view, ["live", "media"]);
-  const shares = activeShares(media, live ?? {});
+  const table = useDocumentPath<Table<Share>>(view, ["shares"]);
+  const live = useDocumentPath<LiveState["shares"]>(view, ["live", "shares"]);
+  const shares = activeShares(table, live ?? {});
   return shares.map((share) => (
     <button
       key={share.id}
@@ -35,7 +35,7 @@ export function ActiveShares({ view }: { readonly view: DocumentView }) {
         "flex min-w-0 shrink items-center gap-1 rounded-sm px-1.5 hover:bg-accent",
         shareStatusTone[share.interrupted ? "interrupted" : "live"],
       )}
-      onClick={() => select({ kind: "media", id: share.id })}
+      onClick={() => select({ kind: "share", id: share.id })}
     >
       <ShareIcon className="size-3 shrink-0" />
       <span className="truncate">

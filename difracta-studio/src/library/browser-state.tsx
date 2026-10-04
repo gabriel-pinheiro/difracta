@@ -1,4 +1,4 @@
-import type { MediaType } from "@difracta/core";
+import type { FileMediaType } from "@difracta/core";
 import {
   createContext,
   useContext,
@@ -10,21 +10,28 @@ import {
 import type { Selection } from "@/selection/selection";
 
 /**
- * A media Parameter the Library is picking for through a new bundled item:
- * the Parameter already holds the item, so the Outputs show each pick.
+ * The Library picking an image or video for one media Address: a Layer's
+ * Parameter or a Macro action's value. Clicking a tile applies the entry at
+ * once through `apply`, so the Outputs are the preview; Escape puts
+ * `initial` back. The Library closes when the selection leaves `anchor`,
+ * the Layer or Macro the Address belongs to.
  */
 export interface ParameterBinding {
-  /** The type the Parameter takes; the Library offers only entries of it. */
-  readonly accepts: MediaType | undefined;
-  /** What was selected when the browse began; the Library stays open while it is. */
+  readonly kind: "parameter";
+  readonly address: string;
+  /** The Address's label, "Image" or "Video", and who owns it, for the title. */
+  readonly label: string;
+  readonly owner?: string | undefined;
+  readonly accepts: FileMediaType;
+  /** The Media reference held when the Library opened. */
+  readonly initial: string;
   readonly anchor: Selection | undefined;
-  /** Puts back the value the Parameter had before the browse, for Escape. */
-  readonly restore: () => void;
-  /** Where keyboard focus goes when the Library closes, as a selector. */
+  readonly apply: (reference: string) => void;
+  /** A selector for the element that gets focus back when the Library closes. */
   readonly returnFocus?: string | undefined;
 }
 
-/** What the Library in the center column is picking for. */
+/** What the Library in the center column is picking for, or browsing. */
 export type LibraryBinding =
   | {
       readonly kind: "layer";
@@ -32,13 +39,17 @@ export type LibraryBinding =
       /** Creating the Layer opened the browse, so Escape can remove it. */
       readonly created: boolean;
     }
+  /**
+   * Browsing one Pack's entries; clicking a tile selects the entry, so the
+   * inspector shows it, and sets nothing. `folder` scopes the grid to one
+   * folder of the Pack when the browse opens from an entry's file path.
+   */
   | {
-      readonly kind: "media";
-      readonly id: string;
-      /** Creating the bundled item opened the browse, so Escape can remove it. */
-      readonly created: boolean;
-      readonly parameter?: ParameterBinding | undefined;
-    };
+      readonly kind: "pack";
+      readonly packId: string;
+      readonly folder?: string | undefined;
+    }
+  | ParameterBinding;
 
 interface BrowserState {
   /** Undefined while the Library is closed. */
@@ -48,14 +59,12 @@ interface BrowserState {
     layerId: string,
     options?: { readonly created?: boolean },
   ) => void;
-  /** Binds the Library to a bundled Media item. */
-  readonly openMedia: (
-    mediaId: string,
-    options?: {
-      readonly created?: boolean;
-      readonly parameter?: ParameterBinding;
-    },
+  /** Binds the Library to a Pack to browse; with a `folder`, scoped to it, every time. */
+  readonly openPack: (
+    packId: string,
+    options?: { readonly folder?: string | undefined },
   ) => void;
+  readonly openParameter: (binding: Omit<ParameterBinding, "kind">) => void;
   readonly close: () => void;
 }
 
@@ -83,19 +92,16 @@ export function BrowserProvider({
                 created: options?.created === true,
               },
         ),
-      openMedia: (mediaId, options) =>
+      openPack: (packId, options) =>
         setBinding((previous) =>
-          previous?.kind === "media" &&
-          previous.id === mediaId &&
-          options?.created !== true
+          previous?.kind === "pack" &&
+          previous.packId === packId &&
+          options?.folder === undefined
             ? previous
-            : {
-                kind: "media",
-                id: mediaId,
-                created: options?.created === true,
-                parameter: options?.parameter,
-              },
+            : { kind: "pack", packId, folder: options?.folder },
         ),
+      openParameter: (parameter) =>
+        setBinding({ kind: "parameter", ...parameter }),
       close: () => setBinding(undefined),
     }),
     [binding],

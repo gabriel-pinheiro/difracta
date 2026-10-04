@@ -1,70 +1,52 @@
-import { describeBeats, type MediaDefinition } from "@difracta/core";
+import { entryFacts } from "@/entities/pack/entry-facts";
 
-import { bundledUrl, thumbnailUrl } from "@/lib/catalog";
+import type { MediaRow } from "./media-search";
 
 /**
- * The Bundled Media entry the item shows: the clip playing muted beside its
- * name, description, notes, size and length. An entry this runtime's bundle
- * lacks is named by its id, with what to do about it.
+ * The strip above the grid while the Library picks for a media Address:
+ * the entry the Address holds now, its facts and tags, or how to start.
+ * Editing an entry is done from its Inspector while browsing its Pack, not
+ * while picking.
  */
 export function MediaDescription({
   current,
   currentId,
+  noun,
 }: {
-  readonly current: MediaDefinition | undefined;
-  readonly currentId: string;
+  readonly current: MediaRow | undefined;
+  readonly currentId: string | null;
+  /** "images" or "videos". */
+  readonly noun: string;
 }) {
-  if (current === undefined)
-    return (
-      <div className="flex min-h-9 shrink-0 items-center border-b px-2 py-1 text-[0.6875rem]/relaxed text-muted-foreground">
-        <p>
-          Bundled Media “{currentId}” is not in this runtime's bundle. Pick
-          another to replace it.
-        </p>
-      </div>
-    );
   return (
     <div
       data-testid="media-description"
-      className="flex max-h-40 shrink-0 gap-2 overflow-auto border-b px-2 py-1.5 text-[0.6875rem]/relaxed text-muted-foreground"
+      className="flex min-h-9 shrink-0 items-center gap-2 border-b px-2 py-1 text-[0.6875rem]/relaxed text-muted-foreground"
     >
-      {current.type === "video" ? (
-        <video
-          key={current.id}
-          aria-hidden
-          className="aspect-video w-40 shrink-0 self-start rounded-sm bg-black object-cover"
-          poster={thumbnailUrl(current.id)}
-          src={bundledUrl(current.id)}
-          muted
-          loop
-          autoPlay
-          playsInline
-        />
-      ) : (
-        <img
-          alt=""
-          className="aspect-video w-40 shrink-0 self-start rounded-sm bg-black object-cover"
-          src={bundledUrl(current.id)}
-        />
-      )}
-      <div className="grid min-w-0 content-start gap-1">
-        <p>
-          <span className="font-medium text-foreground">{current.name}</span>{" "}
-          {current.description}
+      {current !== undefined ? (
+        <p className="min-w-0">
+          <span className="font-medium text-foreground">
+            {current.entry.name}
+          </span>{" "}
+          <span>{current.packName}</span>
+          {entryFacts(current.entry) !== "" && (
+            <span> · {entryFacts(current.entry)}</span>
+          )}
+          {current.entry.tags.length > 0 && (
+            <span> · {current.entry.tags.join(", ")}</span>
+          )}
+          {current.entry.description !== undefined && (
+            <span> · {current.entry.description}</span>
+          )}
         </p>
-        {current.notes !== undefined && <p>{current.notes}</p>}
-        <p>{mediaFacts(current)}</p>
-      </div>
+      ) : currentId !== null ? (
+        <p>“{currentId}” is in no loaded Pack. Pick another to replace it.</p>
+      ) : (
+        <p>
+          Pick one of the {noun}: click a tile or use the arrow keys. The Layer
+          shows it right away.
+        </p>
+      )}
     </div>
   );
-}
-
-/** Size, length for a video and beats for one with a pulse: "1920×1080, 7.1 s, 16 beats, 135.2 BPM". */
-export function mediaFacts(entry: MediaDefinition): string {
-  const size = `${String(entry.width)}×${String(entry.height)}`;
-  if (entry.duration === undefined) return size;
-  const length = `${size}, ${String(Math.round(entry.duration * 10) / 10)} s`;
-  return entry.beats === undefined
-    ? length
-    : `${length}, ${describeBeats(entry.beats, entry.duration)}`;
 }

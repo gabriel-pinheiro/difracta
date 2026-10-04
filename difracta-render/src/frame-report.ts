@@ -25,7 +25,7 @@ export interface FrameReport {
   };
   /**
    * Video: planned Layers whose Visual takes a video, the video elements
-   * the Output holds (one kept ready per video Media item, one per
+   * the Output holds (one kept ready per video entry in use, one per
    * playback a Layer holds), each of which holds a decoder, and the ones
    * playing.
    */

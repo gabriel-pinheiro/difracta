@@ -1,22 +1,19 @@
-import type { Catalog } from "../catalog/catalog.ts";
+import { parseMediaReference } from "../packs/reference.ts";
 import { settings } from "../settings.ts";
-import type { Document, Media, Table } from "./document.ts";
-import type { Patch } from "./patch.ts";
-import { childrenOf, descendantsOf, flattenTree } from "./tree.ts";
+import type { Document } from "./document.ts";
 
 /**
- * A Media file is one image or video the Installation refers to. Its `path`
- * is relative to the Installation file's folder, with POSIX separators and
- * `..` allowed, so a show folder moves between machines with its files. The
- * type is read from the extension and never stored; a bundled item's comes
- * from its Bundled Media entry in the Catalog, and a Screen Share is always
- * `live`. These helpers run in the browser as well as in Node, so paths are
- * handled here rather than with `node:path`.
+ * Media is an image or video entry of a Pack, or a Screen Share. A `media`
+ * Parameter holds a Media reference: `<packId>/<entryId>` for an entry, a
+ * Screen Share's id for a live one, `""` for none. The type of an entry is
+ * read from its file's extension when the Pack is scanned; a Screen Share
+ * is always `live`. These helpers run in the browser as well as in Node, so
+ * paths are handled here rather than with `node:path`.
  */
 export const MEDIA_TYPES = ["image", "video", "live"] as const;
 export type MediaType = (typeof MEDIA_TYPES)[number];
 
-/** The types a file can be, by its extension: what a file or a Bundled Media entry holds. */
+/** The types a file can be, by its extension: what a Pack entry holds. */
 export const FILE_MEDIA_TYPES = ["image", "video"] as const;
 export type FileMediaType = (typeof FILE_MEDIA_TYPES)[number];
 
@@ -24,66 +21,10 @@ export type FileMediaType = (typeof FILE_MEDIA_TYPES)[number];
 export const aMediaType = (type: MediaType): string =>
   type === "image" ? "an image" : `a ${type}`;
 
-/** The Media items directly under the root (`parentId` null) or a Group, in order. */
-export const childMedia = (
-  media: Table<Media>,
-  parentId: string | null,
-): readonly Media[] => childrenOf(media, parentId);
-
-/** Every Media item in navigator order: depth first from the root. */
-export const flattenMedia = (media: Table<Media>): readonly Media[] =>
-  flattenTree(media);
-
-/** Every Media item below `mediaId`, depth first in display order; empty unless it is a Group. */
-export const descendantMedia = (
-  media: Table<Media>,
-  mediaId: string,
-): readonly Media[] => descendantsOf(media, mediaId);
-
-/**
- * The type of a Media file from its path, `live` for a Screen Share, or
- * undefined for a Group, a file Difracta cannot show, and a bundled item,
- * whose type only the Catalog knows (`mediaItemTypeIn`).
- */
-export function mediaItemType(item: Media): MediaType | undefined {
-  if (item.kind === "file") return mediaTypeOf(item.path);
-  return item.kind === "share" ? "live" : undefined;
-}
-
-/**
- * The type of any Media item: a file's from its extension, a bundled item's
- * from its entry in `catalog`. Undefined for a Group, a file Difracta
- * cannot show and a bundled item whose entry the Catalog lacks, so such an
- * item is never offered or accepted as a value.
- */
-export function mediaItemTypeIn(
-  item: Media,
-  catalog: Catalog,
-): MediaType | undefined {
-  if (item.kind === "bundled") return catalog.mediaEntry(item.bundled)?.type;
-  return mediaItemType(item);
-}
-
 /** A video's length in beats and the time in seconds of its first one. */
 export interface MediaBeats {
   readonly beats: number;
   readonly firstBeat: number;
-}
-
-/**
- * The beats of a Media item: a file's own, a bundled item's from its entry
- * in `catalog`. Undefined for an item without them, which has no tempo to
- * sync.
- */
-export function mediaBeatsIn(
-  item: Media,
-  catalog: Catalog,
-): MediaBeats | undefined {
-  if (item.kind === "group" || item.kind === "share") return undefined;
-  const source =
-    item.kind === "bundled" ? catalog.mediaEntry(item.bundled) : item;
-  if (source?.beats === undefined) return undefined;
-  return { beats: source.beats, firstBeat: source.firstBeat ?? 0 };
 }
 
 /** A clip's own tempo in beats per minute, from its beats and its length in seconds. */
@@ -100,10 +41,6 @@ export function describeBeats(beats: number, duration?: number): string {
   const tempo = Math.round(tempoOf(beats, duration) * 10) / 10;
   return `${count}, ${String(tempo)} BPM`;
 }
-
-/** The refusal for a Bundled Media id the Catalog lacks. */
-export const bundledEntryUnknown = (entry: string): string =>
-  `“${entry}” is not in the Bundled Media; \`difracta media bundled\` lists them.`;
 
 const IMAGE_EXTENSIONS: readonly string[] = settings.media.imageExtensions;
 const VIDEO_EXTENSIONS: readonly string[] = settings.media.videoExtensions;
@@ -125,17 +62,7 @@ export function mediaTypeOf(path: string): FileMediaType | undefined {
   return undefined;
 }
 
-/** Why `path` cannot be a Media item's path, or undefined when it can. */
-export function mediaPathProblem(path: string): string | undefined {
-  const normalized = normalizeMediaPath(path);
-  if (normalized === "." || normalized.endsWith("/"))
-    return "A Media path must name a file.";
-  if (mediaTypeOf(normalized) !== undefined) return undefined;
-  const all = [...IMAGE_EXTENSIONS, ...VIDEO_EXTENSIONS];
-  return `“${fileNameOf(normalized)}” is not an image or video Difracta can show; the file must end in ${all.slice(0, -1).join(", ")} or ${all.at(-1) ?? ""}.`;
-}
-
-/** The name a Media item takes from its file: the file name without its extension. */
+/** The name an entry takes from its file at first scan: the file name without its extension. */
 export function mediaNameOf(path: string): string {
   const name = fileNameOf(path);
   const extension = mediaExtension(path);
@@ -183,10 +110,11 @@ export function isAbsoluteMediaPath(path: string): boolean {
 }
 
 /**
- * The path to store for a file at `absolutePath` in an Installation whose
- * file sits in `folder`: relative to that folder, with `..` when the file
- * is elsewhere. A file on another root (another drive) keeps its absolute
- * path, since nothing relative reaches it.
+ * The path to store as a Pack's `relativePath` hint for a Pack folder at
+ * `absolutePath` in an Installation whose file sits in `folder`: relative
+ * to that folder, with `..` when the Pack is beside it. A folder on another
+ * root (another drive) keeps its absolute path, since nothing relative
+ * reaches it.
  */
 export function relativeMediaPath(
   absolutePath: string,
@@ -216,9 +144,9 @@ function splitAfterRoot(path: string, root: string): readonly string[] {
 }
 
 /**
- * The folder an Installation file's Media paths are relative to: the file's
- * path without its last segment, normalized. Studio uses it with the path
- * from the document's summary, where `node:path` is out of reach.
+ * The folder an Installation file's relative paths are read against: the
+ * file's path without its last segment, normalized. Studio uses it with the
+ * path from the document's summary, where `node:path` is out of reach.
  */
 export function installationFolder(filePath: string): string {
   const normalized = normalizeMediaPath(filePath);
@@ -228,7 +156,7 @@ export function installationFolder(filePath: string): string {
   return parent === "" ? "." : parent;
 }
 
-/** Where a stored Media path points for an Installation file in `folder`, normalized. */
+/** Where a stored relative path points for an Installation file in `folder`, normalized. */
 export function resolveMediaPath(folder: string, path: string): string {
   return isAbsoluteMediaPath(path)
     ? normalizeMediaPath(path)
@@ -242,62 +170,33 @@ export function withinFolder(folder: string, resolved: string): boolean {
   return normalizeMediaPath(resolved).startsWith(prefix);
 }
 
-/**
- * Why `value` cannot be the value of a Media Parameter accepting `accepts`,
- * or undefined when it can: the empty string for none, or the id of a Media
- * file, bundled item or Screen Share of that type. A Group is never a value,
- * nor is a bundled item whose entry `catalog` lacks.
- */
-export function mediaValueProblem(
-  document: Pick<Document, "media">,
-  catalog: Catalog,
-  accepts: MediaType,
-  value: unknown,
-): string | undefined {
-  const expected = `must be the id of ${aMediaType(accepts)} Media item, or "" for none`;
-  if (value === "") return undefined;
-  if (typeof value !== "string") return expected;
-  const item = document.media[value];
-  if (item === undefined)
-    return `${expected}; there is no Media item “${value}”`;
-  if (item.kind === "group")
-    return `${expected}; “${item.name}” is a Media Group`;
-  const type = mediaItemTypeIn(item, catalog);
-  if (type === undefined && item.kind === "bundled")
-    return `${expected}; “${item.name}” is Bundled Media “${item.bundled}”, which this runtime lacks`;
-  if (type !== accepts)
-    return `${expected}; “${item.name}” is ${type === undefined ? "a file of another type" : type === "live" ? "a Screen Share, which is live" : aMediaType(type)}`;
-  return undefined;
+/** What a `media` Parameter accepting `accepts` must hold, for messages. */
+export function mediaValueExpectation(accepts: MediaType): string {
+  return accepts === "live"
+    ? 'must be the id of a Screen Share, or "" for none'
+    : `must be a Media reference “<pack>/<entry>” to ${aMediaType(accepts)} entry of a Pack, or "" for none`;
 }
 
 /**
- * Patches setting to `""` every Media Parameter value that `clear` rejects,
- * on every Layer whose definition the Catalog knows: what removing a Media
- * item, or changing its type, takes with it.
+ * Why `value` cannot be the value of a Media Parameter accepting `accepts`,
+ * or undefined when it can. The shape only: `""`, a well-formed
+ * `<packId>/<entryId>` for an image or video, a Screen Share the
+ * Installation has for live. Whether an entry exists, is of the accepted
+ * type and has its file is live status the runtime computes.
  */
-export function clearMediaValues(
-  document: Pick<Document, "layers">,
-  catalog: Catalog,
-  clear: (accepts: MediaType, value: string) => boolean,
-): Patch[] {
-  const patches: Patch[] = [];
-  for (const layer of Object.values(document.layers)) {
-    if (layer.kind === "group") continue;
-    const id = layer.kind === "visual" ? layer.visual : layer.filter;
-    const definition =
-      id === null ? undefined : catalog.definition(layer.kind, id);
-    if (definition === undefined) continue;
-    for (const [name, parameter] of Object.entries(definition.parameters)) {
-      if (parameter.kind !== "media") continue;
-      const value = layer.parameters[name];
-      if (typeof value !== "string" || value === "") continue;
-      if (clear(parameter.accepts, value))
-        patches.push({
-          op: "set",
-          path: ["layers", layer.id, "parameters", name],
-          value: "",
-        });
-    }
-  }
-  return patches;
+export function mediaValueProblem(
+  document: Pick<Document, "shares">,
+  accepts: MediaType,
+  value: unknown,
+): string | undefined {
+  const expected = mediaValueExpectation(accepts);
+  if (value === "") return undefined;
+  if (typeof value !== "string") return expected;
+  if (accepts === "live")
+    return value in document.shares
+      ? undefined
+      : `${expected}; there is no Screen Share “${value}”`;
+  return parseMediaReference(value) === undefined
+    ? `${expected}; “${value}” is not one`
+    : undefined;
 }

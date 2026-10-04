@@ -1,105 +1,76 @@
-import {
-  createBuiltInRegistry,
-  emptyDocument,
-  executeCommand,
-  type Document,
-} from "@difracta/core";
 import { describe, expect, it } from "vitest";
 
-import { resolveId, resolvePayloadNames } from "../names.ts";
-import { beatsPayload, formatMedia, listMedia, mediaGroupId } from "./media.ts";
-
-const registry = createBuiltInRegistry();
-
-/** Logo at the root, and Art { Logo, Clips { Loop } }. */
-function stage(): Document {
-  let document = emptyDocument("Living");
-  for (const [name, payload] of [
-    ["media.create", { id: "m_logo", path: "logo.png" }],
-    ["media.create", { id: "g_art", kind: "group", name: "Art" }],
-    ["media.create", { id: "m_art", path: "art/logo.png", parentId: "g_art" }],
-    [
-      "media.create",
-      { id: "g_clips", kind: "group", name: "Clips", parentId: "g_art" },
-    ],
-    ["media.create", { id: "m_loop", path: "loop.mp4", parentId: "g_clips" }],
-    ["media.beats", { mediaId: "m_loop", beats: 16 }],
-  ] as const) {
-    const result = executeCommand(registry, document, name, payload);
-    if (!result.ok) throw new Error(result.error);
-    document = result.document;
-  }
-  return document;
-}
+import { packs, stage } from "../media-fixtures.ts";
+import {
+  formatEntries,
+  formatPackEntries,
+  listEntries,
+  listingPacks,
+} from "./media-listing.ts";
+import { mergeTags, parseBeats } from "./media.ts";
 
 describe("media list", () => {
-  it("lists the tree in navigator order with kind, type, status and path", () => {
-    const items = listMedia(stage(), {
-      m_logo: { status: "ok" },
-      m_art: { status: "missing" },
+  it("lists a Pack's entries in path order with reference, path, type, size, length, beats, tags and missing", () => {
+    const bundled = listEntries("bundled", packs.bundled!);
+    expect(bundled).toHaveLength(1);
+    expect(bundled[0]).toMatchObject({
+      reference: "bundled/beam-scan-loop",
+      file: "clips/beam-scan-loop.webm",
+      type: "video",
+      width: 1920,
+      duration: 7.1,
+      beats: 16,
+      firstBeat: 0,
+      tags: ["loop"],
+      status: "ok",
     });
-    expect(items.map((item) => [item.id, item.depth, item.kind])).toEqual([
-      ["m_logo", 0, "file"],
-      ["g_art", 0, "group"],
-      ["m_art", 1, "file"],
-      ["g_clips", 1, "group"],
-      ["m_loop", 2, "file"],
+    expect(formatEntries(bundled)).toBe(
+      "bundled/beam-scan-loop  clips/beam-scan-loop.webm  video  1920×1080  7.1 s  16 beats, 135.2 BPM  loop",
+    );
+    const neon = listEntries("neon-k7f3", packs["neon-k7f3"]!);
+    expect(neon.map((item) => item.file)).toEqual([
+      "Tunnels/04.MP4",
+      "logo.png",
+      "tunnels/04.mp4",
     ]);
-    expect(items[1]).toMatchObject({ path: null, type: null });
-    expect(formatMedia(items).split("\n")).toEqual([
-      "logo      m_logo   file   image  ok       logo.png",
-      "Art       g_art    group",
-      "  logo    m_art    file   image  missing  art/logo.png",
-      "  Clips   g_clips  group",
-      "    loop  m_loop   file   video  …        loop.mp4      16 beats",
+    expect(formatEntries(neon).split("\n")[1]).toBe(
+      "neon-k7f3/logo          logo.png        image          missing",
+    );
+  });
+
+  it("groups every Pack under a heading, saying which are not loaded or missing", () => {
+    const groups = listingPacks(stage(), packs);
+    expect(groups.map((group) => group.packId)).toEqual([
+      "bundled",
+      "neon-k7f3",
+      "neon-x1y2",
+      "tour-a9b8",
     ]);
-    expect(items[4]).toMatchObject({ beats: 16, firstBeat: 0 });
-    expect(items[0]).toMatchObject({ beats: null, firstBeat: null });
-    expect(formatMedia([])).toContain("media add");
+    const text = formatPackEntries(groups);
+    expect(text).toContain("Bundled  bundled\n  bundled/beam-scan-loop");
+    expect(text).toContain("Neon  neon-x1y2  not loaded\n  No entries here");
+    expect(text).toContain("Tour  tour-a9b8  missing\n  No entries here");
+  });
+});
+
+describe("media tag", () => {
+  it("adds tags once each ignoring case and keeps the first spelling", () => {
+    expect(mergeTags(["Loop"], ["loop", "riser", " riser "], false)).toEqual([
+      "Loop",
+      "riser",
+    ]);
+  });
+
+  it("takes tags away ignoring case", () => {
+    expect(mergeTags(["Loop", "riser"], ["LOOP"], true)).toEqual(["riser"]);
   });
 });
 
 describe("media beats", () => {
-  it("reads a number of beats or none, and a first beat", () => {
-    expect(beatsPayload("m_loop", "16", undefined)).toEqual({
-      mediaId: "m_loop",
-      beats: 16,
-    });
-    expect(beatsPayload("m_loop", " None ", undefined)).toEqual({
-      mediaId: "m_loop",
-      beats: null,
-    });
-    expect(beatsPayload("m_loop", "7.5", "0.25")).toEqual({
-      mediaId: "m_loop",
-      beats: 7.5,
-      firstBeat: 0.25,
-    });
-    expect(() => beatsPayload("m_loop", "sixteen", undefined)).toThrow(
-      "Beats must be a number, not “sixteen”.",
-    );
-    expect(() => beatsPayload("m_loop", "16", "soon")).toThrow(
-      "The first beat must be a number",
-    );
-  });
-});
-
-describe("Media names", () => {
-  it("resolves a name across the tree and refuses an ambiguous one with the ids", () => {
-    const document = stage();
-    expect(resolveId(document, "media", "loop")).toBe("m_loop");
-    expect(() => resolveId(document, "media", "logo")).toThrow(
-      "“logo” matches 2 Media items: logo (m_logo), logo (m_art, in Group Art)",
-    );
-    expect(mediaGroupId(document, "clips")).toBe("g_clips");
-    expect(() => mediaGroupId(document, "loop")).toThrow(
-      "“loop” is not a Media Group.",
-    );
-    expect(
-      resolvePayloadNames(document, "media.move", {
-        mediaId: "loop",
-        parentId: "Art",
-        after: "Clips",
-      }),
-    ).toEqual({ mediaId: "m_loop", parentId: "g_art", after: "g_clips" });
+  it("reads a count or none and refuses the rest", () => {
+    expect(parseBeats("16")).toBe(16);
+    expect(parseBeats("None")).toBeNull();
+    expect(() => parseBeats("fast")).toThrow("positive number of beats");
+    expect(() => parseBeats("0")).toThrow("positive number of beats");
   });
 });

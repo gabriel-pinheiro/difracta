@@ -1,14 +1,6 @@
-import { mediaDefinitionsFromManifest } from "@difracta/core";
-
-import manifest from "../../bundled/manifest.json" with { type: "json" };
-
 /**
- * The Bundled Media: the entries of the manifest `npm run media:fetch` put
- * in `bundled/`, validated when this module loads, so a bad manifest fails
- * the build and the tests, never a show. Bundlers inline the JSON; the
- * clips and thumbnails stay files under `bundledRoot`.
+ * Where the Bundled Pack's files are: the folder `npm run media:fetch` fills
+ * from the difracta-media release `settings.media.bundle` pins. The runtime
+ * loads it as the read-only Pack `bundled`; the clips stay files here.
  */
-export const bundledMedia = mediaDefinitionsFromManifest(manifest);
-
-/** Where the bundle's files are: `manifest.json`, `clips/` and `thumbnails/`. */
 export const bundledRoot = new URL("../../bundled/", import.meta.url);

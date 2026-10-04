@@ -6,7 +6,11 @@ import {
   type Patch,
   type PatchPath,
 } from "@difracta/core";
-import { EMPTY_LIVE_STATE, type LiveState } from "@difracta/protocol";
+import {
+  EMPTY_LIVE_STATE,
+  type LiveState,
+  type LiveRequest,
+} from "@difracta/protocol";
 
 import { Signal, type ReadonlySignal } from "./signal.ts";
 
@@ -22,15 +26,18 @@ export const LIVE_ROOT = "live";
  */
 export class DocumentView {
   readonly documentId: string;
-  /** Whether the runtime was asked for live state. */
-  readonly live: boolean;
+  /** What of the live state the runtime was asked for: all of it, the sections named, or none (false). */
+  readonly live: LiveRequest;
   readonly document: Signal<Document | undefined>;
   readonly liveState: Signal<LiveState>;
   readonly revision: Signal<number>;
   readonly #pathListeners = new Map<string, Set<() => void>>();
   readonly #eventListeners = new Set<(address: string) => void>();
 
-  constructor(documentId: string, options: { readonly live?: boolean } = {}) {
+  constructor(
+    documentId: string,
+    options: { readonly live?: LiveRequest } = {},
+  ) {
     this.documentId = documentId;
     this.live = options.live ?? false;
     this.document = new Signal<Document | undefined>(undefined);

@@ -208,14 +208,13 @@ happens next and never where things are now.
 
 ### Catalog
 
-What a Runtime knows it can show, in four kinds of definition, each with a
-stable id unique across all four: Visuals, Filters, Bundled Media (`media`) and
-Bundled Fonts (`font`). Studio picks from the Catalog in the Library, the CLI
-lists and describes it, and commands validate ids and Parameter Values against
-it. A Visual, a Filter or a Bundled Media entry may carry notes for whoever
-composes with it, and has a thumbnail rendered from it. A Layer referring to an
-id the Catalog no longer has is shown as unavailable and renders nothing; the
-file stays valid.
+What a Runtime knows it can show, in three kinds of definition, each with a
+stable id unique across all three: Visuals, Filters and Bundled Fonts (`font`).
+Studio picks from the Catalog in the Library, the CLI lists and describes it,
+and commands validate ids and Parameter Values against it. A Visual or a Filter
+may carry notes for whoever composes with it, and has a thumbnail rendered from
+it. A Layer referring to an id the Catalog no longer has is shown as unavailable
+and renders nothing; the file stays valid.
 
 ### Recommended
 
@@ -258,30 +257,66 @@ definition's defaults.
 
 ### Media
 
-One image, video or Screen Share the Installation refers to, as an entity in the
-`media` table. A Media item is of kind `file`, with a `path` relative to the
-Installation File's folder, POSIX separators and `..` allowed, of kind
-`bundled`, naming a Bundled Media entry by id, or of kind `share`, a Screen
-Share. Its type is read from the file's extension (image: png, jpg, jpeg, webp,
-gif, svg; video: mp4, webm, mov) or from the entry, is `live` for a Screen
-Share, and is never stored. Items are arranged in Media Groups, and a name is
-unique among its siblings. The Runtime serves a file at `GET /media/<id>` and
-reports in the live state whether it is there: `ok`, `missing`, `outside` the
-folder, or `unsaved` while the Installation has no file for the path to be
-relative to; a bundled item is `ok`, or `unavailable` when the Runtime's Catalog
-lacks its entry; a Screen Share is `idle`, `live` or `interrupted`.
+An image or video entry of a Pack, or a Screen Share: what a Media Parameter
+shows. An entry has a stable id within its Pack, a name, free-form tags, a
+fingerprint of its file, and once measured its width, height and, for a video,
+duration; a video with a steady pulse has Beats. Its type, image or video, is
+read from the file's extension (image: png, jpg, jpeg, webp, gif, svg; video:
+mp4, webm, mov) when the Pack is scanned. Media is not an entity of the
+Installation: the Installation attaches Packs and names entries through
+references.
+
+### Media reference
+
+What a Media Parameter holds: `<packId>/<entryId>` for an image or video entry
+of a Pack, a Screen Share's id for a live one, or `""` for none. The reference
+is the value; whether the entry exists, is of the accepted type and has its file
+is live status the Runtime computes, so a reference into a Pack this machine
+lacks reads as missing and the Layer waits rather than breaks. Removing a Pack
+never rewrites references.
+
+### Pack
+
+A folder of images and videos on the Runtime's machine, with a manifest in its
+`.difracta/` folder: an id (the folder's slug plus a short random suffix, so two
+"neon" Packs never collide), a name, whether it is read-only, and one entry per
+media file found in it. The Runtime scans the folder, bakes thumbnails and
+proxies into `.difracta/`, and serves it. An Installation attaches Packs by id,
+keeping a copy of the name and, when the Pack sits inside or beside the show
+folder, a relative hint to it. A Pack the machine lacks is missing until it is
+located.
+
+### Bundled Pack
+
+The Pack Difracta ships, from a pinned release of the `difracta-media`
+repository: id `bundled`, read-only, attached to every Installation and never
+detached or renamed. Its entries carry the `recommended`, `loop` and `hit` tags
+and Beats for a clip with a steady pulse, and it ships Prepared.
+
+### Registry
+
+The Runtime machine's record of where each Pack it knows is on disk, by Pack id,
+with the Pack's name. It is the machine's, never in the Installation, so a show
+relocates without edits; a Pack kept beside the show folder is found through the
+Installation's relative hint instead.
+
+### Prepared
+
+A Pack whose every entry has its thumbnail and, for a video, its proxy baked.
+Until then the Runtime reports how many are done, and Studio shows a placeholder
+for an entry still waiting.
 
 ### Screen Share
 
-A Media item of kind `share`, of type `live`: a named slot a Sharer shares a
-screen or window into. It is authored like any item, Layers point at it, and
-someone shares into it at the show. The file holds the slot only: no file, and
-nothing about who shares. In the live state it is `idle` while nobody shares,
-`live` while a Sharer does, with the Sharer's name, whether it is a screen or a
-window, since when and how many Viewers it has, and `interrupted` while the
-Sharer's connection to the Runtime is gone, until the Sharer comes back or a
-delay passes. A second Sharer replaces the first; anyone may stop a share. Do
-not call it a stream, a feed or a capture.
+A named slot a Sharer shares a screen or window into, an entity of the
+Installation's `shares` table, of type `live`. Layers name it by id in a Media
+Parameter, and someone shares into it at the show. The file holds the slot only:
+no file, and nothing about who shares. In the live state it is `idle` while
+nobody shares, `live` while a Sharer does, with the Sharer's name, whether it is
+a screen or a window, since when and how many Viewers it has, and `interrupted`
+while the Sharer's connection to the Runtime is gone, until the Sharer comes
+back or a delay passes. A second Sharer replaces the first; anyone may stop a
+share. Do not call it a stream, a feed or a capture.
 
 ### Sharer
 
@@ -303,35 +338,22 @@ picture of it is on screen.
 
 ### Beats
 
-How many beats a video Media item lasts, such as 16 for a four-bar loop, with
-its First Beat, the time in seconds of the first one, zero unless the clip
-starts off the beat. The clip's own tempo follows from them and its length,
-`beats × 60 / seconds`, and is never stored. A file's Beats are written on the
-item; a bundled item's are its Bundled Media entry's and cannot be changed. An
-item without Beats has no tempo to follow. Video's Sync to Tempo uses them to
-play a clip at a song's tempo and to put its pulse on the beat.
+How many beats a video entry lasts, such as 16 for a four-bar loop, with its
+First Beat, the time in seconds of the first one, zero unless the clip starts
+off the beat. The clip's own tempo follows from them and its length,
+`beats × 60 / seconds`, and is never stored. Beats are written in the entry's
+Pack manifest; the Bundled Pack's cannot be changed. An entry without Beats has
+no tempo to follow. Video's Sync to Tempo uses them to play a clip at a song's
+tempo and to put its pulse on the beat.
 
 Do not store or ask for a clip's BPM; it is what Beats make of its length.
 
-### Bundled Media
-
-The images and videos Difracta ships, from a pinned release of the
-`difracta-media` repository, each with a stable id, a name, a description,
-notes, a thumbnail, optional Recommended, Loop (loops without a seam) and Hit (a
-one-shot on a beat) flags, and Beats for a clip with a steady pulse. They are
-`media` definitions in the Catalog, so the Library, the CLI and validation know
-them. A Media item of kind `bundled` refers to one by id; when the Runtime's
-Catalog lacks that id the item stays in the file, unavailable, and shows
-nothing.
-
 ### Media Parameter
 
-A Parameter of kind `media` a Visual declares, holding a Media id or `""` for
-none, restricted to one type (`accepts: "image" | "video" | "live"`). Its
-Address lists the Media items of that type as its options, files, bundled items
-or Screen Shares, in navigator order and without Groups, so a Macro can swap
-artwork; it is not linkable. Removing the Media item, or the Group holding it,
-clears every Media Parameter holding it.
+A Parameter of kind `media` a Visual declares, holding a Media reference or `""`
+for none, restricted to one type (`accepts: "image" | "video" | "live"`). Its
+Address is of type `media` and lists no options: a Macro sets the same string a
+person picks in the Library, so it can swap artwork; it is not linkable.
 
 ### Text Parameter
 
@@ -366,22 +388,23 @@ Its Animation is how a digit becomes the next: Cut, Roll, Flip or Pop.
 
 ### Image
 
-The built-in shader Visual that shows an image Media item on its Target, through
-a Fit (cover by default, contain or stretch) and a Tint. The Output loads every
-Media item ahead of use and uploads the picture to a texture once; the Layer is
-blank until the picture is decoded or while the Parameter is `""`.
+The built-in shader Visual that shows an image entry of a Pack on its Target,
+through a Fit (cover by default, contain or stretch) and a Tint. The Output
+loads every entry the Installation names ahead of use and uploads the picture to
+a texture once; the Layer is blank until the picture is decoded, while the
+Parameter is `""`, or while the entry is missing.
 
 ### Video
 
-The built-in shader Visual that plays a video Media item on its Target, muted,
-with the same Fit and Tint, Autoplay, Loop, Speed (the playback rate) and Hide
-on Stop, and the Cues Play, Pause and Stop. Its transport is stopped, paused or
-playing: Play from stopped starts at the first frame, from paused resumes, from
-playing restarts; Pause holds the frame; Stop returns to the first frame, as
-does ending without Loop. Every Layer on every Output plays its own copy of the
-file on the browser's clock, and a hidden Layer pauses it. A stopped Layer holds
-no video player, and Play takes the one the Output keeps ready for the Media
-item; Keep Warm has the Layer hold its own while stopped.
+The built-in shader Visual that plays a video entry of a Pack on its Target,
+muted, with the same Fit and Tint, Autoplay, Loop, Speed (the playback rate) and
+Hide on Stop, and the Cues Play, Pause and Stop. Its transport is stopped,
+paused or playing: Play from stopped starts at the first frame, from paused
+resumes, from playing restarts; Pause holds the frame; Stop returns to the first
+frame, as does ending without Loop. Every Layer on every Output plays its own
+copy of the file on the browser's clock, and a hidden Layer pauses it. A stopped
+Layer holds no video player, and Play takes the one the Output keeps ready for
+the entry; Keep Warm has the Layer hold its own while stopped.
 
 ### Live
 
@@ -393,8 +416,8 @@ slot shares one picture. The Layer is blank while nobody shares and until a
 frame arrives. On Signal Loss says what it does when the connection to the
 Sharer drops while the share goes on: Hold keeps the last frame for a few
 seconds and then goes blank, Blank shows nothing at once. It has no Tint and no
-Cues. Live names the Visual and the Media type; the Media item is a Screen
-Share.
+Cues. Live names the Visual and the Media type; its Media Parameter names a
+Screen Share.
 
 ### Controller
 
@@ -461,11 +484,6 @@ still moves on. Chance is per action; there is no Chance on a Macro.
 
 A named folder of Macros in the navigator, nested as needed. A Group only
 arranges; it has no run of its own.
-
-### Media Group
-
-A folder in the Media section of the navigator. It arranges Media items and
-other Groups and has no file of its own; a Media Parameter never holds one.
 
 ### Cue
 
@@ -739,12 +757,14 @@ the default when the value differs from it.
 
 ### Library
 
-The Studio view for picking from the Catalog. It is bound to one Layer, to pick
-its Visual or Filter, or to one bundled Media item, to pick its Bundled Media
-entry, and takes the center column while open, under the Preview when that is
-the tab in use, with search, facets and a grid of thumbnails. Picking applies at
-once, so the Outputs and the Preview show each candidate; Enter keeps the pick
-and Escape discards the browse, putting the previous one back.
+The Studio view for picking from the Catalog or from the Packs' entries, with
+search, facets and a grid of thumbnails. Bound to one Layer, to pick its Visual
+or Filter, or to one media Address, to pick an image or video, it sits under the
+Preview when that is the tab in use: picking applies at once, so the Outputs and
+the Preview show each candidate, Enter keeps the pick and Escape discards the
+browse, putting the previous one back. Bound to a Pack, to browse it, it takes
+the whole center column; a tile selects the entry, whose Inspector edits it, and
+sets nothing.
 
 ### Preview
 

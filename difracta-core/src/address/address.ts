@@ -16,12 +16,8 @@ import {
   type Layer,
   type Surface,
 } from "../document/document.ts";
-import {
-  aMediaType,
-  flattenMedia,
-  mediaItemTypeIn,
-  type MediaType,
-} from "../document/media.ts";
+import { mediaValueExpectation, type MediaType } from "../document/media.ts";
+import { parseMediaReference } from "../packs/reference.ts";
 import { orderedEntries } from "../document/order.ts";
 import { flattenTree } from "../document/tree.ts";
 import type { PatchPath } from "../document/patch.ts";
@@ -66,9 +62,9 @@ export interface ResolvedAddress {
   /** What the property starts at; a trigger has none. */
   readonly default?: AddressValue;
   readonly range?: NumberRange;
-  /** A choice's values, or for a media Address none (`""`) and the Media items of the accepted type. */
+  /** A choice's values. */
   readonly options?: readonly ChoiceOption[];
-  /** The type of Media item a media Address takes. */
+  /** The type of Media a media Address takes; its value is a Media reference, never listed. */
   readonly accepts?: MediaType;
   /** Whether a text Address takes line breaks. */
   readonly multiline?: boolean;
@@ -77,7 +73,7 @@ export interface ResolvedAddress {
 /** What resolving needs from a Document: the tables that own Addresses. */
 export type AddressSource = Pick<
   Document,
-  "layers" | "surfaces" | "controllers" | "scenes" | "macros" | "media"
+  "layers" | "surfaces" | "controllers" | "scenes" | "macros" | "shares"
 >;
 
 /** A source with nothing but the given entities, for resolving one entity's own Addresses. */
@@ -88,7 +84,7 @@ export function addressSource(partial: Partial<AddressSource>): AddressSource {
     controllers: {},
     scenes: {},
     macros: {},
-    media: {},
+    shares: {},
     ...partial,
   };
 }
@@ -117,27 +113,7 @@ export function layerDefinition(layer: Layer, catalog: Catalog) {
   return undefined;
 }
 
-/**
- * None first, then the Media files, bundled items and Screen Shares of
- * `type` in navigator order, Groups and bundled items the Catalog lacks left out, so a control
- * lists them as they are.
- */
-function mediaOptions(
-  source: AddressSource,
-  catalog: Catalog,
-  type: MediaType,
-): readonly ChoiceOption[] {
-  return [
-    { value: "", label: "None" },
-    ...flattenMedia(source.media)
-      .filter((item) => mediaItemTypeIn(item, catalog) === type)
-      .map((item) => ({ value: item.id, label: item.name })),
-  ];
-}
-
 function fromParameter(
-  source: AddressSource,
-  catalog: Catalog,
   layer: Layer,
   name: string,
   definition: ParameterDefinition,
@@ -166,12 +142,7 @@ function fromParameter(
     case "boolean":
       return { ...base, type: "boolean" };
     case "media":
-      return {
-        ...base,
-        type: "media",
-        accepts: definition.accepts,
-        options: mediaOptions(source, catalog, definition.accepts),
-      };
+      return { ...base, type: "media", accepts: definition.accepts };
     case "text":
       return {
         ...base,
@@ -351,7 +322,7 @@ const patterns: readonly AddressPattern[] = [
       const parameter = layerDefinition(layer, catalog)?.parameters[name];
       return parameter === undefined
         ? undefined
-        : fromParameter(document, catalog, layer, name, parameter);
+        : fromParameter(layer, name, parameter);
     },
     list: (document, catalog) =>
       orderedEntries(document.layers).flatMap((layer) =>
@@ -438,15 +409,13 @@ export function listAddresses(
 
 /**
  * The Addresses of one Layer, in inspector order: its own settings, its
- * Parameters, then its Cues. `media` is the Installation's Media table,
- * which a media Parameter lists as its options.
+ * Parameters, then its Cues.
  */
 export function layerAddresses(
   layer: Layer,
   catalog: Catalog = emptyCatalog,
-  media: AddressSource["media"] = {},
 ): readonly ResolvedAddress[] {
-  const document = addressSource({ layers: { [layer.id]: layer }, media });
+  const document = addressSource({ layers: { [layer.id]: layer } });
   const own = ["enabled", "opacity", "blend", "mix"].map((field) =>
     resolveAddress(
       document,
@@ -516,7 +485,9 @@ export function linkable(
 /**
  * Why `value` cannot be written to `resolved`, or undefined when it can. A
  * number must be within the range and on its step grid, the same rule a
- * Parameter value is held to.
+ * Parameter value is held to. A media value is checked for shape here; that
+ * a live one names a Screen Share the Installation has is `writeAddress`'s
+ * check, which has the document.
  */
 export function addressValueProblem(
   resolved: ResolvedAddress,
@@ -535,17 +506,15 @@ export function addressValueProblem(
       return resolved.options?.some((option) => option.value === value)
         ? undefined
         : `must be one of ${(resolved.options ?? []).map((option) => option.value).join(", ")}`;
-    case "media":
-      return resolved.options?.some((option) => option.value === value)
-        ? undefined
-        : `must be "" for none or the id of ${aMediaType(resolved.accepts ?? "image")} Media item${
-            (resolved.options?.length ?? 0) > 1
-              ? `: ${(resolved.options ?? [])
-                  .filter((option) => option.value !== "")
-                  .map((option) => option.value)
-                  .join(", ")}`
-              : "; the Installation has none"
-          }`;
+    case "media": {
+      const accepts = resolved.accepts ?? "image";
+      if (value === "") return undefined;
+      if (typeof value !== "string") return mediaValueExpectation(accepts);
+      if (accepts === "live") return undefined;
+      return parseMediaReference(value) === undefined
+        ? `${mediaValueExpectation(accepts)}; “${value}” is not one`
+        : undefined;
+    }
     case "text":
       return textProblem(value, resolved.multiline === true);
     case "trigger":

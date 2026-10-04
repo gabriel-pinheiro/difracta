@@ -1,71 +1,147 @@
-import type { MediaDefinition } from "@difracta/core";
+import type { PackEntryLive, PackLive } from "@difracta/protocol";
 import { describe, expect, it } from "vitest";
 
-import { firstMedia, rankMedia } from "./media-search.ts";
+import {
+  folderCrumbs,
+  folderOf,
+  hoverSource,
+  mediaRows,
+  rankMediaRows,
+  subfolders,
+  tagCounts,
+  WHOLE_LIBRARY,
+} from "./media-search";
 
-function entry(
+const entry = (
   id: string,
-  name: string,
-  extra: Partial<MediaDefinition> = {},
-): MediaDefinition {
-  return {
-    kind: "media",
-    id,
-    name,
-    description: `${name} on a Surface.`,
-    type: "video",
-    file: `clips/${id}.webm`,
-    width: 1920,
-    height: 1080,
-    duration: 4,
-    ...extra,
-  };
-}
+  file: string,
+  over: Partial<PackEntryLive> = {},
+): PackEntryLive => ({
+  id,
+  file,
+  type: file.endsWith(".png") ? "image" : "video",
+  name: id.replaceAll("-", " "),
+  tags: [],
+  fingerprint: "0123456789abcdef-1",
+  status: "ok",
+  hasThumbnail: true,
+  hasProxy: false,
+  ...over,
+});
 
-const bundle = [
-  entry("beam", "Beam Scan", {
-    loop: true,
-    notes: "Reads as a lighting rig over a stage backdrop.",
-  }),
-  entry("flash", "Flash Cut", { hit: true, recommended: true }),
-  entry("tunnel", "Tunnel Grid", { loop: true, recommended: true }),
-  entry("still", "Still Grid", { type: "image" }),
-];
+const pack = (name: string, entries: PackEntryLive[]): PackLive => ({
+  name,
+  readOnly: false,
+  status: "ok",
+  folder: `/p/${name}`,
+  ffmpeg: true,
+  prepared: { done: 0, total: 0 },
+  entries: Object.fromEntries(entries.map((e) => [e.id, e])),
+});
 
-const ids = (entries: readonly MediaDefinition[]): string[] =>
-  entries.map((item) => item.id);
+const packs = {
+  bundled: pack("Bundled", [
+    entry("beam", "clips/beam.webm", {
+      tags: ["loop", "recommended"],
+      description: "Spotlights sweep",
+    }),
+    entry("riser", "clips/riser.webm", {
+      tags: ["Hit", "organic"],
+      notes: "Builds to a crash",
+    }),
+  ]),
+  neon: pack("Neon", [
+    entry("tunnel", "tunnels/tunnel.mp4", { tags: ["loop", "organic"] }),
+    entry("gone", "tunnels/dark/gone.mp4", { status: "missing" }),
+    entry("logo", "logo.png", { tags: ["hit"] }),
+  ]),
+  lost: { ...pack("Lost", [entry("x", "x.mp4")]), status: "missing" as const },
+};
 
-describe("Bundled Media search", () => {
-  it("puts Recommended entries first, then names", () => {
-    expect(ids(rankMedia(bundle, ""))).toEqual([
-      "flash",
-      "tunnel",
-      "beam",
-      "still",
+describe("The Library's media rows", () => {
+  const rows = mediaRows(packs);
+
+  it("flattens every loaded Pack's entries with their folder, leaving missing Packs out", () => {
+    expect(rows.map((row) => [row.reference, row.folder])).toEqual([
+      ["bundled/beam", "clips"],
+      ["bundled/riser", "clips"],
+      ["neon/tunnel", "tunnels"],
+      ["neon/gone", "tunnels/dark"],
+      ["neon/logo", ""],
     ]);
+    expect(folderOf("a.mp4")).toBe("");
   });
 
-  it("narrows by the Loop and Hit facets and by the accepted type", () => {
-    expect(ids(rankMedia(bundle, "", { loop: "yes", hit: "any" }))).toEqual([
-      "tunnel",
-      "beam",
-    ]);
-    expect(ids(rankMedia(bundle, "", { loop: "any", hit: "yes" }))).toEqual([
-      "flash",
+  it("ranks recommended first without a query, hides a missing entry unless the query names it", () => {
+    const all = rankMediaRows(rows, "", WHOLE_LIBRARY).map((r) => r.reference);
+    expect(all).toEqual([
+      "bundled/beam",
+      "neon/logo",
+      "bundled/riser",
+      "neon/tunnel",
     ]);
     expect(
-      ids(rankMedia(bundle, "", { loop: "any", hit: "any" }, "image")),
-    ).toEqual(["still"]);
+      rankMediaRows(rows, "gone", WHOLE_LIBRARY).map((r) => r.reference),
+    ).toEqual(["neon/gone"]);
   });
 
-  it("searches names, then descriptions, then notes", () => {
-    expect(ids(rankMedia(bundle, "grid"))).toEqual(["tunnel", "still"]);
-    expect(ids(rankMedia(bundle, "backdrop"))).toEqual(["beam"]);
+  it("scopes to a Pack, a folder and a type, and to rows carrying every picked tag", () => {
+    const refs = (scope: Parameters<typeof rankMediaRows>[2]) =>
+      rankMediaRows(rows, "", scope).map((r) => r.reference);
+    expect(refs({ tags: [], packId: "neon" })).toEqual([
+      "neon/logo",
+      "neon/tunnel",
+    ]);
+    expect(refs({ tags: [], packId: "neon", folder: "tunnels" })).toEqual([
+      "neon/tunnel",
+    ]);
+    expect(refs({ tags: [], type: "image" })).toEqual(["neon/logo"]);
+    expect(refs({ tags: ["LOOP", "organic"] })).toEqual(["neon/tunnel"]);
   });
 
-  it("starts a new item on the first tile, of the accepted type", () => {
-    expect(firstMedia(bundle)?.id).toBe("flash");
-    expect(firstMedia(bundle, "image")?.id).toBe("still");
-    expect(firstMedia([], "video")).toBeUndefined();
+  it("searches names first, then tags, description and notes", () => {
+    const refs = (query: string) =>
+      rankMediaRows(rows, query, WHOLE_LIBRARY).map((r) => r.reference);
+    expect(refs("hit")).toEqual(["neon/logo", "bundled/riser"]);
+    expect(refs("spot")).toEqual(["bundled/beam"]);
+    expect(refs("crash")).toEqual(["bundled/riser"]);
+    expect(refs("tun")).toEqual(["neon/tunnel"]);
+    expect(refs("zzz")).toEqual([]);
+  });
+
+  it("counts the tags of the matching rows, keeps picked ones, and drops the rest as the scope narrows", () => {
+    const whole = rankMediaRows(rows, "", WHOLE_LIBRARY);
+    expect(tagCounts(whole, [])).toEqual([
+      { label: "hit", count: 2 },
+      { label: "loop", count: 2 },
+      { label: "organic", count: 2 },
+      { label: "recommended", count: 1 },
+    ]);
+    const organic = rankMediaRows(rows, "", { tags: ["organic"] });
+    expect(tagCounts(organic, ["organic"])).toEqual([
+      { label: "organic", count: 2 },
+      { label: "Hit", count: 1 },
+      { label: "loop", count: 1 },
+    ]);
+    const both = rankMediaRows(rows, "", { tags: ["organic", "loop"] });
+    expect(tagCounts(both, ["organic", "loop"]).map((t) => t.label)).toEqual([
+      "loop",
+      "organic",
+    ]);
+  });
+
+  it("walks folders as crumbs and offers the next level down", () => {
+    expect(folderCrumbs("tunnels/dark")).toEqual(["tunnels", "tunnels/dark"]);
+    expect(folderCrumbs("")).toEqual([]);
+    const neon = rows.filter((row) => row.packId === "neon");
+    expect(subfolders(neon, undefined)).toEqual(["tunnels"]);
+    expect(subfolders(neon, "tunnels")).toEqual(["tunnels/dark"]);
+    expect(subfolders(neon, "tunnels/dark")).toEqual([]);
+  });
+
+  it("plays the proxy on hover, the original for a video without one, nothing for an image", () => {
+    expect(hoverSource({ type: "video", hasProxy: true })).toBe("proxy");
+    expect(hoverSource({ type: "video", hasProxy: false })).toBe("original");
+    expect(hoverSource({ type: "image", hasProxy: false })).toBeUndefined();
   });
 });

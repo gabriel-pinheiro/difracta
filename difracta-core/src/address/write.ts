@@ -1,5 +1,6 @@
 import type { Catalog } from "../catalog/catalog.ts";
 import type { Document } from "../document/document.ts";
+import { mediaValueProblem } from "../document/media.ts";
 import { getAtPath, type Patch } from "../document/patch.ts";
 import {
   addressValueProblem,
@@ -44,7 +45,10 @@ export function writeAddress(
       ok: false,
       error: `${resolved.label} is controlled by ${document.controllers[link.controllerId]?.name ?? "a Controller"}.`,
     };
-  const problem = addressValueProblem(resolved, value);
+  const problem =
+    resolved.type === "media"
+      ? mediaValueProblem(document, resolved.accepts ?? "image", value)
+      : addressValueProblem(resolved, value);
   if (problem !== undefined)
     return { ok: false, error: `${resolved.label} ${problem}.` };
   if (sameAddressValue(getAtPath(document, resolved.path), value))

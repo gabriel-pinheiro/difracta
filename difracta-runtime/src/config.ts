@@ -19,7 +19,7 @@ export interface RuntimeConfig {
   readonly outputDist: string | undefined;
   /** The Catalog's thumbnails; undefined serves the ones inside `@difracta/visuals`. */
   readonly thumbnailsDir: string | undefined;
-  /** The Bundled Media's folder (manifest, clips, thumbnails); undefined serves the one inside `@difracta/visuals`. */
+  /** The Bundled Pack's folder; undefined uses the one inside `@difracta/visuals`. */
   readonly bundledDir: string | undefined;
   /** The Bundled Fonts' folder; undefined serves the one inside `@difracta/visuals`. */
   readonly fontsDir: string | undefined;
@@ -29,11 +29,14 @@ export interface RuntimeConfig {
   /** Announce the runtime on the local network with Zeroconf; one bound to loopback never is. */
   readonly discovery: boolean;
   /**
-   * Serve Media files from outside the Installation file's folder
-   * (`--media-anywhere`, `DIFRACTA_MEDIA_ANYWHERE=1`); a machine setting,
-   * never in the file. Off, such an item is `outside` and refused.
+   * Pack folders loaded for this run (`--pack <dir>`, repeatable, and
+   * `DIFRACTA_PACKS`, a path list), known to the in-memory Registry only.
    */
-  readonly mediaAnywhere: boolean;
+  readonly packs: readonly string[];
+  /** The Registry's file (`DIFRACTA_PACKS_FILE`); undefined uses the user's config folder. */
+  readonly packsFile: string | undefined;
+  /** Where Packs whose folder cannot be written keep their data (`DIFRACTA_CACHE_DIR`); undefined uses the user's cache folder. */
+  readonly packsCacheDir: string | undefined;
 }
 
 function nonEmpty(value: string | undefined): string | undefined {
@@ -56,7 +59,7 @@ export function configFromEnvironment(
       "osc-port": { type: "string" },
       "no-osc": { type: "boolean" },
       "no-discovery": { type: "boolean" },
-      "media-anywhere": { type: "boolean" },
+      pack: { type: "string", multiple: true },
     },
   });
   if (positionals.length > 1)
@@ -105,9 +108,13 @@ export function configFromEnvironment(
     discovery: !(
       values["no-discovery"] === true || env.DIFRACTA_NO_DISCOVERY === "1"
     ),
-    mediaAnywhere:
-      values["media-anywhere"] === true ||
-      env.DIFRACTA_MEDIA_ANYWHERE === "1" ||
-      settings.media.allowOutsideShowFolder,
+    packs: [
+      ...(values.pack ?? []),
+      ...(env.DIFRACTA_PACKS ?? "").split(path.delimiter),
+    ]
+      .filter((folder) => folder.trim() !== "")
+      .map((folder) => path.resolve(folder)),
+    packsFile: nonEmpty(env.DIFRACTA_PACKS_FILE),
+    packsCacheDir: nonEmpty(env.DIFRACTA_CACHE_DIR),
   };
 }

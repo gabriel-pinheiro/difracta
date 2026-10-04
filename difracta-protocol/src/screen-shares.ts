@@ -2,12 +2,12 @@ import { settings } from "@difracta/core";
 import { z } from "zod";
 
 /**
- * Screen Shares: a Media item of kind `share` is a slot a Sharer (a
- * connection of kind `desktop`) shares a screen or window into, and any
- * client may view. The runtime keeps who shares into each slot and who
- * views it, and relays the WebRTC signalling between the Sharer and each
- * Viewer without reading it. Everything is keyed by slot: the slot's Media
- * id.
+ * Screen Shares: a Screen Share of the Installation (`shares` table) is a
+ * slot a Sharer (a connection of kind `desktop`) shares a screen or window
+ * into, and any client may view. The runtime keeps who shares into each
+ * slot and who views it, and relays the WebRTC signalling between the
+ * Sharer and each Viewer without reading it. Everything is keyed by slot:
+ * the Screen Share's id, carried as `mediaId`.
  *
  * Sharer, to the runtime: `share` declares, updates or stops a share;
  * `share-signal` with `viewerId` sends one Viewer a payload.
@@ -85,8 +85,8 @@ export const SHARE_STATUSES = ["idle", "live", "interrupted"] as const;
 export type ShareStatus = (typeof SHARE_STATUSES)[number];
 
 /**
- * A Screen Share in the live state, under `["media", id]` like every Media
- * item's status: `idle` while nobody shares, `live` while a Sharer does,
+ * A Screen Share in the live state, under `["shares", id]`: `idle` while
+ * nobody shares, `live` while a Sharer does,
  * `interrupted` while its Sharer's connection is gone and may come back.
  * Not idle, it says who shares, a screen or a window, since when (epoch
  * ms, kept across an interruption) and how many Viewers it has.

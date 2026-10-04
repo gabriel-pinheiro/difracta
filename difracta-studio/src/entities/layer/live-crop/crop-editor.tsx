@@ -6,13 +6,13 @@ import {
   settings,
   type Controller,
   type Link,
-  type Media,
+  type Share,
   type Table,
   type VisualLayer,
 } from "@difracta/core";
 import { useCallback, useRef, useState } from "react";
 
-import { SharePicture } from "@/entities/media/share-picture";
+import { SharePicture } from "@/entities/share/share-picture";
 import { catalog, definitionOf } from "@/lib/catalog";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useLatestWins } from "@/lib/use-latest-wins";
@@ -51,7 +51,7 @@ export function LiveCropEditor({
   readonly layer: VisualLayer;
 }) {
   const command = useCommand(view);
-  const media = useDocumentPath<Table<Media>>(view, ["media"]) ?? {};
+  const shares = useDocumentPath<Table<Share>>(view, ["shares"]) ?? {};
   const links = useDocumentPath<Table<Link>>(view, ["links"]) ?? {};
   // A driven crop moves with its Controller's value.
   useDocumentPath<Table<Controller>>(view, ["controllers"]);
@@ -140,7 +140,7 @@ export function LiveCropEditor({
 
   const mediaId = layer.parameters.media;
   const slot =
-    typeof mediaId === "string" && media[mediaId]?.kind === "share"
+    typeof mediaId === "string" && shares[mediaId] !== undefined
       ? mediaId
       : undefined;
   const rectangle = (
@@ -161,8 +161,8 @@ export function LiveCropEditor({
       ) : (
         <SharePicture
           mediaId={slot}
-          media={media}
-          empty={`Nobody shares into “${media[slot]?.name ?? ""}”`}
+          shares={shares}
+          empty={`Nobody shares into “${shares[slot]?.name ?? ""}”`}
         >
           {rectangle}
         </SharePicture>

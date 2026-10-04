@@ -39,14 +39,7 @@ import { macroRename } from "./macro.rename.ts";
 import { macroUngroup } from "./macro.ungroup.ts";
 import { installationRename } from "./installation.rename.ts";
 import { maskCreate } from "./mask.create.ts";
-import { mediaBeats } from "./media.beats.ts";
-import { mediaBundled } from "./media.bundled.ts";
-import { mediaCreate } from "./media.create.ts";
-import { mediaMove } from "./media.move.ts";
-import { mediaPath } from "./media.path.ts";
-import { mediaRemove } from "./media.remove.ts";
-import { mediaRename } from "./media.rename.ts";
-import { mediaUngroup } from "./media.ungroup.ts";
+import { mediaReplace } from "./media.replace.ts";
 import {
   maskPointAdd,
   maskPointNudge,
@@ -67,6 +60,9 @@ import {
 import { pathRemove } from "./path.remove.ts";
 import { pathRename } from "./path.rename.ts";
 import { pathUpdate } from "./path.update.ts";
+import { packsAttach } from "./packs.attach.ts";
+import { packsDetach } from "./packs.detach.ts";
+import { packsRename } from "./packs.rename.ts";
 import { regionCornerNudge, regionCornerSet } from "./region.corner.ts";
 import { regionCreate } from "./region.create.ts";
 import { regionRemove } from "./region.remove.ts";
@@ -79,6 +75,9 @@ import { sceneDuplicate } from "./scene.duplicate.ts";
 import { scenePlay } from "./scene.play.ts";
 import { sceneRemove } from "./scene.remove.ts";
 import { sceneRename } from "./scene.rename.ts";
+import { shareCreate } from "./share.create.ts";
+import { shareRemove } from "./share.remove.ts";
+import { shareRename } from "./share.rename.ts";
 import { surfaceAssign } from "./surface.assign.ts";
 import { surfaceCornerNudge, surfaceCornerSet } from "./surface.corner.ts";
 import { surfaceCreate } from "./surface.create.ts";
@@ -121,14 +120,13 @@ export const builtInCommands: readonly CommandDefinition<never>[] = [
   pathPointAdd,
   pathPointRemove,
   pathRemove,
-  mediaCreate,
-  mediaRename,
-  mediaPath,
-  mediaBundled,
-  mediaBeats,
-  mediaMove,
-  mediaUngroup,
-  mediaRemove,
+  packsAttach,
+  packsRename,
+  packsDetach,
+  shareCreate,
+  shareRename,
+  shareRemove,
+  mediaReplace,
   sceneCreate,
   sceneRename,
   sceneDuplicate,

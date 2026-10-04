@@ -116,7 +116,9 @@ beforeEach(async () => {
     autosaveIntervalMs: 60_000,
     oscPort: undefined,
     discovery: false,
-    mediaAnywhere: false,
+    packs: [],
+    packsFile: undefined,
+    packsCacheDir: undefined,
   });
   const address = await runtime.listen();
   url = `${address.replace("http", "ws")}/live`;
@@ -320,11 +322,10 @@ describe("a Display Host that does not answer", () => {
     const handlers = requests.handlers();
     const show = (): Promise<unknown> =>
       Promise.resolve(
-        handlers["displays.show"]({
-          host: "stage-pc",
-          display: "1",
-          output: "out_a",
-        }),
+        handlers["displays.show"](
+          { host: "stage-pc", display: "1", output: "out_a" },
+          {} as never,
+        ),
       );
 
     const unanswered = show();

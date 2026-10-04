@@ -44,8 +44,8 @@ export function PreviewFrame({
     parent.append(element);
     const runtime = studioRuntimeOrigin();
     host.current = new PreviewCanvas(element, {
-      mediaUrl: (id) =>
-        `${runtime}${settings.runtime.mediaPath}/${encodeURIComponent(id)}`,
+      mediaUrl: (reference) =>
+        `${runtime}${settings.runtime.packsPath}/${reference.split("/").map(encodeURIComponent).join("/")}`,
       fontUrl: (file) =>
         `${runtime}${settings.runtime.fontsPath}/${encodeURIComponent(file)}`,
       viewer: shares.claim(),
@@ -68,8 +68,13 @@ export function PreviewFrame({
         document === undefined ? undefined : frames(document, target),
       );
     };
+    const packs = (): void => {
+      canvas.setPacks(view.valueAt(["live", "packs"]) ?? {});
+    };
     show();
+    packs();
     const unsubscribeDocument = view.subscribePath([], show);
+    const unsubscribePacks = view.subscribePath(["live", "packs"], packs);
     const unsubscribeEvents = view.subscribeEvents((address) => {
       const [entity, layerId, field, key] = address.split("/");
       if (entity === "layer" && field === "cue" && layerId && key)
@@ -77,6 +82,7 @@ export function PreviewFrame({
     });
     return () => {
       unsubscribeDocument();
+      unsubscribePacks();
       unsubscribeEvents();
     };
   }, [view, target]);

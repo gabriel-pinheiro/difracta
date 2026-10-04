@@ -4,6 +4,7 @@ import {
   type Compositor,
   type CompositorOptions,
   type FrameReport,
+  type PacksView,
   type RenderIssue,
 } from "@difracta/render";
 import { builtInCatalog } from "@difracta/visuals";
@@ -131,6 +132,11 @@ export class FrameCanvas {
   /** A Cue fired on a Layer; the next frame's update sees it. */
   trigger(layerId: string, key: string): void {
     this.#compositor.trigger(layerId, key);
+  }
+
+  /** The Packs the runtime has loaded, as the page has them now. */
+  setPacks(packs: PacksView): void {
+    this.#compositor.setPacks(packs);
   }
 
   start(): void {

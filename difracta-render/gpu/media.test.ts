@@ -20,9 +20,10 @@ async function dataUrl(file: string, type: string): Promise<string> {
   return `data:${type};base64,${bytes.toString("base64")}`;
 }
 
+/** The sample files by the Media reference the Layers name, as a Pack `sample` would serve them. */
 const media = {
-  pic: await dataUrl(SAMPLE_IMAGE, "image/png"),
-  clip: await dataUrl(SAMPLE_VIDEO, "video/webm"),
+  "sample/pic": await dataUrl(SAMPLE_IMAGE, "image/png"),
+  "sample/clip": await dataUrl(SAMPLE_VIDEO, "video/webm"),
 };
 
 const WHITE = [255, 255, 255] as const;
@@ -31,12 +32,9 @@ const RED = [255, 0, 0] as const;
 
 describe("Image pixels", () => {
   it("stretches the picture over the Surface, rows top first, through the Tint", async () => {
-    const stage = new Stage()
-      .media("pic", "sample.png")
-      .surface("wall")
-      .visual("image", "wall", "image", {
-        params: { media: "pic", fit: "stretch" },
-      });
+    const stage = new Stage().surface("wall").visual("image", "wall", "image", {
+      params: { media: "sample/pic", fit: "stretch" },
+    });
     const frame = await renderer().render(stage.document(), 128, 72, 10, media);
     expectColor(pixel(frame, 88, 36), WHITE); // on the ring
     expectColor(pixel(frame, 64, 36), BLACK); // inside it
@@ -45,10 +43,9 @@ describe("Image pixels", () => {
     expectColor(pixel(frame, 2, 2), BLACK);
     expect(frame.report.issues).toEqual([]);
     const tinted = new Stage()
-      .media("pic", "sample.png")
       .surface("wall")
       .visual("image", "wall", "image", {
-        params: { media: "pic", fit: "stretch", tint: [1, 0, 0, 1] },
+        params: { media: "sample/pic", fit: "stretch", tint: [1, 0, 0, 1] },
       });
     const red = await renderer().render(tinted.document(), 128, 72, 10, media);
     expectColor(pixel(red, 88, 36), RED);
@@ -57,11 +54,10 @@ describe("Image pixels", () => {
   it("contains the picture, leaving the bands clear, and covers by cropping", async () => {
     // A square Surface: the wide picture spans its width in a band of 81 rows.
     const contained = new Stage()
-      .media("pic", "sample.png")
       .surface("wall")
       .solid("under", "wall", [1, 0, 0, 1])
       .visual("image", "wall", "image", {
-        params: { media: "pic", fit: "contain" },
+        params: { media: "sample/pic", fit: "contain" },
       });
     const frame = await renderer().render(
       contained.document(),
@@ -75,11 +71,10 @@ describe("Image pixels", () => {
     expectColor(pixel(frame, 72, 72), BLACK); // the picture's opaque black
     expectColor(pixel(frame, 72 + 27, 72), WHITE); // the ring, scaled by 144/128
     const covered = new Stage()
-      .media("pic", "sample.png")
       .surface("wall")
       .solid("under", "wall", [1, 0, 0, 1])
       .visual("image", "wall", "image", {
-        params: { media: "pic", fit: "cover" },
+        params: { media: "sample/pic", fit: "cover" },
       });
     const cover = await renderer().render(
       covered.document(),
@@ -96,9 +91,8 @@ describe("Image pixels", () => {
 
   it("draws a Surface on a corner of the frame at the Surface's aspect", async () => {
     const stage = new Stage()
-      .media("pic", "sample.png")
       .surface("tv", rect(0.5, 0.5, 1, 1))
-      .visual("image", "tv", "image", { params: { media: "pic" } });
+      .visual("image", "tv", "image", { params: { media: "sample/pic" } });
     const frame = await renderer().render(
       stage.document(),
       256,
@@ -114,12 +108,9 @@ describe("Image pixels", () => {
 
 describe("Video pixels", () => {
   it("shows the first frame of a clip waiting for Play", async () => {
-    const stage = new Stage()
-      .media("clip", "sample.webm")
-      .surface("wall")
-      .visual("video", "wall", "video", {
-        params: { media: "clip", autoplay: false, hideOnStop: false },
-      });
+    const stage = new Stage().surface("wall").visual("video", "wall", "video", {
+      params: { media: "sample/clip", autoplay: false, hideOnStop: false },
+    });
     const frame = await renderer().render(stage.document(), 128, 72, 10, media);
     expectColor(pixel(frame, 24, 36), WHITE, 24); // the square, VP9 at its softest
     expectColor(pixel(frame, 100, 36), BLACK, 24);
@@ -128,12 +119,9 @@ describe("Video pixels", () => {
   });
 
   it("is dark while stopped with Hide on Stop", async () => {
-    const stage = new Stage()
-      .media("clip", "sample.webm")
-      .surface("wall")
-      .visual("video", "wall", "video", {
-        params: { media: "clip", autoplay: false },
-      });
+    const stage = new Stage().surface("wall").visual("video", "wall", "video", {
+      params: { media: "sample/clip", autoplay: false },
+    });
     // Nothing ever draws, so the paced run gives up after its wait.
     const frame = await renderer().render(stage.document(), 32, 18, 5, media);
     expectColor(pixel(frame, 6, 9), BLACK);

@@ -1,8 +1,11 @@
 import { generateId, type Patch } from "@difracta/core";
-import type {
-  ClientKind,
-  DocumentsMode,
-  ServerMessage,
+import {
+  liveSectionWanted,
+  type ClientKind,
+  type DocumentsMode,
+  type LiveRequest,
+  type LiveSection,
+  type ServerMessage,
 } from "@difracta/protocol";
 import type { WebSocket } from "ws";
 
@@ -27,8 +30,8 @@ export class ClientSession {
   kind: ClientKind | undefined;
   /** Owner of undo entries; the session id unless hello supplied an actor. */
   actor = "";
-  /** Subscribed document ids, with whether live state was requested. */
-  readonly subscriptions = new Map<string, { readonly live: boolean }>();
+  /** Subscribed document ids, with what of the live state was requested. */
+  readonly subscriptions = new Map<string, { readonly live: LiveRequest }>();
   readonly #socket: WebSocket;
   /** The id live patches go out under: the document the server listens to. */
   readonly #attachedId: () => string | undefined;
@@ -69,8 +72,13 @@ export class ClientSession {
     this.#scheduleFlush();
   }
 
-  queueLive(patches: readonly Patch[]): void {
-    this.#pendingLive.push(...patches);
+  /** Queues the live patches of the sections `live` asks for; the rest never leave. */
+  queueLive(patches: readonly Patch[], live: LiveRequest): void {
+    const wanted = patches.filter((patch) =>
+      liveSectionWanted(live, patch.path[0] as LiveSection),
+    );
+    if (wanted.length === 0) return;
+    this.#pendingLive.push(...wanted);
     this.#scheduleFlush();
   }
 

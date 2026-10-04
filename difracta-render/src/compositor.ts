@@ -21,6 +21,7 @@ import { LayerPlayers } from "./layer-players.ts";
 import { MaskTextures } from "./masks.ts";
 import { FontLoader } from "./font-loader.ts";
 import { EngineMedia } from "./engine-media.ts";
+import type { PacksView } from "./pack-sources.ts";
 import type { ShareSignalling } from "./live-peer.ts";
 import type { LiveSource } from "./shared-viewer.ts";
 import { MediaTextures } from "./media-textures.ts";
@@ -47,16 +48,24 @@ export interface Compositor {
   ): FrameReport;
   /** Delivers a Cue fired on a Layer to that Layer's Visual instance. */
   trigger(layerId: string, key: string): void;
+  /**
+   * The `packs` live state as the page has it: which Pack entries exist,
+   * their files, types, fingerprints and beats. The next `render` loads
+   * the entries the document names from it; until the first call nothing
+   * loads.
+   */
+  setPacks(packs: PacksView): void;
   dispose(): void;
 }
 
 export interface CompositorOptions {
   /**
-   * Where a Media item's file is fetched from, by id: `/media/<id>` on the
-   * runtime for an Output page, a data URL for the thumbnail harness.
-   * Without it no Media loads and every Media handle stays empty.
+   * Where a Media reference's file is fetched from:
+   * `/packs/<packId>/<entryId>` on the runtime for an Output page, a data
+   * URL for the thumbnail harness; undefined for one this page cannot
+   * reach. Without it no Media loads and every Media handle stays empty.
    */
-  readonly mediaUrl?: (id: string) => string | undefined;
+  readonly mediaUrl?: (reference: string) => string | undefined;
   /**
    * Where a Bundled Font's file is fetched from, by file name:
    * `/fonts/<file>` on the runtime for an Output page. Without it no font
@@ -368,6 +377,10 @@ class WebGLCompositor implements Compositor {
 
   trigger(layerId: string, key: string): void {
     this.#resources?.players.cue(layerId, key);
+  }
+
+  setPacks(packs: PacksView): void {
+    this.#media.setPacks(packs);
   }
 
   dispose(): void {

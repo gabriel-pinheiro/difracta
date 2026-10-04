@@ -186,7 +186,7 @@ describe("Video", () => {
     expect(first.calls.filter((call) => call === "dispose")).toHaveLength(2);
   });
 
-  it("opens a fresh playback when the item it shows is repointed", () => {
+  it("opens a fresh playback when the entry's file changes under the same reference", () => {
     const handles: Record<string, MediaHandle> = { clip: fakeHandle("clip") };
     const clips = [fakeVideo("clip"), fakeVideo("clip")];
     let opened = 0;

@@ -8,6 +8,8 @@ import {
   type TableName,
 } from "@difracta/core";
 
+import { resolveMediaReference, type Packs } from "./media-references.ts";
+
 /**
  * Names stand in for ids at the CLI boundary: an Address segment or a
  * payload field that names an entity may carry its name instead of its id.
@@ -22,7 +24,8 @@ const NOUNS: Record<TableName, string> = {
   regions: "Region",
   masks: "Mask",
   paths: "Path",
-  media: "Media item",
+  packs: "Pack",
+  shares: "Screen Share",
   scenes: "Scene",
   layers: "Layer",
   controllers: "Controller",
@@ -47,7 +50,8 @@ const KEY_TABLES: Readonly<Record<string, TableName>> = {
   regionId: "regions",
   maskId: "masks",
   pathId: "paths",
-  mediaId: "media",
+  shareId: "shares",
+  packId: "packs",
   sceneId: "scenes",
   layerId: "layers",
   controllerId: "controllers",
@@ -63,7 +67,7 @@ const LIST_TABLES: Readonly<Record<string, TableName>> = {
 /** `parentId` and `after` belong to the table the command's prefix names. */
 const PREFIX_TABLES: Readonly<Record<string, TableName>> = {
   layer: "layers",
-  media: "media",
+  share: "shares",
   controller: "controllers",
   macro: "macros",
 };
@@ -295,20 +299,25 @@ function resolveField(
 }
 
 /**
- * A value written to a media Address may name the Media item instead of
- * giving its id, like any other entity reference at the shell; a string
- * that names nothing goes through as typed and the runtime says why.
+ * A value written to a media Address as a person types it: for a Screen
+ * Share, its name or id; for an image or video, a Pack entry reference by
+ * ids, by the Pack's name, or by the file's path inside the Pack
+ * (`media-references.ts`). A string that names nothing a Screen Share
+ * Address knows goes through as typed and the runtime says why.
  */
 export function resolveMediaValue(
   document: Document,
   catalog: Catalog,
   address: string,
   value: unknown,
+  packs: Packs = {},
 ): unknown {
   if (typeof value !== "string" || value === "") return value;
-  if (resolveAddress(document, address, catalog)?.type !== "media")
-    return value;
-  return findId(document, "media", value) ?? value;
+  const resolved = resolveAddress(document, address, catalog);
+  if (resolved?.type !== "media") return value;
+  if (resolved.accepts === "live")
+    return findId(document, "shares", value) ?? value;
+  return resolveMediaReference(document, packs, value);
 }
 
 /**
