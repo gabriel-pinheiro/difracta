@@ -102,6 +102,18 @@ Working from a shell
              bottomRight corner. As a "target", write it Wall/North, or
              North alone when no other Region has that name.
 
+  Masks      A Mask is a polygon of a Surface, in Surface Space, that opens
+             (include) or closes (exclude) part of it on every Output; run
+             mask.create '{"surfaceId":"Wall","name":"Door"}', then
+             mask.update (mode, feather) and mask.point.set / .nudge / .add
+             / .remove. An Output Mask is the same polygon in one Output's
+             Projection Frame, cutting everything that Output draws to
+             black, for a window or a reflector in one projector's beam:
+             output-mask.create '{"outputId":"Projector","name":"Window"}'
+             starts as an exclude rectangle in the middle of the frame;
+             output-mask.update, .rename, .remove and .point.* follow the
+             Mask ones with "outputMaskId". entity.move reorders both.
+
   Addresses  layer/<id|name>/enabled | opacity | blend (Visual Layers)
              layer/<id|name>/mix (Filter Layers)
              layer/<id|name>/param/<key>      layer/<id|name>/cue/<key>

@@ -24,6 +24,7 @@ const NOUNS: Record<TableName, string> = {
   regions: "Region",
   masks: "Mask",
   paths: "Path",
+  outputMasks: "Output Mask",
   packs: "Pack",
   shares: "Screen Share",
   scenes: "Scene",
@@ -50,6 +51,7 @@ const KEY_TABLES: Readonly<Record<string, TableName>> = {
   regionId: "regions",
   maskId: "masks",
   pathId: "paths",
+  outputMaskId: "outputMasks",
   shareId: "shares",
   packId: "packs",
   sceneId: "scenes",
@@ -95,6 +97,10 @@ function whereabouts(
   if (table === "regions" || table === "masks" || table === "paths") {
     const surface = document.surfaces[String(record.surfaceId)];
     return surface === undefined ? undefined : `on Surface ${surface.name}`;
+  }
+  if (table === "outputMasks") {
+    const output = document.outputs[String(record.outputId)];
+    return output === undefined ? undefined : `on Output ${output.name}`;
   }
   if (typeof record.parentId === "string") {
     const parent = (document[table] as Record<string, Named>)[record.parentId];

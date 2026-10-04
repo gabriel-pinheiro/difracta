@@ -69,10 +69,25 @@ function installation(): Document {
     name: "Loose",
     outputs: [],
   });
-  return run(document, "mask.create", {
+  document = run(document, "mask.create", {
     id: "mask_door",
     surfaceId: "sur_wall",
     name: "Door",
+  });
+  document = run(document, "output-mask.create", {
+    id: "om_window",
+    outputId: "out_a",
+    name: "Window",
+  });
+  document = run(document, "output-mask.create", {
+    id: "om_beam",
+    outputId: "out_a",
+    name: "Beam",
+  });
+  return run(document, "output-mask.create", {
+    id: "om_tv",
+    outputId: "out_b",
+    name: "Glare",
   });
 }
 
@@ -162,8 +177,13 @@ describe("planFrame", () => {
     expect(plan).toEqual({
       blackout: false,
       draws: [],
+      outputMaskOutline: undefined,
       layers: [],
       filters: [],
+      outputMasks: [
+        expect.objectContaining({ id: "om_window" }),
+        expect.objectContaining({ id: "om_beam" }),
+      ],
     });
   });
 
@@ -476,8 +496,10 @@ describe("planFrame", () => {
     expect(planFrame(document, "out_a", catalog)).toEqual({
       blackout: true,
       draws: [],
+      outputMaskOutline: undefined,
       layers: [],
       filters: [],
+      outputMasks: [],
     });
   });
 
@@ -580,6 +602,95 @@ describe("planFrame", () => {
     expect(wall?.corner).toBeUndefined();
     expect(wall?.maskOutline?.mask.id).toBe("mask_door");
     expect(wall?.maskOutline?.point).toBe(2);
+  });
+
+  it("carries the Output's masks in order, in the Scene and in Calibration Mode, not under Blackout", () => {
+    const scene = run(staged(), "entity.move", {
+      table: "outputMasks",
+      id: "om_beam",
+      after: null,
+    });
+    const ids = (plan: ReturnType<typeof planFrame>) =>
+      plan.outputMasks.map((mask) => mask.id);
+    expect(ids(planFrame(scene, "out_a", catalog))).toEqual([
+      "om_beam",
+      "om_window",
+    ]);
+    expect(ids(planFrame(scene, "out_b", catalog))).toEqual(["om_tv"]);
+    const calibrating = run(scene, "calibration.set", calibration);
+    expect(ids(planFrame(calibrating, "out_a", catalog))).toEqual([
+      "om_beam",
+      "om_window",
+    ]);
+    expect(
+      planFrame(calibrating, "out_a", catalog).outputMaskOutline,
+    ).toBeUndefined();
+    const dark = run(scene, "address.set", {
+      address: "installation/blackout",
+      value: true,
+    });
+    expect(ids(planFrame(dark, "out_a", catalog))).toEqual([]);
+  });
+
+  it("shows every Surface on the Output as a plain pattern when the Output itself is calibrated", () => {
+    const document = run(staged(), "calibration.set", {
+      ...calibration,
+      surfaceId: null,
+      outputId: "out_a",
+      corner: null,
+      view: "selected",
+    });
+    const plan = planFrame(document, "out_a", catalog);
+    expect(plan.layers).toEqual([]);
+    expect(
+      plan.draws.map((draw) => [
+        draw.surface.id,
+        draw.style,
+        draw.highlighted,
+        draw.corner,
+        draw.masks.length,
+        draw.regions.length,
+      ]),
+    ).toEqual([
+      ["sur_wall", "pattern", false, undefined, 0, 0],
+      ["sur_floor", "pattern", false, undefined, 0, 0],
+    ]);
+    expect(plan.outputMaskOutline).toBeUndefined();
+    expect(planFrame(document, "out_b", catalog).draws).toEqual([]);
+  });
+
+  it("outlines the Output Mask being aligned over the Output's patterns, its point clamped", () => {
+    const document = run(installation(), "calibration.set", {
+      ...calibration,
+      surfaceId: null,
+      outputId: "out_a",
+      outputMaskId: "om_window",
+      corner: null,
+      point: 3,
+    });
+    const plan = planFrame(document, "out_a", catalog);
+    expect(plan.draws.map((draw) => draw.style)).toEqual([
+      "pattern",
+      "pattern",
+    ]);
+    expect(plan.outputMaskOutline?.mask.id).toBe("om_window");
+    expect(plan.outputMaskOutline?.point).toBe(3);
+    expect(plan.outputMasks.map((mask) => mask.id)).toEqual([
+      "om_window",
+      "om_beam",
+    ]);
+    const shorter = run(document, "output-mask.point.remove", {
+      outputMaskId: "om_window",
+      index: 0,
+    });
+    expect(planFrame(shorter, "out_a", catalog).outputMaskOutline?.point).toBe(
+      2,
+    );
+    const gone = run(document, "output-mask.remove", {
+      outputMaskId: "om_window",
+    });
+    expect(planFrame(gone, "out_a", catalog).draws).toEqual([]);
+    expect(planFrame(gone, "out_a", catalog).outputMaskOutline).toBeUndefined();
   });
 
   it("outlines the Surface's Regions while its quad or one of them is aligned", () => {

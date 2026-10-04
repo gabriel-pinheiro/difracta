@@ -10,8 +10,8 @@ terms in code, UI text, docs, and conversation.
 
 One complete projection setup and its configuration.
 
-An Installation owns Outputs, Surfaces, Surface Mappings, Regions, Masks, Paths,
-Media, Scenes, Controllers, Parameter Links, and Macros.
+An Installation owns Outputs, Output Masks, Surfaces, Surface Mappings, Regions,
+Masks, Paths, Media, Scenes, Controllers, Parameter Links, and Macros.
 
 ### Projector
 
@@ -23,7 +23,8 @@ Hardware control is not part of the initial engine.
 ### Output
 
 A logical rendering destination associated with a fullscreen Output browser and
-a projector-connected display. An Installation may contain multiple Outputs.
+a projector-connected display. An Installation may contain multiple Outputs. An
+Output may own Output Masks, which cut its Projection Frame.
 
 Do not use Output as a synonym for a Surface or Scene.
 
@@ -117,13 +118,34 @@ fully closed. Masks then apply in array order, each opening or closing only its
 own polygon. Masked-out pixels are transparent rather than black, so a hole
 reveals whatever another Surface draws underneath it.
 
-Feather is a fraction of Surface Space and fades inward only, so a feathered
-Mask lights strictly less than a hard one and never spills past the physical
-edge it exists to respect.
+Feather is a fraction of Surface Space and always extends the dark side: an
+Include Mask fades inward from its edge, an Exclude Mask is fully dark up to its
+edge and fades outward. A feathered Mask therefore lights strictly less than a
+hard one and never spills past the physical edge it exists to respect.
 
-A clipping mask owned by a Surface Mapping, for blocking one projector's spill
-or working around an obstruction in one beam, remains a separate deferred
-concept.
+An obstruction in one projector's beam is an Output Mask's job. A clipping mask
+owned by a Surface Mapping, cutting one Surface on one Output while another
+Surface may still light that area, remains a separate deferred concept.
+
+### Output Mask
+
+A named polygon in an Output's Projection Frame that cuts everything that Output
+draws, such as a window, a doorway or a reflective panel inside the beam,
+whatever Surfaces lie over it.
+
+An Output Mask belongs to one Output and applies to no other: a Surface on two
+Outputs keeps its Surface Masks on both and is cut by each Output's own Output
+Masks. It is `include` or `exclude`, has 3–16 points plus its own feather
+amount, and its points are normalized Projection Frame coordinates that may lie
+past the frame's edges, as Surface Mapping corners may. Output Masks of one
+Output are ordered and named uniquely within that Output, and compose by the
+Mask rules among themselves: with no Include Output Mask the frame is open, with
+any it starts closed, then they apply in order. The cut area is black, since
+nothing lies beneath an Output's frame. Feather is a fraction of the frame's
+mean side and extends the dark side, as a Mask's does.
+
+An Output Mask has no Address: it is edited in Studio or through its commands,
+never from a Macro or OSC during a show, the same boundary a Mask has.
 
 ### Surface Mapping
 
@@ -149,13 +171,18 @@ physical alignment.
 ### Calibration Mode
 
 A temporary Output presentation used while editing Surface Mappings, Regions,
-Masks, or Paths. It is on one Output at a time, one of those the Surface is on,
-while the Surface's other Outputs keep playing the Scene. It replaces Scene
-playback on that Output with Surface patterns and bounds, or the Surface's
-pattern already masked with the Mask, Path or Region being aligned drawn over it
-with its points marked. While a Surface's quadrilateral or one of its Regions is
-aligned, all its Regions are drawn as named outlines, so the operator sees them
-follow the corners.
+Masks, Paths, or Output Masks. It is on one Output at a time, one of those the
+Surface is on, while the Surface's other Outputs keep playing the Scene. It
+replaces Scene playback on that Output with Surface patterns and bounds, or the
+Surface's pattern already masked with the Mask, Path or Region being aligned
+drawn over it with its points marked. While a Surface's quadrilateral or one of
+its Regions is aligned, all its Regions are drawn as named outlines, so the
+operator sees them follow the corners.
+
+Calibration Mode may also be on an Output with no Surface: every Surface on the
+Output is then drawn as a pattern at once, to see which moved together after a
+projector was bumped, and while one of the Output's Output Masks is aligned its
+polygon and points are drawn over them in the Projection Frame.
 
 Blackout takes precedence: while it is on, the calibrated Output shows black and
 the pattern returns when Blackout is released.
@@ -163,7 +190,8 @@ the pattern returns when Blackout is released.
 Masks are applied while calibrating a Mask or a Path, so the operator aligns
 against the shape the audience will actually see. They are not applied while
 calibrating a Surface's quadrilateral, where a Mask would hide the corners being
-dragged.
+dragged. Output Masks are applied in every case, a quadrilateral's included,
+since they are the Output's own and cut the pattern as they cut the Scene.
 
 Calibration Mode is operational Runtime state. It is not persisted and clears
 when Studio exits it or the Studio session that entered it disconnects. While it

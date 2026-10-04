@@ -3,7 +3,6 @@ import {
   CORNERS,
   enabledCorners,
   orderedEntries,
-  REGION_CORNERS,
   resolveCalibration,
   resolveLayerPaths,
   resolveTarget,
@@ -13,6 +12,7 @@ import {
   type FilterLayer,
   type Layer,
   type Mask,
+  type OutputMask,
   type Path,
   type Quad,
   type Rect,
@@ -23,6 +23,7 @@ import {
   type VisualLayer,
 } from "@difracta/core";
 
+import { calibrationDraws } from "./plan-calibration.ts";
 import { regionCorners, regionPaths } from "./region-targets.ts";
 
 export type SurfaceStyle = "fill" | "pattern" | "outline";
@@ -122,24 +123,41 @@ export interface FilterDraw {
   readonly below: number;
 }
 
+/** The Output Mask being aligned, drawn as an outline in frame space with its points. */
+export interface OutputMaskOutline {
+  readonly mask: OutputMask;
+  readonly point: number | undefined;
+}
+
 export interface FramePlan {
   readonly blackout: boolean;
   /** Calibration drawings, only in Calibration Mode on this Output. */
   readonly draws: readonly SurfaceDraw[];
+  /** The Output Mask being aligned in Calibration Mode on this Output, over the draws. */
+  readonly outputMaskOutline: OutputMaskOutline | undefined;
   /** The Scene's Layers to composite, bottom first; empty while calibrating. */
   readonly layers: readonly LayerDraw[];
   /** The Scene's Filters in the same order, each placed by `below`. */
   readonly filters: readonly FilterDraw[];
+  /**
+   * The Output's masks in order, cutting the whole frame to black after
+   * the Layers and root Filters, in Calibration Mode too; empty when the
+   * Output has none, and under Blackout.
+   */
+  readonly outputMasks: readonly OutputMask[];
 }
 
 const NOTHING = { layers: [], filters: [] } as const;
+const NO_CALIBRATION = { draws: [], outputMaskOutline: undefined } as const;
 
 /**
  * What one Output shows for a document: nothing under Blackout; otherwise
  * the active Scene's Layers on their Surfaces, or, in Calibration Mode on
  * this Output, the calibrated Surface as a pattern and the others as the
- * view says. The Catalog says which Paths each Visual needs bound. Pure,
- * so the rules are testable without a GPU.
+ * view says, or every Surface as a pattern when the Output itself or one of
+ * its Output Masks is calibrated (`plan-calibration.ts`); the Output's
+ * masks come along either way. The Catalog says which Paths each Visual
+ * needs bound. Pure, so the rules are testable without a GPU.
  */
 export function planFrame(
   document: Document,
@@ -147,86 +165,30 @@ export function planFrame(
   catalog: Catalog,
 ): FramePlan {
   if (document.operational.blackout)
-    return { blackout: true, draws: [], ...NOTHING };
+    return { blackout: true, ...NO_CALIBRATION, ...NOTHING, outputMasks: [] };
   const masksOf = (surface: Surface): readonly Mask[] =>
     orderedEntries(document.masks).filter(
       (mask) => mask.surfaceId === surface.id,
     );
+  const outputMasks = orderedEntries(document.outputMasks).filter(
+    (mask) => mask.outputId === outputId,
+  );
   const calibration = resolveCalibration(document);
   const calibrating =
     calibration?.outputId === outputId ? calibration : undefined;
   if (calibrating === undefined)
     return {
       blackout: false,
-      draws: [],
+      ...NO_CALIBRATION,
       ...planStack(document, outputId, catalog, masksOf),
+      outputMasks,
     };
-  const draws: SurfaceDraw[] = [];
-  for (const surface of orderedEntries(document.surfaces)) {
-    const corners = enabledCorners(surface, outputId);
-    if (corners === undefined) continue;
-    if (surface.id === calibrating.surface.id) {
-      const { mask, path, region } = calibrating;
-      const shape = mask ?? path ?? region;
-      const corner = calibrating.calibration.corner ?? undefined;
-      draws.push({
-        surface,
-        corners,
-        style: "pattern",
-        highlighted: true,
-        // A Mask hides the corners being dragged, so Masks only apply while
-        // a Mask, Path or Region is aligned, against the shape the audience sees.
-        masks: shape === undefined ? [] : masksOf(surface),
-        corner: shape === undefined ? corner : undefined,
-        maskOutline:
-          mask === undefined ? undefined : { mask, point: calibrating.point },
-        pathOutline:
-          path === undefined ? undefined : { path, point: calibrating.point },
-        // Regions follow the quad, so they show while it or one of them is aligned.
-        regions:
-          mask !== undefined || path !== undefined
-            ? []
-            : regionsOf(document, surface).map((entry) => ({
-                region: entry,
-                highlighted: entry.id === region?.id,
-                corner:
-                  entry.id === region?.id && isRegionCorner(corner)
-                    ? corner
-                    : undefined,
-              })),
-      });
-      continue;
-    }
-    const view = calibrating.calibration.view;
-    if (view === "selected") continue;
-    draws.push({
-      surface,
-      corners,
-      style: view === "outlines" ? "outline" : "pattern",
-      highlighted: false,
-      masks: [],
-      corner: undefined,
-      maskOutline: undefined,
-      pathOutline: undefined,
-      regions: [],
-    });
-  }
-  return { blackout: false, draws, ...NOTHING };
-}
-
-function regionsOf(document: Document, surface: Surface): readonly Region[] {
-  return orderedEntries(document.regions).filter(
-    (region) => region.surfaceId === surface.id,
-  );
-}
-
-function isRegionCorner(
-  corner: CornerName | undefined,
-): corner is RegionCorner {
-  return (
-    corner !== undefined &&
-    (REGION_CORNERS as readonly string[]).includes(corner)
-  );
+  return {
+    blackout: false,
+    ...calibrationDraws(document, outputId, calibrating, masksOf),
+    ...NOTHING,
+    outputMasks,
+  };
 }
 
 /**

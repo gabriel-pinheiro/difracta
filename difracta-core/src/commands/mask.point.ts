@@ -1,58 +1,21 @@
 import { z } from "zod";
 
+import { defineCommand } from "../command/command.ts";
+import { MASK_POINTS } from "../document/document.ts";
+import { PointSchema } from "../document/geometry.ts";
 import {
-  accepted,
-  defineCommand,
-  rejected,
-  type CommandOutcome,
-} from "../command/command.ts";
-import { MASK_POINTS, type Document } from "../document/document.ts";
-import {
-  addPoints,
-  midpoint,
-  PointSchema,
-  roundPoint,
-  type Point,
-} from "../document/geometry.ts";
+  pointAdd,
+  pointNudge,
+  pointRemove,
+  pointSet,
+  withPoints,
+} from "./polygon-points.ts";
 
-/**
- * Point edits replace the whole `points` array, since patch paths address
- * object keys, not array positions; a Mask has at most sixteen points, so
- * the patch stays small. Set and nudge share one coalesce key per point.
- */
-function withPoints(
-  document: Document,
-  maskId: string,
-  next: (points: readonly Point[]) => readonly Point[] | string,
-): CommandOutcome {
-  const mask = document.masks[maskId];
-  if (mask === undefined) return rejected(`Mask “${maskId}” does not exist.`);
-  const points = next(mask.points);
-  if (typeof points === "string") return rejected(points);
-  if (
-    points.length === mask.points.length &&
-    points.every(
-      (point, index) =>
-        point.x === mask.points[index]?.x && point.y === mask.points[index]?.y,
-    )
-  )
-    return accepted([]);
-  return accepted([
-    { op: "set", path: ["masks", mask.id, "points"], value: points },
-  ]);
-}
-
-const indexOf = (
-  points: readonly Point[],
-  index: number,
-): string | undefined =>
-  index < points.length
-    ? undefined
-    : `Point ${String(index)} does not exist; the Mask has ${String(points.length)} points.`;
-
+/** Set and nudge share one coalesce key per point. */
 const Index = z.number().int().nonnegative();
 const pointKey = ({ maskId, index }: { maskId: string; index: number }) =>
   `mask.point:${maskId}:${String(index)}`;
+const NOUN = "Mask";
 
 export const maskPointSet = defineCommand({
   name: "mask.point.set",
@@ -64,11 +27,9 @@ export const maskPointSet = defineCommand({
   label: () => "Move Mask point",
   coalesceKey: pointKey,
   apply: ({ document, payload }) =>
-    withPoints(document, payload.maskId, (points) => {
-      const missing = indexOf(points, payload.index);
-      if (missing !== undefined) return missing;
-      return points.with(payload.index, roundPoint(payload.point));
-    }),
+    withPoints(document, "masks", NOUN, payload.maskId, (points) =>
+      pointSet(NOUN, points, payload.index, payload.point),
+    ),
 });
 
 /** Relative, so repeated nudges from a held key apply in full whatever order their replies arrive in. */
@@ -82,11 +43,9 @@ export const maskPointNudge = defineCommand({
   label: () => "Move Mask point",
   coalesceKey: pointKey,
   apply: ({ document, payload }) =>
-    withPoints(document, payload.maskId, (points) => {
-      const current = points[payload.index];
-      if (current === undefined) return indexOf(points, payload.index) ?? "";
-      return points.with(payload.index, addPoints(current, payload.by));
-    }),
+    withPoints(document, "masks", NOUN, payload.maskId, (points) =>
+      pointNudge(NOUN, points, payload.index, payload.by),
+    ),
 });
 
 /** Inserts a point halfway along the edge that leaves point `after`. */
@@ -97,14 +56,9 @@ export const maskPointAdd = defineCommand({
   payload: z.object({ maskId: z.string().min(1), after: Index }).strict(),
   label: () => "Add Mask point",
   apply: ({ document, payload }) =>
-    withPoints(document, payload.maskId, (points) => {
-      const from = points[payload.after];
-      if (from === undefined) return indexOf(points, payload.after) ?? "";
-      if (points.length >= MASK_POINTS.max)
-        return `A Mask has at most ${String(MASK_POINTS.max)} points.`;
-      const to = points[(payload.after + 1) % points.length] ?? from;
-      return points.toSpliced(payload.after + 1, 0, midpoint(from, to));
-    }),
+    withPoints(document, "masks", NOUN, payload.maskId, (points) =>
+      pointAdd(NOUN, MASK_POINTS, points, payload.after),
+    ),
 });
 
 export const maskPointRemove = defineCommand({
@@ -114,11 +68,7 @@ export const maskPointRemove = defineCommand({
   payload: z.object({ maskId: z.string().min(1), index: Index }).strict(),
   label: () => "Remove Mask point",
   apply: ({ document, payload }) =>
-    withPoints(document, payload.maskId, (points) => {
-      const missing = indexOf(points, payload.index);
-      if (missing !== undefined) return missing;
-      if (points.length <= MASK_POINTS.min)
-        return `A Mask keeps at least ${String(MASK_POINTS.min)} points.`;
-      return points.toSpliced(payload.index, 1);
-    }),
+    withPoints(document, "masks", NOUN, payload.maskId, (points) =>
+      pointRemove(NOUN, MASK_POINTS, points, payload.index),
+    ),
 });

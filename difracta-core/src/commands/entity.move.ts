@@ -21,6 +21,7 @@ const labels: Record<OrderedTableName, string> = {
   regions: "Region",
   masks: "Mask",
   paths: "Path",
+  outputMasks: "Output Mask",
   shares: "Screen Share",
   scenes: "Scene",
   layers: "Layer",

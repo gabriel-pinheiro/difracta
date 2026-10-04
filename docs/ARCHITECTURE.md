@@ -67,6 +67,7 @@ Document
 ├── regions { [id]: Region }          surfaceId, bounds (topLeft, bottomRight)
 ├── masks { [id]: Mask }              surfaceId, mode, points, feather
 ├── paths { [id]: Path }              surfaceId, points, closed
+├── outputMasks { [id]: OutputMask }  outputId, mode, points, feather
 ├── packs { [packId]: PackAttachment } name (a copy), relativePath? (a hint); never the Bundled Pack
 ├── shares { [id]: Share }            name, order: a Screen Share
 ├── scenes { [id]: Scene }            name, order
@@ -177,12 +178,37 @@ A Mask is a polygon in Surface Space, three to sixteen points, that decides
 which part of its Surface is lit: `include` lights only its area, `exclude`
 never lights it. A Surface with no include Masks is fully lit; with any, it
 starts closed, and Masks then apply in order, each changing only its own
-polygon. Feather is a fraction of Surface Space and fades inward only. Masks
+polygon. Feather is a fraction of Surface Space and extends the dark side: an
+include Mask fades inward from its edge, an exclude Mask is dark up to its edge
+and fades outward, so a feathered Mask never lights more than a hard one. Masks
 live in their own table with a `surfaceId` and an `order` key scoped to that
 Surface; `entity.move` keeps a Mask among its siblings. Removing a Surface
 removes its Masks. Point commands (`mask.point.set`, `.nudge`, `.add`,
 `.remove`) replace the whole `points` array, because patch paths address object
-keys, not array positions, and sixteen points is a small value.
+keys, not array positions, and sixteen points is a small value; the point rules
+are one module (`commands/polygon-points.ts`) the Output Mask commands share.
+
+### Output Masks
+
+An Output Mask is the same polygon, three to sixteen points, in one Output's
+Projection Frame: its points are normalized frame coordinates, the space of a
+Surface Mapping's corners, and may lie past the frame's edges as corners may. It
+cuts everything that Output draws, to black. Output Masks live in their own
+table with an `outputId` and an `order` key scoped to that Output, and compose
+among themselves by the Mask rules; removing an Output removes them. The
+commands mirror the Mask ones under `output-mask.*` with `outputMaskId`, and a
+new one starts as an exclude rectangle over the middle of the frame
+(`settings.outputMasks.defaultInset`), since an obstruction in the beam is what
+one is made for. There is no Address for them.
+
+**Why per Output, not per mapping:** a window inside one projector's beam sits
+under whichever Surfaces cross it, and a Surface on two Outputs may have the
+obstruction in one beam only; a Mask on the Surface cannot say either, and a
+mask per Surface Mapping would have to be drawn once per Surface over the same
+window. **Why a final pass, not per Layer:** the mask is a fact about the frame
+the projector emits, so it is applied once to the finished frame, after the root
+Filters, and catches the blur or displacement that pushes light past a Surface
+Mask. **Why black, not transparent:** nothing lies beneath an Output's frame.
 
 ### Paths
 
@@ -593,14 +619,17 @@ of choices, the CLI, Macros and validation, works as it is.
 `operational.calibration` names one Surface, or one Mask, Path or Region of it,
 the one Output showing it (`outputId`, among those the Surface is on), plus the
 highlighted corner or point, the view for the Output's other Surfaces (hidden,
-outlines, patterns) and the live session that entered it. `calibration.set`
-replaces the whole entry and `calibration.exit` clears it; both are performance
-commands, so they replicate at once and never enter undo history. The runtime
-clears the entry when its owner's session closes. Authoring commands do not
-touch it, so removing the calibrated Surface or taking it off that Output leaves
-a stale entry behind briefly; readers go through `resolveCalibration`, which
-treats a dangling entry as no calibration, and the next `set` or `exit`
-overwrites it.
+outlines, patterns) and the live session that entered it. With `surfaceId` null
+it names the Output alone, which then shows every Surface on it as a pattern, or
+one of the Output's Output Masks (`outputMaskId`), drawn over those patterns
+with its points; the view is ignored and nothing of a Surface may come along.
+`calibration.set` replaces the whole entry and `calibration.exit` clears it;
+both are performance commands, so they replicate at once and never enter undo
+history. The runtime clears the entry when its owner's session closes. Authoring
+commands do not touch it, so removing the calibrated Surface, Output or Output
+Mask, or taking the Surface off that Output, leaves a stale entry behind
+briefly; readers go through `resolveCalibration`, which treats a dangling entry
+as no calibration, and the next `set` or `exit` overwrites it.
 
 **Why one Output at a time, for a Mask, Path or Region too:** the mode takes the
 Scene off the Output it is on, so a pattern on every Output of a Surface would
@@ -1803,9 +1832,25 @@ others follow the view. Masks apply to the pattern only while a Mask, Path or
 Region is being aligned, and that shape is then drawn over it with its points
 marked, a Mask as a loop and an open Path as a line; while the quad or a Region
 is aligned, the Surface's Regions are drawn as named rectangles, the aligned one
-brighter with its two corners marked. That drawing lives in
-`calibration-drawing.ts` and goes through the same Surface Space program as the
-Layers (`surface-program.ts`), so a pattern lands exactly where the Scene will.
+brighter with its two corners marked. Calibrating the Output itself draws every
+Surface enabled on it as a plain pattern, and an Output Mask being aligned is
+drawn over them in frame space as a loop with its points marked. That drawing
+lives in `calibration-drawing.ts` and goes through the same Surface Space
+program as the Layers (`surface-program.ts`), so a pattern lands exactly where
+the Scene will.
+
+The plan also carries the Output's Output Masks, in order, in every branch. Once
+the Layers are drawn and the root Filter chain has presented, and before the
+calibration drawing, one full-frame pass draws black wherever they close; an
+Output with none skips it, and Blackout returns before it. The pass uses one
+texture per compositor, rasterized in the Projection Frame at the frame's pixel
+size (capped at the GPU's limit) with the same Canvas 2D composition as the
+Surface Mask textures and the feather uniform in pixels from the frame's mean
+side, rebuilt only when the mask objects change identity or the frame size does.
+Because it runs after the root Filters it also cuts the light a blur or a
+displacement pushes past a Surface Mask. Studio's Preview applies it in Output
+framing, the real Output, and not in Surface framing, whose synthetic Output is
+in no document.
 
 Each planned Layer has a Visual instance (`layer-players.ts`). A canvas Visual's
 draws on its own canvas, sized by `surfaceCanvasSize` and capped at the GPU's
@@ -1932,11 +1977,12 @@ Surface's Masks change (identity comparison, since the document is immutable per
 revision) or that size does, and sampled once per fragment. The texture is kept
 for as long as the Surface has a planned Layer or a calibration drawing on the
 Output, whether or not that Layer drew this frame, so a Visual that blinks does
-not rebuild its Surface's Masks on every flash. Feather is drawn inward from the
-polygon edge and clipped to it, so no Mask changes coverage outside its own
-boundary. **Why sized to the Surface, in steps:** a Mask edge is only as sharp
-as its texels on the wall, and rounding the size up keeps a corner drag from
-re-rasterizing every step.
+not rebuild its Surface's Masks on every flash. Feather is drawn on the dark
+side of the polygon edge: an include Mask fades inward and is clipped to its
+polygon, an exclude Mask is dark up to its edge and its fade is drawn outside
+it, so a feathered Mask never lights more than a hard one. **Why sized to the
+Surface, in steps:** a Mask edge is only as sharp as its texels on the wall, and
+rounding the size up keeps a corner drag from re-rasterizing every step.
 
 Media: the loader (`media-loader.ts`) is engine-owned and preloading. The page
 hands the compositor the `packs` live state as it has it (`setPacks`; the Output
@@ -2320,12 +2366,13 @@ tab, which shows one card per Output; the tab last used is remembered per
 browser. Selection is Studio-local state and never reaches the runtime; the
 selected row and card carry an outline so the inspector's subject is visible at
 a glance. Rows with children open and close with a chevron: Output rows start
-open so their live sessions stay in view, Surface rows start closed so Regions,
-Masks and Paths do not crowd the list; creating a child or selecting one from an
-inspector opens its parent. Column sizes and section open states are remembered
-per browser in localStorage; row open states live in memory and reset with the
-Installation. An empty section says how to add its first entity, and an open row
-without children says so in one dim line.
+open so their Output Masks and live sessions stay in view, the masks first,
+Surface rows start closed so Regions, Masks and Paths do not crowd the list;
+creating a child or selecting one from an inspector opens its parent. Column
+sizes and section open states are remembered per browser in localStorage; row
+open states live in memory and reset with the Installation. An empty section
+says how to add its first entity, and an open row without children says so in
+one dim line.
 
 Why per-entity folders: every entity kind contributes the same two pieces, a
 navigator section and an inspector, and they change together. Each kind lives in
@@ -2527,13 +2574,15 @@ at each of those would hide the work; it is not remembered across sessions, so a
 show reopens on what plays.
 
 The Surface, Mask, Path and Region inspectors carry a Calibrate toggle and,
-while active, the view for the other Surfaces. Calibrating is on the Surface's
-mapping Output (`lib/mapping-output.ts`): the Output showing its pattern now,
-else the one this Studio picked for the Surface, else the only one it is on. On
-several Outputs with none picked there is none and Calibrate is disabled, with a
-"Show on" select over the Surface's Outputs above it; the pick is Studio's own,
-kept per Surface and never saved. The corner or point selected in the inspector
-is mirrored to the Output as it changes, and focusing a corner or point button
+while active, the view for the other Surfaces; the Output and Output Mask
+inspectors carry the Output-level one, which calibrates the Output with no
+Surface and shows no view select. Calibrating is on the Surface's mapping Output
+(`lib/mapping-output.ts`): the Output showing its pattern now, else the one this
+Studio picked for the Surface, else the only one it is on. On several Outputs
+with none picked there is none and Calibrate is disabled, with a "Show on"
+select over the Surface's Outputs above it; the pick is Studio's own, kept per
+Surface and never saved. The corner or point selected in the inspector is
+mirrored to the Output as it changes, and focusing a corner or point button
 selects it, so Tab and the arrow keys agree. While the mode is on, selecting
 another Surface, Mask, Path or Region moves the pattern to it, on the same
 Output when that Surface is on it, on its only Output otherwise, and not at all

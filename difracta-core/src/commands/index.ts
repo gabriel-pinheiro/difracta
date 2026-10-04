@@ -50,6 +50,16 @@ import { maskRemove } from "./mask.remove.ts";
 import { maskRename } from "./mask.rename.ts";
 import { maskUpdate } from "./mask.update.ts";
 import { outputCreate } from "./output.create.ts";
+import { outputMaskCreate } from "./output-mask.create.ts";
+import {
+  outputMaskPointAdd,
+  outputMaskPointNudge,
+  outputMaskPointRemove,
+  outputMaskPointSet,
+} from "./output-mask.point.ts";
+import { outputMaskRemove } from "./output-mask.remove.ts";
+import { outputMaskRename } from "./output-mask.rename.ts";
+import { outputMaskUpdate } from "./output-mask.update.ts";
 import { pathCreate } from "./path.create.ts";
 import {
   pathPointAdd,
@@ -92,6 +102,14 @@ export const builtInCommands: readonly CommandDefinition<never>[] = [
   outputRename,
   outputUpdate,
   outputRemove,
+  outputMaskCreate,
+  outputMaskRename,
+  outputMaskUpdate,
+  outputMaskPointSet,
+  outputMaskPointNudge,
+  outputMaskPointAdd,
+  outputMaskPointRemove,
+  outputMaskRemove,
   surfaceCreate,
   surfaceRename,
   surfaceAssign,

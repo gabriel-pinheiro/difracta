@@ -9,6 +9,7 @@ import {
   type LayerId,
   type MacroId,
   type MaskId,
+  type OutputMaskId,
   type ShareId,
   type PathId,
   type RegionId,
@@ -150,31 +151,62 @@ export type Surface = Entity<typeof SurfaceSchema, SurfaceId>;
 
 export const MASK_POINTS = { min: 3, max: 16 } as const;
 
+export const MaskModeSchema = z.enum(["include", "exclude"]);
+export type MaskMode = z.infer<typeof MaskModeSchema>;
+
+/** The fields a Mask and an Output Mask share; which space the points lie in is the owner's. */
+const MaskShape = {
+  id: z.string().min(1),
+  name: EntityName,
+  mode: MaskModeSchema,
+  points: z
+    .array(PointSchema)
+    .min(MASK_POINTS.min)
+    .max(MASK_POINTS.max)
+    .readonly(),
+  /**
+   * Fraction of the space the edge fades over, always on the dark side: an
+   * include Mask fades inward from its edge, an exclude Mask is dark up to
+   * its edge and fades outward. A feathered Mask never lights more than a
+   * hard one.
+   */
+  feather: z.number().min(0).max(1),
+};
+
 /**
  * A polygon in Surface Space deciding which part of its Surface is lit. A
  * Surface with no include Masks is fully lit; with any, it starts closed.
  * Masks then apply in order, each opening (include) or closing (exclude)
- * only its own polygon. Feather fades inward only, as a fraction of Surface
- * Space, so it never spills past the physical edge the Mask respects.
+ * only its own polygon. Feather is a fraction of Surface Space.
  */
 export const MaskSchema = z
   .object({
-    id: z.string().min(1),
-    name: EntityName,
+    ...MaskShape,
     surfaceId: z.string().min(1),
-    mode: z.enum(["include", "exclude"]),
-    points: z
-      .array(PointSchema)
-      .min(MASK_POINTS.min)
-      .max(MASK_POINTS.max)
-      .readonly(),
-    feather: z.number().min(0).max(1),
-    /** Position among the Masks of the same Surface. */
+    /** Position among the Regions, Masks and Paths of the same Surface, which share one order. */
     order: z.string().min(1).default(DEFAULT_ORDER_KEY),
   })
   .strict();
 export type Mask = Entity<typeof MaskSchema, MaskId>;
-export type MaskMode = Mask["mode"];
+
+/**
+ * A polygon in one Output's Projection Frame that cuts everything the Output
+ * draws, to black: a window or a reflector in the beam, whatever Surfaces
+ * lie over it. Points are normalized frame coordinates, the space of
+ * `SurfaceMapping.corners`, and may lie past the frame's edges as corners
+ * may. Composition follows the Mask rules among the Output's own masks:
+ * with no include mask the frame is open, with any it starts closed, then
+ * the masks apply in order. Feather is a fraction of the frame's mean side.
+ */
+export const OutputMaskSchema = z
+  .object({
+    ...MaskShape,
+    outputId: z.string().min(1),
+    /** Position among the Output Masks of the same Output. */
+    order: z.string().min(1).default(DEFAULT_ORDER_KEY),
+  })
+  .strict();
+export type OutputMask = Entity<typeof OutputMaskSchema, OutputMaskId>;
 
 /** The smallest side a Region may have, as a fraction of Surface Space. */
 export const REGION_MIN_SIDE = 0.01;
@@ -286,15 +318,20 @@ export const CalibrationViewSchema = z.enum(CALIBRATION_VIEWS);
 export type CalibrationView = z.infer<typeof CalibrationViewSchema>;
 
 /**
- * Calibration Mode: one Surface (or one of its Masks or Paths) shown as a pattern on
- * its Output instead of the dim fill. `owner` is the live session that
+ * Calibration Mode: one Surface (or one of its Masks, Paths or Regions)
+ * shown as a pattern on its Output instead of the dim fill; or, with no
+ * Surface, one Output showing every Surface on it as a pattern, alone or
+ * while one of its Output Masks is aligned. `owner` is the live session that
  * entered it, so the runtime can clear it when that session goes away.
  */
 export const CalibrationSchema = z
   .object({
-    surfaceId: z.string().min(1),
+    /** Surface being aligned; null calibrates the Output itself. */
+    surfaceId: z.string().min(1).nullable(),
     /** The one Output showing the pattern, among those the Surface is on. */
     outputId: z.string().min(1),
+    /** Output Mask being aligned, over the Output's patterns; needs `surfaceId` null. */
+    outputMaskId: z.string().min(1).nullable().default(null),
     /** Mask being aligned, with its Masks applied; null aligns the quad. */
     maskId: z.string().min(1).nullable(),
     /** Path being aligned, with the Masks applied; exclusive with `maskId`. */
@@ -302,12 +339,12 @@ export const CalibrationSchema = z
     /** Region being aligned, with the Masks applied; exclusive with both. */
     regionId: z.string().min(1).nullable().default(null),
     /**
-     * Corner, Mask point or Path point highlighted on the Output; while a
-     * Region is aligned, one of its two corners.
+     * Corner, Mask point, Path point or Output Mask point highlighted on the
+     * Output; while a Region is aligned, one of its two corners.
      */
     corner: CornerNameSchema.nullable(),
     point: z.number().int().min(0).nullable(),
-    /** What the other Surfaces of the Output show meanwhile. */
+    /** What the other Surfaces of the Output show meanwhile; ignored with no Surface. */
     view: CalibrationViewSchema,
     owner: z.string().min(1),
   })
@@ -568,6 +605,7 @@ export const DocumentSchema = z
     regions: z.record(z.string(), RegionSchema),
     masks: z.record(z.string(), MaskSchema),
     paths: z.record(z.string(), PathSchema),
+    outputMasks: z.record(z.string(), OutputMaskSchema),
     packs: z.record(z.string(), PackAttachmentSchema),
     shares: z.record(z.string(), ShareSchema),
     scenes: z.record(z.string(), SceneSchema),
@@ -586,6 +624,7 @@ export interface Document {
   readonly regions: Table<Region>;
   readonly masks: Table<Mask>;
   readonly paths: Table<Path>;
+  readonly outputMasks: Table<OutputMask>;
   readonly packs: Table<PackAttachment>;
   readonly shares: Table<Share>;
   readonly scenes: Table<Scene>;
@@ -603,6 +642,7 @@ export const TABLE_SCHEMAS = {
   regions: RegionSchema,
   masks: MaskSchema,
   paths: PathSchema,
+  outputMasks: OutputMaskSchema,
   packs: PackAttachmentSchema,
   shares: ShareSchema,
   scenes: SceneSchema,
@@ -620,6 +660,7 @@ export const ORDERED_TABLES = [
   "regions",
   "masks",
   "paths",
+  "outputMasks",
   "shares",
   "scenes",
   "layers",
@@ -638,6 +679,7 @@ export const PARENT_FIELDS: Partial<
   regions: ["surfaceId"],
   masks: ["surfaceId"],
   paths: ["surfaceId"],
+  outputMasks: ["outputId"],
   layers: ["sceneId", "parentId"],
   controllers: ["parentId"],
   macros: ["parentId"],
@@ -676,6 +718,7 @@ export function emptyDocument(name: string): Document {
     regions: {},
     masks: {},
     paths: {},
+    outputMasks: {},
     packs: {},
     shares: {},
     scenes: {},

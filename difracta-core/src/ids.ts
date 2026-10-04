@@ -10,6 +10,7 @@ export type OutputId = Id<"output">;
 export type SurfaceId = Id<"surface">;
 export type RegionId = Id<"region">;
 export type MaskId = Id<"mask">;
+export type OutputMaskId = Id<"outputMask">;
 export type PathId = Id<"path">;
 export type SceneId = Id<"scene">;
 export type LayerId = Id<"layer">;

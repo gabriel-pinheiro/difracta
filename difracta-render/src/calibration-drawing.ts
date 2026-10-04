@@ -2,7 +2,12 @@ import type { Point, RegionBounds } from "@difracta/core";
 
 import { project } from "./homography.ts";
 import { Labels } from "./labels.ts";
-import { CORNER_INDEX, type RegionOutline, type SurfaceDraw } from "./plan.ts";
+import {
+  CORNER_INDEX,
+  type OutputMaskOutline,
+  type RegionOutline,
+  type SurfaceDraw,
+} from "./plan.ts";
 import {
   MODE,
   WHOLE,
@@ -33,9 +38,11 @@ const SELECTED_MARKER_SIZE = 0.045;
  * outline or the pattern, the calibrated one with its name, corner labels
  * and, when a Mask or Path is being aligned, its line and point markers;
  * its Regions as named rectangles while the quad or one of them is
- * aligned, that one with its corners marked. Everything is drawn in
- * Surface Space through the shared program, so it lands exactly where the
- * Scene will.
+ * aligned, that one with its corners marked; and, when an Output Mask is
+ * being aligned, its polygon and points in frame space over every Surface.
+ * Everything is drawn in Surface Space through the shared program, so it
+ * lands exactly where the Scene will; the frame-space outline goes through
+ * the same program set to the full frame.
  */
 export class CalibrationDrawing {
   readonly #program: SurfaceProgram;
@@ -117,6 +124,13 @@ export class CalibrationDrawing {
         index >= 2 ? 1 - CORNER_LABEL_INSET - h : CORNER_LABEL_INSET,
       ]);
     });
+  }
+
+  /** The Output Mask being aligned, unmasked, over everything drawn so far; the program is set to the full frame. */
+  drawFrameOutline({ mask, point }: OutputMaskOutline): void {
+    const { gl, uniforms } = this.#program;
+    gl.uniform1i(uniforms.maskEnabled, 0);
+    this.#line(mask.points, true, MASK_EDGE, point);
   }
 
   /** A Region's rectangle with its name inside; the aligned one brighter, its two corners marked. */

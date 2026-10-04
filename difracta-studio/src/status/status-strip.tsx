@@ -1,8 +1,10 @@
 import type { ConnectionPhase, DocumentView } from "@difracta/client";
 import {
   isEnabledOn,
+  type Calibration,
   type Mask,
   type Output,
+  type OutputMask,
   type Path,
   type Surface,
   type Table,
@@ -130,24 +132,22 @@ function CalibrationStatus({ view }: { readonly view: DocumentView }) {
   const masks = useDocumentPath<Table<Mask>>(view, ["masks"]);
   const paths = useDocumentPath<Table<Path>>(view, ["paths"]);
   const outputs = useDocumentPath<Table<Output>>(view, ["outputs"]);
+  const outputMasks = useDocumentPath<Table<OutputMask>>(view, ["outputMasks"]);
   if (calibration === null) return null;
-  // Same checks as the Output makes: a stale entry shows nothing.
-  const surface = surfaces?.[calibration.surfaceId];
-  if (surface === undefined || !isEnabledOn(surface, calibration.outputId))
-    return null;
-  const mask =
-    calibration.maskId === null ? undefined : masks?.[calibration.maskId];
-  if (calibration.maskId !== null && mask?.surfaceId !== surface.id)
-    return null;
-  const path =
-    calibration.pathId === null ? undefined : paths?.[calibration.pathId];
-  if (calibration.pathId !== null && path?.surfaceId !== surface.id)
-    return null;
   const output = outputs?.[calibration.outputId]?.name;
   if (output === undefined) return null;
+  // Same checks as the Output makes: a stale entry shows nothing.
+  const subject = calibratedName(calibration, {
+    surfaces,
+    masks,
+    paths,
+    outputMasks,
+  });
+  if (subject === undefined) return null;
   return (
     <span className="flex items-center gap-1.5 rounded-sm bg-amber-500/20 px-1.5 text-amber-300">
-      Calibrating {mask?.name ?? path?.name ?? surface.name} on {output}
+      Calibrating {subject ?? output}
+      {subject !== null && <> on {output}</>}
       <button
         type="button"
         className="underline underline-offset-2 hover:text-amber-100"
@@ -157,4 +157,43 @@ function CalibrationStatus({ view }: { readonly view: DocumentView }) {
       </button>
     </span>
   );
+}
+
+/**
+ * What the calibration pattern is of: a Mask, Path or Surface by name, or
+ * an Output Mask; null when the Output itself is calibrated; undefined when
+ * the entry names something gone.
+ */
+function calibratedName(
+  calibration: Calibration,
+  tables: {
+    readonly surfaces: Table<Surface> | undefined;
+    readonly masks: Table<Mask> | undefined;
+    readonly paths: Table<Path> | undefined;
+    readonly outputMasks: Table<OutputMask> | undefined;
+  },
+): string | null | undefined {
+  if (calibration.surfaceId === null) {
+    if (calibration.outputMaskId === null) return null;
+    const outputMask = tables.outputMasks?.[calibration.outputMaskId];
+    return outputMask?.outputId === calibration.outputId
+      ? outputMask.name
+      : undefined;
+  }
+  const surface = tables.surfaces?.[calibration.surfaceId];
+  if (surface === undefined || !isEnabledOn(surface, calibration.outputId))
+    return undefined;
+  const mask =
+    calibration.maskId === null
+      ? undefined
+      : tables.masks?.[calibration.maskId];
+  if (calibration.maskId !== null && mask?.surfaceId !== surface.id)
+    return undefined;
+  const path =
+    calibration.pathId === null
+      ? undefined
+      : tables.paths?.[calibration.pathId];
+  if (calibration.pathId !== null && path?.surfaceId !== surface.id)
+    return undefined;
+  return mask?.name ?? path?.name ?? surface.name;
 }

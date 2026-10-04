@@ -52,6 +52,12 @@ function stage(): Document {
     ["controller.create", { id: "ctl_e", kind: "number", name: "Energy" }],
     ["controller.create", { id: "ctl_g", kind: "group", name: "Looks" }],
     ["macro.create", { id: "mac_hit", name: "Hit" }],
+    ["output.create", { id: "out_beam", name: "Beam" }],
+    ["output-mask.create", { id: "om_tv", outputId: "out_tv", name: "Window" }],
+    [
+      "output-mask.create",
+      { id: "om_beam", outputId: "out_beam", name: "Window" },
+    ],
   ] as const) {
     const result = executeCommand(registry, document, name, payload);
     if (!result.ok) throw new Error(result.error);
@@ -79,6 +85,15 @@ describe("resolveId", () => {
     expect(() => resolveId(document, "layers", "Wash")).toThrow(
       "“Wash” matches 2 Layers: Wash (lay_1, in Scene Live), Wash (lay_2, in Scene Rehearsal)",
     );
+    expect(() => resolveId(document, "outputMasks", "Window")).toThrow(
+      "“Window” matches 2 Output Masks: Window (om_tv, on Output TV), Window (om_beam, on Output Beam)",
+    );
+    expect(
+      resolvePayloadNames(document, "output-mask.rename", {
+        outputMaskId: "om_tv",
+        name: "Door",
+      }),
+    ).toEqual({ outputMaskId: "om_tv", name: "Door" });
   });
 
   it("names the table when nothing matches", () => {

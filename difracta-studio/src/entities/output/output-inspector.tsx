@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { CopyField } from "@/inspector/fields/copy-field";
 import { InspectorHeading } from "@/inspector/fields/inspector-heading";
 import { NameField } from "@/inspector/fields/name-field";
+import { OutputCalibrationControls } from "@/inspector/fields/output-calibration-controls";
 import { SwitchField } from "@/inspector/fields/switch-field";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { pickMappingOutput } from "@/lib/mapping-output";
@@ -109,6 +110,7 @@ export function OutputInspector({
             </ul>
           )}
         </div>
+        <OutputCalibrationControls view={view} outputId={id} />
       </div>
     </>
   );

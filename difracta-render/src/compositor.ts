@@ -1,4 +1,9 @@
-import { effectiveDocument, type Catalog, type Document } from "@difracta/core";
+import {
+  effectiveDocument,
+  FULL_FRAME,
+  type Catalog,
+  type Document,
+} from "@difracta/core";
 
 import { CalibrationDrawing } from "./calibration-drawing.ts";
 import { FilterChain } from "./filter-chain.ts";
@@ -19,6 +24,7 @@ import { drawShader, drawTexture, plannedMedia } from "./layer-composite.ts";
 import { LayerChain, targetBufferSize } from "./layer-chain.ts";
 import { LayerPlayers } from "./layer-players.ts";
 import { MaskTextures } from "./masks.ts";
+import { cutFrame, OutputMaskTexture } from "./output-masks.ts";
 import { FontLoader } from "./font-loader.ts";
 import { EngineMedia } from "./engine-media.ts";
 import type { PacksView } from "./pack-sources.ts";
@@ -31,6 +37,9 @@ import { MAX_FRAME_SECONDS } from "./sdk/visual.ts";
 import { ShaderVisualPrograms } from "./shader-visuals.ts";
 import { SurfaceGeometries } from "./surface-geometry.ts";
 import { SurfaceProgram } from "./surface-program.ts";
+
+/** The geometry key of the full-frame quad the Output Mask pass and outline draw with. */
+const FRAME_TARGET = "frame";
 
 export interface Compositor {
   /**
@@ -90,6 +99,7 @@ interface Resources {
   readonly program: SurfaceProgram;
   readonly calibration: CalibrationDrawing;
   readonly masks: MaskTextures;
+  readonly outputMasks: OutputMaskTexture;
   readonly players: LayerPlayers;
   readonly filters: FilterPlayers;
   readonly filterPrograms: FilterPrograms;
@@ -353,6 +363,27 @@ class WebGLCompositor implements Compositor {
         height,
       );
     }
+    // The Output's masks cut the finished frame to black: after every root
+    // Filter, so light a Filter pushed past a Surface Mask is cut too, and
+    // after the calibration patterns, so they apply in Calibration Mode as
+    // well; only the Output Mask being aligned is drawn over them.
+    const frame = resources.geometries.get(
+      FRAME_TARGET,
+      FULL_FRAME,
+      width,
+      height,
+    );
+    const outputMask = resources.outputMasks.get(
+      plan.outputMasks,
+      width,
+      height,
+    );
+    if (outputMask !== undefined && frame !== undefined)
+      cutFrame(program, frame, outputMask);
+    if (plan.outputMaskOutline !== undefined && frame !== undefined) {
+      program.setSurface(frame);
+      resources.calibration.drawFrameOutline(plan.outputMaskOutline);
+    }
     // Mask textures follow the plan, not the draw: a Surface whose Layer is
     // hidden or blank this frame keeps its Masks rasterized, and a filtered
     // Layer keeps its result while it is planned, hidden or blank too.
@@ -389,6 +420,7 @@ class WebGLCompositor implements Compositor {
     const resources = this.#resources;
     if (resources === undefined) return;
     resources.masks.dispose();
+    resources.outputMasks.dispose();
     resources.calibration.dispose();
     resources.players.dispose();
     resources.filters.dispose();
@@ -433,6 +465,7 @@ class WebGLCompositor implements Compositor {
       program,
       calibration: new CalibrationDrawing(program),
       masks: new MaskTextures(gl),
+      outputMasks: new OutputMaskTexture(gl),
       players: new LayerPlayers(gl, this.#catalog, this.#media, this.#text),
       filters: new FilterPlayers(this.#catalog),
       filterPrograms,

@@ -44,6 +44,10 @@ const tables = {
   },
   masks: { door: { id: "door", surfaceId: "floor" } },
   paths: { edge: { id: "edge", surfaceId: "wall" } },
+  outputMasks: {
+    beam: { id: "beam", outputId: "b" },
+    stray: { id: "stray", outputId: "gone" },
+  },
   layers: {
     glow: { id: "glow", kind: "visual", target: "window", sceneId: "intro" },
     lost: { id: "lost", kind: "visual", target: null, sceneId: "intro" },
@@ -123,6 +127,25 @@ describe("resolvePreview", () => {
         picked: none,
       }),
     ).toEqual(shows("b"));
+  });
+
+  it("follows an Output Mask to its Output, in Output framing, and stays when the Output is gone", () => {
+    expect(
+      resolvePreview({
+        document: tables,
+        choice: follow("a", "surface", "wall"),
+        selection: { kind: "outputMask", id: "beam" },
+        picked: none,
+      }),
+    ).toEqual(shows("b"));
+    expect(
+      resolvePreview({
+        document: tables,
+        choice: follow("a"),
+        selection: { kind: "outputMask", id: "stray" },
+        picked: none,
+      }),
+    ).toEqual(shows("a"));
   });
 
   it("follows a Surface, and what belongs to one, to its only Output", () => {

@@ -1,11 +1,12 @@
-import {
-  surfaceCanvasSize,
-  type Mask,
-  type Point,
-  type Quad,
-} from "@difracta/core";
+import { surfaceCanvasSize, type Mask, type Quad } from "@difracta/core";
 
 import { createScratchCanvas, createTexture } from "./gl.ts";
+import {
+  composeMasks,
+  sameMasks,
+  surfaceSpace,
+  type Scratch,
+} from "./mask-raster.ts";
 import type { SurfaceDraw } from "./plan.ts";
 
 /** No Mask texture is smaller than this on either side. */
@@ -51,8 +52,6 @@ export function maskTextureSize({
   return { width: fit(extent.width), height: fit(extent.height) };
 }
 
-type Scratch = ReturnType<typeof createScratchCanvas>;
-
 interface Entry {
   masks: readonly Mask[];
   width: number;
@@ -64,10 +63,11 @@ interface Entry {
  * Keeps one alpha texture per Surface, rebuilt only when that Surface's Masks
  * change (the document is immutable per revision, so identity comparison of
  * the Mask objects is exact) or the texture's size does. The composition
- * rule: fully open without Include Masks and fully closed with any, then
- * every Mask in order opens or closes its polygon. Feather fades inward
- * from the polygon edge, clipped to it, so no Mask changes coverage outside
- * its own boundary.
+ * rule (`mask-raster.ts`): fully open without Include Masks and fully
+ * closed with any, then every Mask in order opens or closes its polygon,
+ * feather extending the dark side, so a feathered Mask never lights more
+ * than a hard one. Alpha is the open coverage the fragment shader
+ * multiplies by.
  */
 export class MaskTextures {
   readonly #gl: WebGL2RenderingContext;
@@ -131,46 +131,13 @@ export class MaskTextures {
     this.retain(new Set());
   }
 
-  /**
-   * Rasterizes in Surface Space: the transform scales the unit square to
-   * the texture, strokes included, so a feather is the same fraction of
-   * the Surface on both axes whatever the texture's aspect. Only the blur
-   * that softens the feather is in texels, taken from the mean side.
-   */
+  /** Rasterizes the entry's Masks in Surface Space and uploads the result. */
   #upload(entry: Entry): void {
     const { width, height, masks, texture } = entry;
-    const { canvas, context } = this.#scratch("layer", width, height);
-    context.setTransform(width, 0, 0, height, 0, 0);
-    context.globalCompositeOperation = "source-over";
-    context.filter = "none";
-    context.clearRect(0, 0, 1, 1);
-    context.fillStyle = "#fff";
-    if (!masks.some((mask) => mask.mode === "include"))
-      context.fillRect(0, 0, 1, 1);
-    for (const mask of masks) {
-      const blurPx = (mask.feather * (width + height)) / 8;
-      context.save();
-      tracePolygon(context, mask.points);
-      context.clip();
-      context.globalCompositeOperation =
-        mask.mode === "include" ? "source-over" : "destination-out";
-      if (blurPx >= 0.25) {
-        const shape = this.#scratch("shape", width, height);
-        featheredShape(shape.context, mask.points, width, height, mask.feather);
-        context.setTransform(1, 0, 0, 1, 0, 0);
-        context.filter = `blur(${String(blurPx)}px)`;
-        context.drawImage(shape.canvas, 0, 0);
-      } else {
-        tracePolygon(context, mask.points);
-        context.fill();
-      }
-      context.restore();
-    }
-    const gl = this.#gl;
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
-    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    const layer = this.#scratch("layer", width, height);
+    const shape = this.#scratch("shape", width, height);
+    composeMasks(layer, shape, masks, surfaceSpace(width, height));
+    uploadAlpha(this.#gl, texture, layer.canvas);
   }
 
   /** One of the two scratch canvases, at the size asked; resizing clears it. */
@@ -191,45 +158,14 @@ export class MaskTextures {
   }
 }
 
-function sameMasks(a: readonly Mask[], b: readonly Mask[]): boolean {
-  return a.length === b.length && a.every((mask, index) => mask === b[index]);
-}
-
-function tracePolygon(
-  context: Scratch["context"],
-  points: readonly Point[],
+/** Uploads a scratch canvas as the texture's pixels, premultiplied as the compositor blends. */
+export function uploadAlpha(
+  gl: WebGL2RenderingContext,
+  texture: WebGLTexture,
+  canvas: Scratch["canvas"],
 ): void {
-  context.beginPath();
-  points.forEach((point, index) => {
-    if (index === 0) context.moveTo(point.x, point.y);
-    else context.lineTo(point.x, point.y);
-  });
-  context.closePath();
-}
-
-/**
- * The polygon eroded by half the feather: a stroke centred on the boundary
- * eats that much inward, and the outer half is clipped away by the caller.
- * Blurred by the caller, the result ramps from the edge to full coverage.
- */
-function featheredShape(
-  context: Scratch["context"],
-  points: readonly Point[],
-  width: number,
-  height: number,
-  feather: number,
-): void {
-  context.setTransform(width, 0, 0, height, 0, 0);
-  context.filter = "none";
-  context.globalCompositeOperation = "source-over";
-  context.clearRect(0, 0, 1, 1);
-  context.fillStyle = "#fff";
-  tracePolygon(context, points);
-  context.fill();
-  context.globalCompositeOperation = "destination-out";
-  context.lineCap = "round";
-  context.lineJoin = "round";
-  context.lineWidth = feather;
-  tracePolygon(context, points);
-  context.stroke();
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
 }

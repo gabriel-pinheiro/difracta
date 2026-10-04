@@ -71,6 +71,7 @@ export type PreviewTables = Pick<
   | "regions"
   | "masks"
   | "paths"
+  | "outputMasks"
   | "scenes"
   | "layers"
 >;
@@ -84,9 +85,9 @@ export interface Resolved {
 /**
  * What the Preview shows. A named Output is shown whatever is selected, with
  * the active Scene. Following, the selection moves the Preview when it names
- * something to show: an Output itself, or the Surface a Surface, Region,
- * Mask, Path or Visual Layer is or draws on, which is shown flat when the
- * framing allows and on its Output otherwise. In Layer framing a selected
+ * something to show: an Output itself or one of its Output Masks, or the
+ * Surface a Surface, Region, Mask, Path or Visual Layer is or draws on, which
+ * is shown flat when the framing allows and on its Output otherwise. In Layer framing a selected
  * Layer is shown with only what it draws with: a Visual Layer on its
  * Target's Surface flat, a Filter Layer or a Group on the Output shown, and
  * it stays shown until something else is. A Scene, or the Scene of a
@@ -182,9 +183,15 @@ export function resolvePreview({
       notice,
     };
   };
-  if (selection?.kind === "output")
-    return selection.id in document.outputs
-      ? { target: onOutput(selection.id), notice: undefined }
+  const selectedOutput =
+    selection?.kind === "output"
+      ? selection.id
+      : selection?.kind === "outputMask"
+        ? document.outputMasks[selection.id]?.outputId
+        : undefined;
+  if (selectedOutput !== undefined)
+    return selectedOutput in document.outputs
+      ? { target: onOutput(selectedOutput), notice: undefined }
       : stay();
   if (choice.framing === "layer" && selection?.kind === "layer") {
     const target = onLayer(document.layers[selection.id]);

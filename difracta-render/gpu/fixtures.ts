@@ -210,6 +210,38 @@ export class Stage {
     return this;
   }
 
+  /** A four-point Output Mask on the Output, its points in the Projection Frame; exclude unless told otherwise. */
+  outputMask(
+    id: string,
+    points: Quad,
+    { mode = "exclude", feather = 0 } = {},
+  ): this {
+    this.#document = run(this.#document, "output-mask.create", {
+      id,
+      outputId: OUTPUT,
+      name: id,
+    });
+    const ordered = [
+      points.topLeft,
+      points.topRight,
+      points.bottomRight,
+      points.bottomLeft,
+    ];
+    ordered.forEach((point, index) => {
+      this.#document = run(this.#document, "output-mask.point.set", {
+        outputMaskId: id,
+        index,
+        point,
+      });
+    });
+    this.#document = run(this.#document, "output-mask.update", {
+      outputMaskId: id,
+      mode,
+      feather,
+    });
+    return this;
+  }
+
   /** A Region of a Surface: a rectangle of it, corners in Surface Space. */
   region(
     id: string,
@@ -257,6 +289,22 @@ export class Stage {
       corner: null,
       point: null,
       view: "selected",
+      owner: "gpu",
+    });
+    return this;
+  }
+
+  /** Calibration Mode on the Output itself, or on one of its Output Masks with no point marked. */
+  calibrateOutput(outputMaskId: string | null = null): this {
+    this.#document = run(this.#document, "calibration.set", {
+      surfaceId: null,
+      outputId: OUTPUT,
+      outputMaskId,
+      maskId: null,
+      pathId: null,
+      corner: null,
+      point: null,
+      view: "patterns",
       owner: "gpu",
     });
     return this;

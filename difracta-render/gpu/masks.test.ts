@@ -82,6 +82,40 @@ describe("Masks", () => {
     expect(ramp).toBeGreaterThanOrEqual(4);
     expect(ramp).toBeLessThan(50);
   });
+
+  it("feathers an exclude Mask outward: dark up to its edge, fading outside it", async () => {
+    const frame = await renderer().render(
+      new Stage()
+        .surface("wall")
+        .mask("hole", "wall", middle, { mode: "exclude", feather: 0.1 })
+        .solid("fill", "wall", RED)
+        .document(),
+      SIZE,
+      SIZE,
+    );
+    // The polygon's edge is at x = 50; it and everything inside stays black.
+    expectColor(pixel(frame, 50, 100), [0, 0, 0]);
+    expectColor(pixel(frame, 55, 100), [0, 0, 0]);
+    expectColor(pixel(frame, 100, 100), [0, 0, 0]);
+    // Far outside the polygon the fill is whole; between, it ramps.
+    expectColor(pixel(frame, 10, 100), [255, 0, 0]);
+    const outside = scanline(frame, 100, 0, 50);
+    expect(rampWidth(outside)).toBeGreaterThanOrEqual(4);
+    // Half the feather dilated from the edge, blurred both ways: half lit at 0.20 of the Surface.
+    const dropsAt = outside.findIndex((value) => value < 128);
+    expect(Math.abs(dropsAt / SIZE - 0.2)).toBeLessThan(0.02);
+    // A feathered exclude Mask lights strictly less than a hard one.
+    const hard = await renderer().render(
+      new Stage()
+        .surface("wall")
+        .mask("hole", "wall", middle, { mode: "exclude" })
+        .solid("fill", "wall", RED)
+        .document(),
+      SIZE,
+      SIZE,
+    );
+    expect(countLit(frame, 8)).toBeLessThan(countLit(hard, 8));
+  });
 });
 
 describe("Masks on a wide Surface", () => {

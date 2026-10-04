@@ -6,7 +6,7 @@ import {
   type Surface,
   type Table,
 } from "@difracta/core";
-import { Monitor, MonitorUp, Trash2 } from "lucide-react";
+import { Monitor, MonitorUp, SquareDashed, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { NameDialog } from "@/components/name-dialog";
@@ -14,8 +14,13 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import {
+  NewOutputMaskDialog,
+  OutputMaskRows,
+} from "@/entities/output-mask/output-mask-rows";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useNow } from "@/lib/use-now";
 import { useExpansion } from "@/navigator/expansion";
@@ -38,7 +43,10 @@ import {
 } from "./output-live";
 import { outputWarningCount, outputWithoutSurface } from "./output-warning";
 
-/** Navigator section listing the Outputs; "+" asks for a name, creates one and selects it. */
+/**
+ * Navigator section listing the Outputs; "+" asks for a name, creates one
+ * and selects it. An Output's own "+" adds an Output Mask under it.
+ */
 export function OutputsSection({ view }: { readonly view: DocumentView }) {
   const command = useCommand(view);
   const removeEntity = useRemoveEntity();
@@ -46,6 +54,7 @@ export function OutputsSection({ view }: { readonly view: DocumentView }) {
   const outputs = useDocumentPath<Table<Output>>(view, ["outputs"]) ?? {};
   const surfaces = useDocumentPath<Table<Surface>>(view, ["surfaces"]) ?? {};
   const [naming, setNaming] = useState(false);
+  const [masking, setMasking] = useState<Output | undefined>(undefined);
   const ordered = orderedEntries(outputs);
 
   function create(name: string): void {
@@ -59,7 +68,7 @@ export function OutputsSection({ view }: { readonly view: DocumentView }) {
     <>
       <NavigatorSection
         storageKey="output"
-        holds={["output"]}
+        holds={["output", "outputMask"]}
         label="Outputs"
         empty={ordered.length === 0 ? "No Outputs yet." : undefined}
         warnings={outputWarningCount(outputs, surfaces)}
@@ -83,9 +92,14 @@ export function OutputsSection({ view }: { readonly view: DocumentView }) {
                     unassigned={outputWithoutSurface(output.id, surfaces)}
                     selected={isSelected(selection, "output", output.id)}
                     onSelect={() => select({ kind: "output", id: output.id })}
+                    onCreate={() => setMasking(output)}
                   />
                 </ContextMenuTrigger>
                 <ContextMenuContent>
+                  <ContextMenuItem onClick={() => setMasking(output)}>
+                    <SquareDashed /> Add Output Mask…
+                  </ContextMenuItem>
+                  <ContextMenuSeparator />
                   <ContextMenuItem
                     variant="destructive"
                     onClick={() => removeEntity("output", output.id)}
@@ -112,17 +126,23 @@ export function OutputsSection({ view }: { readonly view: DocumentView }) {
         }
         onClose={() => setNaming(false)}
       />
+      <NewOutputMaskDialog
+        view={view}
+        output={masking}
+        onClose={() => setMasking(undefined)}
+      />
     </>
   );
 }
 
-/** The Output's row plus, while open, one row per Output Session under it. */
+/** The Output's row plus, while open, its Output Masks and then one row per Output Session under it. */
 function OutputRow({
   view,
   output,
   unassigned,
   selected,
   onSelect,
+  onCreate,
 }: {
   readonly view: DocumentView;
   readonly output: Output;
@@ -130,6 +150,8 @@ function OutputRow({
   readonly unassigned: boolean;
   readonly selected: boolean;
   readonly onSelect: () => void;
+  /** Adds an Output Mask under it. */
+  readonly onCreate: () => void;
 }) {
   const sessions = sessionList(
     useDocumentPath<SessionTable>(view, [
@@ -152,6 +174,7 @@ function OutputRow({
         expanded={expanded}
         onToggle={(next) => setExpanded("output", output.id, next)}
         onSelect={onSelect}
+        onCreate={onCreate}
       >
         {unassigned && (
           <NavigatorWarning
@@ -164,6 +187,7 @@ function OutputRow({
           title={toneTitle(sessions)}
         />
       </NavigatorRow>
+      {expanded && <OutputMaskRows view={view} outputId={output.id} />}
       {expanded && sessions.length === 0 && (
         <NavigatorEmptyRow depth={2}>Not connected</NavigatorEmptyRow>
       )}

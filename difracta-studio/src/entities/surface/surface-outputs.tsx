@@ -24,16 +24,9 @@ import { calibrationFor, useCalibration } from "@/lib/calibration";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { pickMappingOutput, useMappingOutput } from "@/lib/mapping-output";
 
-import {
-  primarySession,
-  sessionList,
-  type SessionTable,
-} from "@/entities/output/output-live";
+import { useOutputAspect } from "@/entities/output/output-aspect";
 
 import { QuadEditor, quadPoints } from "./quad-editor";
-
-/** Frame shape assumed until an Output Session reports its real resolution. */
-const DEFAULT_ASPECT = 16 / 9;
 
 /**
  * Where the Surface goes: every Output as a row with its switch, so the
@@ -157,17 +150,7 @@ function Mapping({
 }) {
   const command = useCommand(view);
   const surfaces = useDocumentPath<Table<Surface>>(view, ["surfaces"]) ?? {};
-  const sessions = useDocumentPath<SessionTable>(view, [
-    "live",
-    "outputs",
-    outputId,
-    "sessions",
-  ]);
-  const telemetry = primarySession(sessionList(sessions))?.telemetry;
-  const aspect =
-    telemetry === undefined || telemetry === null
-      ? DEFAULT_ASPECT
-      : telemetry.width / telemetry.height;
+  const aspect = useOutputAspect(view, outputId);
   const { calibration } = useCalibration(view);
   // Open on the corner the Output already highlights, if it does.
   const [selected, setSelected] = useState(() => {

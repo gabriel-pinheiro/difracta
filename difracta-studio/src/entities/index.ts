@@ -10,6 +10,7 @@ import { layerEntity } from "./layer/layer-entity";
 import { macroEntity } from "./macro/macro-entity";
 import { maskEntity } from "./mask/mask-entity";
 import { outputEntity } from "./output/output-entity";
+import { outputMaskEntity } from "./output-mask/output-mask-entity";
 import { packEntity } from "./pack/pack-entity";
 import { pathEntity } from "./path/path-entity";
 import { regionEntity } from "./region/region-entity";
@@ -60,6 +61,7 @@ export interface EntityModule {
 
 export const entities = {
   output: outputEntity,
+  outputMask: outputMaskEntity,
   surface: surfaceEntity,
   region: regionEntity,
   mask: maskEntity,

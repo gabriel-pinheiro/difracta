@@ -164,6 +164,10 @@ export const settings = {
     /** A new Mask is the Surface minus this fraction on each side. */
     defaultInset: 0.1,
   },
+  outputMasks: {
+    /** A new Output Mask is the Projection Frame minus this fraction on each side. */
+    defaultInset: 0.25,
+  },
   paths: {
     /** A new Path runs around the Surface this fraction in from each side. */
     defaultInset: 0.15,

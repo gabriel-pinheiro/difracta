@@ -54,7 +54,15 @@ export function CalibrationControls({
     pathId,
     regionId,
   );
-  const selection = { surfaceId, maskId, pathId, regionId, corner, point };
+  const selection = {
+    surfaceId,
+    outputMaskId: null,
+    maskId,
+    pathId,
+    regionId,
+    corner,
+    point,
+  };
 
   useEffect(() => {
     if (active === undefined) return;

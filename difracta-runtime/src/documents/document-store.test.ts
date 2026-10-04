@@ -338,6 +338,7 @@ describe("DocumentStore", () => {
         regions: {},
         masks: {},
         paths: {},
+        outputMasks: {},
         packs: {},
         shares: {},
         scenes: {},

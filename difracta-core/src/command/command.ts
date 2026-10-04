@@ -62,7 +62,7 @@ export interface CommandDefinition<TPayload = unknown> {
 export function defineCommand<TPayload>(
   definition: CommandDefinition<TPayload>,
 ): CommandDefinition<TPayload> {
-  if (!/^[a-z][a-z0-9]*(\.[a-z][a-z0-9-]*)+$/.test(definition.name)) {
+  if (!/^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$/.test(definition.name)) {
     throw new Error(
       `Command name “${definition.name}” must look like “entity.verb”.`,
     );

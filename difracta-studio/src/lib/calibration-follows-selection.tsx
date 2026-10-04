@@ -1,6 +1,7 @@
 import type { DocumentView } from "@difracta/client";
 import {
   type Mask,
+  type OutputMask,
   type Path,
   type Region,
   type Surface,
@@ -19,10 +20,11 @@ import { followedOutput } from "./mapping-output";
  * While Calibration Mode is on, selecting another Surface, Mask, Path or
  * Region moves the pattern to it, on the same Output when it can
  * (`followedOutput`); the view is kept and the inspector then reports its
- * own corner or point. Selecting anything else leaves the mode as it is, so a
- * glance at an Output's stats does not drop the pattern on stage. Reacts to
- * selection changes only: another Studio moving the calibration must not be
- * pulled back here.
+ * own corner or point. Selecting an Output Mask moves it to that mask on its
+ * Output. Selecting anything else leaves the mode as it is, so a glance at
+ * an Output's stats does not drop the pattern on stage. Reacts to selection
+ * changes only: another Studio moving the calibration must not be pulled
+ * back here.
  */
 export function CalibrationFollowsSelection({
   view,
@@ -35,9 +37,25 @@ export function CalibrationFollowsSelection({
   const masks = useDocumentPath<Table<Mask>>(view, ["masks"]) ?? {};
   const paths = useDocumentPath<Table<Path>>(view, ["paths"]) ?? {};
   const regions = useDocumentPath<Table<Region>>(view, ["regions"]) ?? {};
-  const latest = useRef({ calibration, surfaces, masks, paths, regions });
+  const outputMasks =
+    useDocumentPath<Table<OutputMask>>(view, ["outputMasks"]) ?? {};
+  const latest = useRef({
+    calibration,
+    surfaces,
+    masks,
+    paths,
+    regions,
+    outputMasks,
+  });
   useEffect(() => {
-    latest.current = { calibration, surfaces, masks, paths, regions };
+    latest.current = {
+      calibration,
+      surfaces,
+      masks,
+      paths,
+      regions,
+      outputMasks,
+    };
   });
   const previous = useRef<Selection | undefined>(selection);
   useEffect(() => {
@@ -45,6 +63,26 @@ export function CalibrationFollowsSelection({
     previous.current = selection;
     const current = latest.current;
     if (current.calibration === null) return;
+    if (selection?.kind === "outputMask") {
+      const outputMask = current.outputMasks[selection.id];
+      if (
+        outputMask === undefined ||
+        current.calibration.outputMaskId === outputMask.id
+      )
+        return;
+      set({
+        ...current.calibration,
+        surfaceId: null,
+        outputId: outputMask.outputId,
+        outputMaskId: outputMask.id,
+        maskId: null,
+        pathId: null,
+        regionId: null,
+        corner: null,
+        point: null,
+      });
+      return;
+    }
     const target = selectionSurface(selection, current);
     if (target === undefined) return;
     const { surface, ...shape } = target;
@@ -62,6 +100,7 @@ export function CalibrationFollowsSelection({
       ...shape,
       surfaceId: surface.id,
       outputId,
+      outputMaskId: null,
       corner: null,
       point: null,
     });
