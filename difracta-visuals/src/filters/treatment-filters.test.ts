@@ -109,6 +109,16 @@ describe("every treatment Filter", () => {
     },
   );
 
+  it("Colorize skips the pass in the Hue modes when Color has no hue", () => {
+    const frame = player(colorize);
+    for (const mode of ["hue", "hue-saturation"]) {
+      expect(frame({ mode, color: [0.5, 0.5, 0.5, 1] }).identity).toBe(true);
+      expect(frame({ mode, color: [1, 0, 0, 1] }).identity).toBe(false);
+    }
+    for (const mode of ["tint", "tritone"])
+      expect(frame({ mode, color: [0.5, 0.5, 0.5, 1] }).identity).toBe(false);
+  });
+
   it("Adjust and Transform leave identity whichever value moves", () => {
     expect(player(adjust)({ saturation: 0 }).identity).toBe(false);
     expect(player(adjust)({ brightness: -0.1 }).identity).toBe(false);
