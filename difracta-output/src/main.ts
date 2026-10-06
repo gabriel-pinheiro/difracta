@@ -25,8 +25,8 @@ new OutputPage({
   canvas,
   overlay,
   output,
-  mediaUrl: (reference) =>
-    `${origin}${settings.runtime.packsPath}/${reference.split("/").map(encodeURIComponent).join("/")}`,
+  mediaUrl: (reference, proxy) =>
+    `${origin}${settings.runtime.packsPath}/${reference.split("/").map(encodeURIComponent).join("/")}${proxy === undefined ? "" : `/proxy/${String(proxy)}`}`,
   fontUrl: (file) =>
     `${origin}${settings.runtime.fontsPath}/${encodeURIComponent(file)}`,
 });

@@ -1,4 +1,5 @@
 import {
+  BASE_PROXY_HEIGHT,
   BUNDLED_PACK_ID,
   parsePackManifest,
   type PackManifest,
@@ -36,15 +37,55 @@ export interface PackData {
   /** The entries whose file the walk did not find. */
   readonly missing: ReadonlySet<string>;
   readonly warning: string | undefined;
-  /** The fingerprints that have a thumbnail, and those that have a proxy. */
+  /** The fingerprints that have a thumbnail. */
   readonly thumbnails: ReadonlySet<string>;
-  readonly proxies: ReadonlySet<string>;
+  /** The heights each fingerprint's proxy is baked at. */
+  readonly proxies: ReadonlyMap<string, ReadonlySet<number>>;
+  /**
+   * The proxy heights asked for (`media.prepare`) and not baked yet, by
+   * entry id. The runtime's own, never written: reading the folder again
+   * starts with none.
+   */
+  readonly asked: ReadonlyMap<string, ReadonlySet<number>>;
 }
 
+const THUMBNAIL_EXTENSION = ".webp";
+const PROXY_EXTENSION = ".mp4";
+
 export const thumbnailPath = (dataDir: string, fingerprint: string): string =>
-  path.join(dataDir, THUMBS, `${fingerprint}.webp`);
-export const proxyPath = (dataDir: string, fingerprint: string): string =>
-  path.join(dataDir, PROXIES, `${fingerprint}.mp4`);
+  path.join(dataDir, THUMBS, `${fingerprint}${THUMBNAIL_EXTENSION}`);
+
+/**
+ * Where a fingerprint's proxy of `height` is: `<fingerprint>.mp4` for the
+ * first size, the one every video has, and `<fingerprint>.<height>.mp4`
+ * for the others.
+ */
+export const proxyPath = (
+  dataDir: string,
+  fingerprint: string,
+  height: number = BASE_PROXY_HEIGHT,
+): string =>
+  path.join(
+    dataDir,
+    PROXIES,
+    height === BASE_PROXY_HEIGHT
+      ? `${fingerprint}${PROXY_EXTENSION}`
+      : `${fingerprint}.${String(height)}${PROXY_EXTENSION}`,
+  );
+
+/** The fingerprint and height a proxy file's name carries, as `proxyPath` writes them; undefined for any other file. */
+export function parseProxyName(
+  name: string,
+): { readonly fingerprint: string; readonly height: number } | undefined {
+  if (!name.endsWith(PROXY_EXTENSION)) return undefined;
+  const stem = name.slice(0, -PROXY_EXTENSION.length);
+  const sized = /^(.+)\.([1-9]\d*)$/.exec(stem);
+  if (sized === null)
+    return stem === ""
+      ? undefined
+      : { fingerprint: stem, height: BASE_PROXY_HEIGHT };
+  return { fingerprint: sized[1] ?? "", height: Number(sized[2]) };
+}
 
 export type ManifestRead =
   | { readonly ok: true; readonly manifest: PackManifest }
@@ -103,29 +144,34 @@ export async function resolveDataDir(
   return (await writable(inside)) ? inside : path.join(cacheRoot, packId);
 }
 
-/** The fingerprints that have a baked file in `dir`, by the files' names. */
-async function bakedIn(dir: string, extension: string): Promise<Set<string>> {
+/** The names of the files in `dir`; none when it is not there. */
+async function namesIn(dir: string): Promise<readonly string[]> {
   try {
-    const names = await readdir(dir);
-    return new Set(
-      names
-        .filter((name) => name.endsWith(extension))
-        .map((name) => name.slice(0, -extension.length)),
-    );
+    return await readdir(dir);
   } catch {
-    return new Set();
+    return [];
   }
 }
 
-/** The thumbnails and proxies baked under `dataDir`, by fingerprint. */
+/** The thumbnails baked under `dataDir`, by fingerprint, and the heights each fingerprint's proxy is baked at, by the files' names. */
 export async function listBaked(dataDir: string): Promise<{
   readonly thumbnails: Set<string>;
-  readonly proxies: Set<string>;
+  readonly proxies: Map<string, Set<number>>;
 }> {
-  return {
-    thumbnails: await bakedIn(path.join(dataDir, THUMBS), ".webp"),
-    proxies: await bakedIn(path.join(dataDir, PROXIES), ".mp4"),
-  };
+  const thumbnails = new Set(
+    (await namesIn(path.join(dataDir, THUMBS)))
+      .filter((name) => name.endsWith(THUMBNAIL_EXTENSION))
+      .map((name) => name.slice(0, -THUMBNAIL_EXTENSION.length)),
+  );
+  const proxies = new Map<string, Set<number>>();
+  for (const name of await namesIn(path.join(dataDir, PROXIES))) {
+    const parsed = parseProxyName(name);
+    if (parsed === undefined) continue;
+    const heights = proxies.get(parsed.fingerprint) ?? new Set<number>();
+    heights.add(parsed.height);
+    proxies.set(parsed.fingerprint, heights);
+  }
+  return { thumbnails, proxies };
 }
 
 export interface LoadOptions {
@@ -212,6 +258,7 @@ export async function loadPackFolder(
       missing: new Set(scanned.missing),
       warning: walk.warning,
       ...baked,
+      asked: new Map(),
     },
   };
 }

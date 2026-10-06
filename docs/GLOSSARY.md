@@ -330,9 +330,32 @@ Installation's relative hint instead.
 
 ### Prepared
 
-A Pack whose every entry has its thumbnail and, for a video, its proxy baked.
-Until then the Runtime reports how many are done, and Studio shows a placeholder
-for an entry still waiting.
+A Pack whose every entry has its thumbnail and, for a video, its smallest proxy
+baked, along with every proxy size asked for it. Until then the Runtime reports
+how many are done, Studio and the CLI say how many are to go, and Studio shows a
+placeholder for an entry still waiting.
+
+### Proxy
+
+A smaller copy of a video entry that the Runtime bakes into the Pack's
+`.difracta/` folder: H.264, no audio, at one of a fixed list of heights (480,
+720, 1080, 1440 and 2160 rows), each with a bitrate a hardware decoder keeps up
+with. The smallest is baked for every video when its Pack is scanned and is what
+the Library and the Preview play; the others are baked on use, when a Layer's
+Resolution asks for that size. A video no taller than a size and within that
+size's bitrate budget needs no proxy of it: its original plays. A read-only
+Pack, the Bundled Pack among them, is never baked and plays from what it ships.
+
+### Resolution
+
+The Video Parameter that says which of an entry's files a Layer plays: Auto,
+Original, or one of the proxy sizes (4K, 1440p, 1080p, 720p, 480p). Auto, the
+default, is the size the Layer's Target takes on the Output drawing it, so one
+Layer may play 1080 rows on one Output and 480 on another; Original is the file
+as it is in the Pack, whatever it costs to decode. An Output plays one file per
+entry, the largest any of its Layers asks for, and while that size is not baked
+yet it plays the largest proxy below it, else the smallest above, else the
+original.
 
 ### Screen Share
 
@@ -432,7 +455,8 @@ resumes, from playing restarts; Pause holds the frame; Stop returns to the first
 frame, as does ending without Loop. Every Layer on every Output plays its own
 copy of the file on the browser's clock, and a hidden Layer pauses it. A stopped
 Layer holds no video player, and Play takes the one the Output keeps ready for
-the entry; Keep Warm has the Layer hold its own while stopped.
+the entry; Keep Warm has the Layer hold its own while stopped. Resolution says
+which of the entry's files it plays, the original or a proxy.
 
 ### Live
 

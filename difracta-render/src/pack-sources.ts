@@ -4,6 +4,7 @@ import {
   type AddressSource,
   type Catalog,
   type FileMediaType,
+  type Rendition,
 } from "@difracta/core";
 
 import type { MediaSource, MediaSources } from "./media-loader.ts";
@@ -24,15 +25,31 @@ export interface PackEntryView {
   readonly fingerprint: string;
   readonly beats?: number | undefined;
   readonly firstBeat?: number | undefined;
+  /** The picture's size in pixels and a video's length in seconds, once measured. */
+  readonly width?: number | undefined;
+  readonly height?: number | undefined;
+  readonly duration?: number | undefined;
+  /** The heights a video's proxy is baked at. */
+  readonly proxies?: readonly number[] | undefined;
 }
 
 export interface PackView {
   /** `loading`, `ok` or `missing`; a missing Pack's entries are nobody's files. */
   readonly status: string;
+  /** Whether nothing is written to the Pack, so no proxy is baked for it. */
+  readonly readOnly?: boolean | undefined;
+  /** Whether the runtime can bake at all. */
+  readonly ffmpeg?: boolean | undefined;
   readonly entries: Readonly<Record<string, PackEntryView>>;
 }
 
 export type PacksView = Readonly<Record<string, PackView>>;
+
+/** Where a Media reference's file is: the original, or its proxy of `proxy` rows; undefined for one the page cannot reach. */
+export type MediaUrl = (
+  reference: string,
+  proxy?: number,
+) => string | undefined;
 
 /** No Packs at all: what the engine starts with, so nothing loads until the slice arrives. */
 export const NO_PACKS: PacksView = {};
@@ -41,24 +58,32 @@ export const NO_PACKS: PacksView = {};
  * One loader source per image or video reference the document names that
  * `packs` has: the entry exists in a Pack that is not missing, its file is
  * there and its type is the one the Parameter accepts. The source's URL is
- * `mediaUrl(reference)`, its revision the entry's fingerprint and its
- * beats the entry's as they are now. A reference into a missing Pack or
- * entry, of another type, or one `mediaUrl` cannot reach gives no source,
- * so its Layer stays blank. Screen Shares are not sources: the Viewer has
- * them.
+ * `mediaUrl(reference, proxy)`, where `proxy` is the height of the proxy
+ * `playing` says a video plays from here (`video-resolution.ts`) and
+ * undefined for the original file, as for every image; its revision is the
+ * entry's fingerprint and its beats the entry's as they are now. A
+ * reference into a missing Pack or entry, of another type, or one
+ * `mediaUrl` cannot reach gives no source, so its Layer stays blank.
+ * Screen Shares are not sources: the Viewer has them.
  */
 export function packSources(
   document: AddressSource,
   catalog: Catalog,
   packs: PacksView,
-  mediaUrl: (reference: string) => string | undefined,
+  mediaUrl: MediaUrl,
+  playing: (reference: string) => Rendition | undefined = () => undefined,
 ): MediaSources {
   const sources: Record<string, MediaSource> = {};
   for (const use of mediaReferencesInUse(document, catalog)) {
     if (use.accepts === "live" || use.reference in sources) continue;
     const entry = entryOf(packs, use.reference);
     if (entry?.type !== use.accepts) continue;
-    const url = mediaUrl(use.reference);
+    const rendition =
+      entry.type === "video" ? playing(use.reference) : undefined;
+    const url = mediaUrl(
+      use.reference,
+      typeof rendition === "number" ? rendition : undefined,
+    );
     if (url === undefined) continue;
     sources[use.reference] = {
       type: entry.type,

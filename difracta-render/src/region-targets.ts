@@ -4,6 +4,8 @@ import {
   type Quad,
   type Rect,
   type Region,
+  type ResolvedTarget,
+  type SurfaceSize,
 } from "@difracta/core";
 
 import { homography, project } from "./homography.ts";
@@ -38,6 +40,17 @@ export function regionCorners(region: Region, mapping: Quad): Quad | undefined {
         };
   byMapping.set(mapping, corners);
   return corners;
+}
+
+/** A Target's physical size when its Surface states one: the Surface's, scaled by the Region's rectangle. */
+export function targetPhysicalSize(target: ResolvedTarget): SurfaceSize | null {
+  const { surface, region, rect } = target;
+  return surface.size === null || region === undefined
+    ? surface.size
+    : {
+        width: surface.size.width * rect.width,
+        height: surface.size.height * rect.height,
+      };
 }
 
 /** The Paths in Region Space, so the Visual draws them where they are on the Surface; cached like the corners. */

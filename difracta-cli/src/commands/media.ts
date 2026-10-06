@@ -1,3 +1,4 @@
+import { PROXY_HEIGHTS } from "@difracta/core";
 import type { CommandResult } from "@difracta/protocol";
 import type { Command } from "commander";
 
@@ -9,6 +10,11 @@ import {
   type Packs,
 } from "../media-references.ts";
 import { findId } from "../names.ts";
+import {
+  describePrepared,
+  parseProxyHeight,
+  type PrepareReply,
+} from "./media-prepare.ts";
 import { formatCommandResult, type NamedResult } from "../result.ts";
 import {
   formatEntries,
@@ -74,7 +80,7 @@ export function registerMedia(program: Command, cli: Cli): void {
   media
     .command("list [pack]")
     .description(
-      "List the entries of every Pack (Bundled first, then the attached ones), or of one Pack by id or name: reference, path inside the Pack, type, size, length, Beats with the tempo they make, tags, and `missing` when the file is gone.",
+      "List the entries of every Pack (Bundled first, then the attached ones), or of one Pack by id or name: reference, path inside the Pack, type, size, length, Beats with the tempo they make, the sizes a video's proxy is baked at, tags, and `missing` when the file is gone.",
     )
     .action((pack: string | undefined) =>
       cli.withDocument(async (client, summary) => {
@@ -189,6 +195,35 @@ export function registerMedia(program: Command, cli: Cli): void {
           { ...reply, reference, thumbnailAt },
           () =>
             `${reference}: thumbnail at ${String(thumbnailAt)} s; it is baked again shortly.`,
+        );
+      }),
+    );
+
+  media
+    .command("prepare <entry> <height>")
+    .description(
+      `Bake a video entry's proxy at a size ahead of time: ${PROXY_HEIGHTS.map(String).join(", ")} rows (1080p and 4k read too). An Output asks for the size a Layer's Resolution wants by itself and plays a smaller proxy, or the original, until it is baked; this bakes it before the show. Nothing is baked when the proxy is there, when the original already plays at that size (no taller, and within the size's bitrate), for an image, on a read-only Pack or without ffmpeg. \`packs list\` says preparing until it is done, and \`media list\` then shows the size.`,
+    )
+    .action((typed: string, heightText: string) =>
+      cli.withDocument(async (client, summary) => {
+        const { document, view } = await cli.replica(client, summary.id);
+        const packs = view.liveState.get().packs;
+        const { reference, packId, entry } = locate(document, packs, typed);
+        const height = parseProxyHeight(heightText);
+        const reply = await client.request<PrepareReply>("media.prepare", {
+          packId,
+          entryId: entry.id,
+          height,
+        });
+        const pack = packs[packId];
+        cli.print({ ...reply, reference, height }, () =>
+          describePrepared(
+            reference,
+            height,
+            reply.baking,
+            pack ?? { readOnly: false, ffmpeg: true },
+            entry,
+          ),
         );
       }),
     );

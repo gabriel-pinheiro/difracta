@@ -147,6 +147,7 @@ describe("document modes", () => {
       "packs.rescan",
       "packs.rename",
       "media.update",
+      "media.prepare",
     ])
       expect(pinnedRefusal(store, name, {})).toBeUndefined();
     const pinned = await connect("pinned", "127.0.0.1");

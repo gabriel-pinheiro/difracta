@@ -202,6 +202,23 @@ describe("Pack requests over the live protocol", () => {
       studio.request("packs.rescan", { packId: "none-aaaa" }),
     ).rejects.toThrow(/No Pack “none-aaaa”/);
 
+    // Any connection asks for a proxy size; a read-only Pack has nothing to bake.
+    const output = await connect("output");
+    expect(
+      await output.request("media.prepare", {
+        packId: "bundled",
+        entryId: "beam-scan-loop",
+        height: 1080,
+      }),
+    ).toEqual({ packId: "bundled", entryId: "beam-scan-loop", baking: null });
+    await expect(
+      output.request("media.prepare", {
+        packId: "none-aaaa",
+        entryId: "a",
+        height: 1080,
+      }),
+    ).rejects.toThrow(/No Pack “none-aaaa”/);
+
     // Detaching unloads it; the Registry still knows it, so attaching again loads it.
     await studio.command(created.id, "packs.detach", { packId: added.packId });
     await waitFor(() =>

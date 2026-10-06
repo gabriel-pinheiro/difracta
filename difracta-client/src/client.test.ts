@@ -185,7 +185,7 @@ describe("DifractaClient subscriptions", () => {
           fingerprint: "aaaaaaaaaaaaaaaa-1",
           status: "ok",
           hasThumbnail: true,
-          hasProxy: false,
+          proxies: [],
         },
       },
     };

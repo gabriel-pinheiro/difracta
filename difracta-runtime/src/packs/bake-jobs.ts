@@ -1,11 +1,11 @@
-import { settings, type FileMediaType } from "@difracta/core";
+import { settings, type FileMediaType, type ProxySize } from "@difracta/core";
 import { z } from "zod";
 
 /**
  * What one ffmpeg or ffprobe run does, as arguments. Pure, so the baker's
- * plans are tested without a binary. The settings match the ones the
- * Bundled Pack was baked with, so every Pack's thumbnails and proxies look
- * the same.
+ * plans are tested without a binary. The thumbnail's settings and the
+ * first proxy size's match the ones the Bundled Pack was baked with, so
+ * every Pack's thumbnails and proxies look the same.
  */
 
 /** Width, height and duration of the first video stream, as JSON. */
@@ -100,9 +100,12 @@ export function thumbnailArgs(
   ];
 }
 
-/** The video at the proxy height (smaller sources keep theirs), H.264, no audio, ready to stream. */
-export function proxyArgs(file: string, out: string): string[] {
-  const { height, bitrateKbps } = settings.packs.proxy;
+/** The video at the height of `size`, one of `settings.packs.proxy.sizes` (smaller sources keep theirs), at its bitrate, H.264, no audio, ready to stream. */
+export function proxyArgs(
+  file: string,
+  out: string,
+  { height, bitrateKbps }: Pick<ProxySize, "height" | "bitrateKbps">,
+): string[] {
   return [
     "-y",
     "-i",

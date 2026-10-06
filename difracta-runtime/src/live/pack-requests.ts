@@ -2,6 +2,7 @@ import type { DocumentStore } from "../documents/document-store.ts";
 import {
   addPack,
   locatePack,
+  prepareProxy,
   renamePackEverywhere,
   rescanPack,
   updatePackEntry,
@@ -17,7 +18,8 @@ export type PackRequestName =
   | "packs.locate"
   | "packs.rescan"
   | "packs.rename"
-  | "media.update";
+  | "media.update"
+  | "media.prepare";
 
 /**
  * The Pack requests: each changes the disk or the Registry through the Pack
@@ -25,7 +27,9 @@ export type PackRequestName =
  * copy, applies the document command that follows: `packs.add` attaches the
  * new Pack, `packs.rename` renames its attachment. Whether a connection may
  * name folders at all (`packs.add`, `packs.locate`) is decided before these
- * run (`documents-mode.ts`). Without a Pack store every request is refused.
+ * run (`documents-mode.ts`); `media.prepare` is any connection's, an Output
+ * on another machine included. Without a Pack store every request is
+ * refused.
  */
 export function packRequests(
   packs: PackStore | undefined,
@@ -44,6 +48,7 @@ export function packRequests(
       "packs.rescan": refused,
       "packs.rename": refused,
       "media.update": refused,
+      "media.prepare": refused,
     };
   }
   const command = (
@@ -90,6 +95,8 @@ export function packRequests(
     },
     "media.update": ({ packId, entryId, ...update }) =>
       updatePackEntry(packs, packId, entryId, update),
+    "media.prepare": ({ packId, entryId, height }) =>
+      prepareProxy(packs, packId, entryId, height),
   };
 }
 

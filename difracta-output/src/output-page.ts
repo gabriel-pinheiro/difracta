@@ -1,5 +1,5 @@
 import type { DifractaClient, DocumentView } from "@difracta/client";
-import { settings } from "@difracta/core";
+import { parseMediaReference, settings } from "@difracta/core";
 import {
   MAX_TELEMETRY_ISSUES,
   type DocumentSummary,
@@ -18,8 +18,8 @@ interface OutputPageOptions {
   readonly overlay: HTMLDivElement;
   /** The `?output=` value: an Output id or name, or null to pick one. */
   readonly output: string | null;
-  /** Where a Media reference's file is fetched from, on the runtime this page talks to. */
-  readonly mediaUrl: (reference: string) => string;
+  /** Where a Media reference's file, or its proxy of `proxy` rows, is fetched from, on the runtime this page talks to. */
+  readonly mediaUrl: (reference: string, proxy?: number) => string;
   /** Where a Bundled Font's file is fetched from, by file name, on the same runtime. */
   readonly fontUrl: (file: string) => string;
 }
@@ -35,7 +35,9 @@ interface OutputPageOptions {
  * by clicking, and it lists them under the message too when the value names
  * no Output or several. Everything shown is built as DOM nodes and text,
  * never as HTML, since the query and the names come from outside. Telemetry goes out once a second while attached.
- * The compositor views Screen Shares through the client's `viewing`.
+ * The compositor views Screen Shares through the client's `viewing`, and
+ * asks the runtime, with `media.prepare`, for the proxy of a video at the
+ * size a Layer plays it here when the Pack does not have it yet.
  */
 export class OutputPage {
   readonly #options: OutputPageOptions;
@@ -52,6 +54,14 @@ export class OutputPage {
       mediaUrl: options.mediaUrl,
       fontUrl: options.fontUrl,
       shares: options.client.viewing,
+      prepare: (reference, height) => {
+        const entry = parseMediaReference(reference);
+        if (entry === undefined) return;
+        // A bake refused or failed leaves the Layer on the file it plays.
+        options.client
+          .request("media.prepare", { ...entry, height })
+          .catch(() => undefined);
+      },
     });
     options.client.phase.subscribe(() => this.#refresh());
     options.client.document.subscribe(() => this.#refresh());

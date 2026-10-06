@@ -131,6 +131,23 @@ export const RuntimeRequestSchemas = {
       duration: z.number().positive().optional(),
     })
     .strict(),
+  /**
+   * Bake an entry's proxy at `height`, one of
+   * `settings.packs.proxy.sizes`, so a video played at that size has its
+   * file: what an Output asks when a Layer's Resolution wants a size that
+   * is not baked. Resolves at once with `{ packId, entryId, baking }`: the
+   * height being baked, or null when there is nothing to bake (it is
+   * there, the original serves that size, the entry is an image, the Pack
+   * is read-only or the runtime has no ffmpeg). The Pack's live state
+   * shows the bake: `prepared`, then the entry's `proxies`.
+   */
+  "media.prepare": z
+    .object({
+      packId: z.string().min(1),
+      entryId: z.string().regex(SLUG_PATTERN),
+      height: z.number().int().positive(),
+    })
+    .strict(),
 } as const;
 
 export type RuntimeRequestName = keyof typeof RuntimeRequestSchemas;

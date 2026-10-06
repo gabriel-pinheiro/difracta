@@ -49,7 +49,8 @@ Working from a shell
              its .difracta/ folder. "packs list" shows the Installation's:
              the Bundled Pack (id "bundled", the clips Difracta ships,
              attached to every Installation, read-only) and the attached
-             ones, each ok, preparing n/m, or missing. "packs add <folder>"
+             ones, each ok, "preparing, N to go" while N entries wait for
+             a bake, or missing. "packs add <folder>"
              makes a folder a Pack and attaches it (from the runtime's own
              machine only); "packs known" lists the Packs this machine
              knows and "packs attach <pack>" attaches one from anywhere;
@@ -73,6 +74,19 @@ Working from a shell
              beats, how many it lasts, from which its tempo follows; Video's
              Sync to Tempo plays such a clip at the Tempo it is given and
              chases the beat Cue.
+             A video plays from its original file or from a proxy, a
+             smaller copy the runtime bakes: 480 rows for every video, and
+             720, 1080, 1440 or 2160 when something plays it at that size.
+             A Video Layer's Resolution says which: edit
+             layer/Wall/param/videoResolution auto (the default: the size
+             the Layer's Target takes on each Output), original, or a size
+             as 2160, 1440, 1080, 720 or 480. An original no taller than
+             the size and within its bitrate plays as it is; a heavier one
+             plays the proxy of that size. An Output asks the runtime for a
+             size not baked yet and plays a smaller proxy, or the original,
+             until it lands, then starts the clip over on the new file.
+             "media prepare <entry> <height>" bakes a size before the show;
+             "media list" shows the sizes each video has.
              A Screen Share is a slot a Difracta Desktop (the Sharer) shares
              a screen or window into; a Live Layer's media Parameter takes
              its id or name. "media screen-share [name]" adds one; a share

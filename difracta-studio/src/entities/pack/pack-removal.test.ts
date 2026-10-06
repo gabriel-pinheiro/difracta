@@ -17,6 +17,7 @@ const macro = (macroId: string, action: number): MediaUse => ({
   accepts: "video",
   macroId,
   action,
+  layerId: "layer_a",
 });
 
 describe("The confirm before detaching a Pack", () => {

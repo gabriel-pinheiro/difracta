@@ -27,7 +27,7 @@ import { MaskTextures } from "./masks.ts";
 import { cutFrame, OutputMaskTexture } from "./output-masks.ts";
 import { FontLoader } from "./font-loader.ts";
 import { EngineMedia } from "./engine-media.ts";
-import type { PacksView } from "./pack-sources.ts";
+import type { MediaUrl, PacksView } from "./pack-sources.ts";
 import type { ShareSignalling } from "./live-peer.ts";
 import type { LiveSource } from "./shared-viewer.ts";
 import { MediaTextures } from "./media-textures.ts";
@@ -70,11 +70,24 @@ export interface Compositor {
 export interface CompositorOptions {
   /**
    * Where a Media reference's file is fetched from:
-   * `/packs/<packId>/<entryId>` on the runtime for an Output page, a data
+   * `/packs/<packId>/<entryId>` on the runtime for an Output page, with
+   * `/proxy/<height>` after it for a video's proxy of that height, a data
    * URL for the thumbnail harness; undefined for one this page cannot
    * reach. Without it no Media loads and every Media handle stays empty.
    */
-  readonly mediaUrl?: (reference: string) => string | undefined;
+  readonly mediaUrl?: MediaUrl;
+  /**
+   * The tallest video file this page plays, one of the proxy sizes,
+   * whatever a Layer's Resolution asks: Studio's Preview plays the
+   * smallest. Without it a Layer plays what it asks for.
+   */
+  readonly maxVideoHeight?: number;
+  /**
+   * Asks the runtime to bake a video's proxy of a height a Layer wants here
+   * and the Pack does not have yet: `media.prepare` for an Output page.
+   * Without it the page plays what is baked and asks for nothing.
+   */
+  readonly prepare?: (reference: string, height: number) => void;
   /**
    * Where a Bundled Font's file is fetched from, by file name:
    * `/fonts/<file>` on the runtime for an Output page. Without it no font
@@ -165,6 +178,8 @@ class WebGLCompositor implements Compositor {
       mediaUrl: options.mediaUrl ?? (() => undefined),
       shares: options.shares,
       viewer: options.viewer,
+      maxVideoHeight: options.maxVideoHeight,
+      prepare: options.prepare,
     });
     this.#text = new TextRasters(
       new FontLoader({
@@ -204,7 +219,12 @@ class WebGLCompositor implements Compositor {
     this.#lastNow = now;
     const resources = (this.#resources ??= this.#setup());
     const { gl, program } = resources;
-    this.#media.sync(document, outputId);
+    this.#media.sync(document, outputId, {
+      width,
+      height,
+      now,
+      maxDimension: resources.maxDimension,
+    });
     // Parameter Links resolve here, once per frame: the Layers planned and
     // drawn carry what their Controllers make of them.
     const plan = planFrame(

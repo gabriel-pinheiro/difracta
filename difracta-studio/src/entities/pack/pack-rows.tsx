@@ -22,7 +22,12 @@ import { NavigatorWarning } from "@/navigator/navigator-warning";
 import { isSelected, useSelection } from "@/selection/selection";
 
 import type { PackActions } from "./pack-actions";
-import { MISSING_EXPLANATION, packRowStatus, packWarning } from "./pack-status";
+import {
+  MISSING_EXPLANATION,
+  packRowStatus,
+  packWarning,
+  toGo,
+} from "./pack-status";
 
 /** One Pack the Installation has: the Bundled Pack, or an attached one by id and name. */
 export interface PackRowItem {
@@ -33,7 +38,7 @@ export interface PackRowItem {
 
 /**
  * A Pack's row in the Media section: its name, then what the runtime says
- * of it: "preparing 42/310" with a thin bar while thumbnails and proxies
+ * of it: "preparing, 4 to go" with a thin bar while thumbnails and proxies
  * bake, "missing" with Locate… when nothing on the machine is the Pack, a
  * read-only badge, a warning icon when the scan hit a limit or ffmpeg is
  * absent. Selecting it shows the Pack in the inspector and opens the
@@ -149,7 +154,7 @@ function RowBadge({ children }: { readonly children: string }) {
   );
 }
 
-/** "preparing 42/310" with a thin bar filling as the baker works through the Pack. */
+/** "preparing, 4 to go" with a thin bar filling as the baker works through the Pack. */
 function Preparing({
   done,
   total,
@@ -158,13 +163,14 @@ function Preparing({
   readonly total: number;
 }) {
   const fraction = total === 0 ? 0 : Math.min(1, done / total);
+  const left = toGo({ done, total });
   return (
     <span
       data-pack-preparing={`${String(done)}/${String(total)}`}
       className="flex shrink-0 items-center gap-1 text-[0.625rem] text-muted-foreground tabular-nums"
-      title={`Baking thumbnails and previews: ${String(done)} of ${String(total)} entries prepared`}
+      title={`Baking thumbnails and proxies: ${String(done)} of ${String(total)} entries prepared`}
     >
-      preparing {done}/{total}
+      preparing, {left} to go
       <span className="h-0.5 w-6 overflow-hidden rounded-full bg-muted">
         <span
           className="block h-full bg-foreground/60"

@@ -41,7 +41,7 @@ export function entry(
     fingerprint: "0123456789abcdef-1k9z",
     status: "ok",
     hasThumbnail: true,
-    hasProxy: !file.endsWith(".png"),
+    proxies: file.endsWith(".png") ? [] : [480],
     ...more,
   };
 }

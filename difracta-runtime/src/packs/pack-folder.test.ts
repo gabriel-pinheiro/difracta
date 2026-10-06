@@ -1,3 +1,4 @@
+import { BASE_PROXY_HEIGHT } from "@difracta/core";
 import { chmod, readFile, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -6,6 +7,8 @@ import { tempDir, writeTree } from "./fixtures.ts";
 import { fingerprintFile } from "./fingerprint.ts";
 import {
   loadPackFolder,
+  parseProxyName,
+  proxyPath,
   readManifest,
   resolveDataDir,
   writeManifest,
@@ -17,6 +20,27 @@ afterEach(async () => {
 });
 
 const random = () => 0.25;
+
+describe("proxy files", () => {
+  it("name the first size by the fingerprint alone and the others with their height", () => {
+    const fingerprint = "3fa9c2e8b1d4a6f0-1k9z";
+    const base = proxyPath("/d", fingerprint);
+    expect(base).toBe(path.join("/d", "proxies", `${fingerprint}.mp4`));
+    expect(proxyPath("/d", fingerprint, BASE_PROXY_HEIGHT)).toBe(base);
+    const sized = proxyPath("/d", fingerprint, 1080);
+    expect(sized).toBe(path.join("/d", "proxies", `${fingerprint}.1080.mp4`));
+    expect(parseProxyName(path.basename(base))).toEqual({
+      fingerprint,
+      height: BASE_PROXY_HEIGHT,
+    });
+    expect(parseProxyName(path.basename(sized))).toEqual({
+      fingerprint,
+      height: 1080,
+    });
+    expect(parseProxyName("notes.txt")).toBeUndefined();
+    expect(parseProxyName(".mp4")).toBeUndefined();
+  });
+});
 
 describe("loadPackFolder", () => {
   it("creates the manifest in .difracta on first load and updates it without touching metadata", async () => {
@@ -144,6 +168,8 @@ describe("loadPackFolder", () => {
     await writeTree(path.join(pack, ".difracta"), {
       [`thumbs/${fingerprint}.webp`]: "t",
       [`proxies/${fingerprint}.mp4`]: "p",
+      [`proxies/${fingerprint}.1080.mp4`]: "p",
+      "proxies/notes.txt": "n",
     });
     const before = (await stat(path.join(pack, ".difracta", "pack.json")))
       .mtimeMs;
@@ -159,7 +185,10 @@ describe("loadPackFolder", () => {
       "clips-new",
     ]);
     expect(loaded.pack.thumbnails.has(fingerprint)).toBe(true);
-    expect(loaded.pack.proxies.has(fingerprint)).toBe(true);
+    expect(loaded.pack.proxies).toEqual(
+      new Map([[fingerprint, new Set([BASE_PROXY_HEIGHT, 1080])]]),
+    );
+    expect(loaded.pack.asked.size).toBe(0);
     expect(
       (await stat(path.join(pack, ".difracta", "pack.json"))).mtimeMs,
     ).toBe(before);

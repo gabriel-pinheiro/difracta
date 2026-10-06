@@ -8,7 +8,11 @@ import { z } from "zod";
  * when neither the Registry nor the Installation's hint finds it. `folder`
  * is where it is on the runtime's disk, empty while missing. `warning`
  * names a limit the scan hit; `ffmpeg` says whether the runtime can bake
- * thumbnails and proxies; `prepared` counts the entries that have theirs.
+ * thumbnails and proxies; `prepared` counts the entries that have theirs,
+ * a proxy size asked for with `media.prepare` included until it is baked.
+ * An entry's `proxies` are the heights its proxy is baked at, smallest
+ * first: the first of `settings.packs.proxy.sizes` once Prepared, and the
+ * sizes something played it at.
  * Deltas are per property: a tag edit patches one entry's `tags`, baking
  * patches `prepared` and one entry's flags.
  */
@@ -24,7 +28,7 @@ export type EntryStatus = z.infer<typeof EntryStatusSchema>;
 export const PackEntryLiveSchema = PackEntrySchema.extend({
   status: EntryStatusSchema,
   hasThumbnail: z.boolean(),
-  hasProxy: z.boolean(),
+  proxies: z.array(z.number().int().positive()),
 }).strict();
 export type PackEntryLive = z.infer<typeof PackEntryLiveSchema>;
 

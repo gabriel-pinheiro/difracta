@@ -20,15 +20,15 @@ describe("packs list", () => {
     ]);
     expect(items.map(describePackState)).toEqual([
       "ok",
-      "preparing 2/3",
+      "preparing, 1 to go",
       "…",
       "missing",
     ]);
     expect(formatPacks(items).split("\n")).toEqual([
-      "Bundled  bundled    ok             1 entry    read-only  /opt/difracta/bundled",
-      "Neon     neon-k7f3  preparing 2/3  3 entries             /media/neon",
+      "Bundled  bundled    ok                  1 entry    read-only  /opt/difracta/bundled",
+      "Neon     neon-k7f3  preparing, 1 to go  3 entries             /media/neon",
       "Neon     neon-x1y2  …",
-      "Tour     tour-a9b8  missing        0 entries             hint ../tour",
+      "Tour     tour-a9b8  missing             0 entries             hint ../tour",
     ]);
   });
 

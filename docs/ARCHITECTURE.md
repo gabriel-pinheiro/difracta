@@ -322,17 +322,19 @@ one says whether a resolved path stays under that folder.
 
 The CLI has a group for each (`difracta-cli/src/commands/packs.ts`, `media.ts`).
 `difracta packs list` prints the Bundled Pack and the attached ones with id,
-state (`ok`, `preparing n/m`, `missing`, `loading`), entry count, read-only and
-folder or hint; `packs add <folder>` sends `packs.add` (a relative folder is
+state (`ok`, `preparing, N to go`, `missing`, `loading`), entry count, read-only
+and folder or hint; `packs add <folder>` sends `packs.add` (a relative folder is
 resolved against the shell's directory when the runtime is on this machine);
 `packs attach <pack>` attaches one of `packs known`, the Registry's listing,
 with the document command; `packs detach`, `packs locate <pack> <folder>` and
 `packs rescan` follow. `difracta media list [pack]` prints every entry with its
 reference, path inside the Pack, type, size, length, Beats with the tempo they
-make, tags and `missing`; `media tag <entry> <tag…> [--remove]`,
+make, the heights a video's proxy is baked at, tags and `missing`;
+`media tag <entry> <tag…> [--remove]`,
 `media beats <entry> <beats|none> [--first-beat <s>]`,
 `media thumbnail <entry> <seconds>` and `media rename <entry> <name>` go through
-`media.update`; `media replace <from> <to>` runs `media.replace`;
+`media.update`; `media prepare <entry> <height>` sends `media.prepare`, to bake
+a proxy size before a show; `media replace <from> <to>` runs `media.replace`;
 `media screen-share [name]` adds a Screen Share. A reference typed at the shell
 is `<pack>/<entry>` by ids, or a Pack's name in place of its id and the entry's
 path inside the Pack, with or without its extension, in place of the entry's id
@@ -810,11 +812,12 @@ a compile error.
 below). `["live", "packs", <packId>]` is where a loaded Pack goes: its name,
 whether it is read-only, `loading`, `ok` or `missing`, its folder, a warning
 when a scan hit a limit, whether ffmpeg is there, how many entries are prepared,
-and its entries, each the manifest entry plus whether its file is there and
-which of its thumbnail and proxy exist (`protocol/src/packs.ts`). The runtime
-loads the Bundled Pack at start, the Packs the open Installation attaches, and
-the folders `--pack <dir>` (repeatable) or `DIFRACTA_PACKS` (a path list) name
-for one run (`difracta-runtime/src/packs/`, `pack-store.ts`).
+and its entries, each the manifest entry plus whether its file is there, whether
+its thumbnail exists and the heights its proxy is baked at, smallest first
+(`proxies`, `protocol/src/packs.ts`). The runtime loads the Bundled Pack at
+start, the Packs the open Installation attaches, and the folders `--pack <dir>`
+(repeatable) or `DIFRACTA_PACKS` (a path list) name for one run
+(`difracta-runtime/src/packs/`, `pack-store.ts`).
 
 The **Registry** (`registry.ts`) is the machine's record of where each Pack it
 knows is: `packs.json` in the user's config folder (`$XDG_CONFIG_HOME` or
@@ -846,8 +849,11 @@ proxy, `settings.packs.bake.concurrency` at a time under `nice`
 (`settings.packs.bake.nice`; plain on Windows): ffprobe for width, height and
 duration, written into the manifest; a WebP thumbnail at `thumbnailAt` or
 `settings.packs.thumbnail.defaultAt` of the duration, fitted inside
-`settings.packs.thumbnail`; an H.264 proxy at `settings.packs.proxy` height and
-bitrate, no audio. The binaries come from `PATH` or `DIFRACTA_FFMPEG` and
+`settings.packs.thumbnail`; an H.264 proxy, no audio, at the first of
+`settings.packs.proxy.sizes`, each of which states a height and the bitrate it
+is baked at. The other sizes are baked on use: `media.prepare` queues one for an
+entry, and until it lands that entry counts as not prepared, so the Pack reads
+as preparing. The binaries come from `PATH` or `DIFRACTA_FFMPEG` and
 `DIFRACTA_FFPROBE` (`tools.ts`); without them Packs load with `ffmpeg: false`
 and nothing bakes. Each finished entry patches its own flags and the Pack's
 `prepared` count; a failed one is logged and left for the next run. Every change
@@ -866,7 +872,11 @@ id, records it and loads the Pack; `packs.rescan`; `packs.rename` writes the
 manifest and the Registry, then applies the document command so the
 Installation's copy follows; `media.update` edits an entry's name, tags
 (trimmed, one per spelling ignoring case, first-use case kept), Beats, first
-beat, thumbnail time (re-baked) or measured size and duration. Every write on a
+beat, thumbnail time (re-baked) or measured size and duration;
+`media.prepare { packId, entryId, height }` asks for an entry's proxy at one of
+the sizes and answers at once with the height being baked, or null when there is
+nothing to bake: the proxy is there, the original serves that size, the entry is
+an image, the Pack is read-only or the runtime has no ffmpeg. Every write on a
 read-only Pack is refused with the reason. `packs.add` and `packs.locate` name
 folders on the runtime's disk, so a pinned connection is refused them like
 `documents.open` (`pinnedRefusal`); the other Pack requests are open to every
@@ -1225,11 +1235,11 @@ A Pack entry's file is addressed by its Media reference,
 `GET /packs/<packId>/<entryId>` (`settings.runtime.packsPath`,
 `packs/pack-routes.ts`): the original streams with its content type, an ETag
 from size and modification time under `Cache-Control: no-cache`, Range requests
-honoured for seeking, and any origin allowed (`send-file.ts`); `/thumb` and
-`/proxy` under it stream what the runtime baked, 404 until they exist. 404,
-naming the problem, for a Pack that is not loaded, an entry the Pack lacks and a
-missing file. The Output page and Studio's Preview build the URL from the
-reference.
+honoured for seeking, and any origin allowed (`send-file.ts`); `/thumb`,
+`/proxy` (the smallest proxy) and `/proxy/<height>` under it stream what the
+runtime baked, 404 until they exist. 404, naming the problem, for a Pack that is
+not loaded, an entry the Pack lacks and a missing file. The Output page and
+Studio's Preview build the URL from the reference.
 
 **Why by reference and not by path:** the URL then says nothing about the
 runtime's disk, and a file renamed inside its Pack keeps its entry, so every
@@ -2050,6 +2060,58 @@ got. **Why the warm element is handed over rather than kept as the poster:** a
 player opened on Play starts a frame or two late, one already on its first frame
 starts at once, and the poster needs no decoder.
 
+Which file a video plays: a video entry has its original and proxies, copies the
+runtime bakes at the heights of `settings.packs.proxy.sizes`, and the rules that
+choose among them are pure functions in core (`packs/proxies.ts`), so the
+runtime that bakes and the pages that play agree. A Layer asks through its
+Resolution, a choice Parameter the Video Visual's media Parameter names
+(`resolution` on the definition, carried on every `MediaUse`, a Macro's set
+action included, so a clip a Macro swaps in is loaded at the size its Layer
+plays): Original, a size, or Auto. Auto is worked out per Output Session from
+the Layer's Target as that Output draws it (`video-resolution.ts`): the rows of
+the video that would cover the Target's pixels, which no Fit asks more than, and
+`autoProxyHeight` takes the smallest size that covers them when stretched by
+`settings.packs.proxy.upscale`, so a projector a little taller than a size does
+not jump to the next. A Layer whose Target is not on this Output asks for the
+smallest size. The loader keeps one source per reference, so an Output plays one
+file per entry: the largest any of its Layers asks for. `wantedRendition` turns
+the request into a file: a size is first brought down to the smallest one that
+holds the original, since nothing larger is baked; the original then serves it
+when it is no taller than that size and within the size's `budgetKbps`, and
+otherwise the proxy of that size does, which for an original of that very height
+is the same picture at a bitrate a decoder keeps up with. The entry's bitrate is
+its file size, which its fingerprint carries, over its duration, so nothing more
+is probed. `playableRendition` then says what to load now, from the heights the
+entry's `proxies` list in the live state: the wanted file when it is there, else
+the largest proxy below it, else the smallest above it, else the original. When
+the wanted proxy is missing the page asks for it (`prepare` in the compositor's
+options, which the Output page sends as `media.prepare`), again whenever its
+Pack's state changes while it is still missing, since a rescan forgets what was
+asked; the Pack reads as preparing, and when the bake lands the entry's
+`proxies` change, the source's URL with them, and the loader loads the new file,
+which restarts a clip that is playing. `video-files.ts` holds the file each
+reference plays from over time: a change of file for a reference already loaded
+waits `settings.packs.proxy.settleMs`, so dragging a corner, resizing a window
+across a threshold or several bakes landing load once; a reference seen for the
+first time loads at once. A page may cap what it plays (`maxVideoHeight`):
+Studio's Preview plays the smallest proxy and passes no `prepare`. A read-only
+Pack is never baked, nor anything on a runtime without ffmpeg, so there the page
+does not wait on a smaller file: it plays the smallest proxy above the size
+asked, else the original, and the picture is never below what was asked. **Why a
+bitrate budget and not only a height:** frame rate falls with bitrate, not with
+pixel count, since a hardware decoder that plays one camera original does not
+keep up with several at once, while the same pictures at a proxy's bitrate play
+together at full rate; memory, on the other hand, follows resolution, each
+player holding a pool of decoded frames whose size is the picture's. **Why one
+file per entry per Output:** two Layers on one clip at two sizes would hold two
+decoders for the same picture, and the loader, its warm elements and its turns
+are all keyed by reference. **Why the fallback goes down before up:** a smaller
+proxy is soft but never slow, and a show that is being prepared should lose
+sharpness for a minute rather than frames. **Why Auto reads the Target and not
+the Output:** a Layer on a wall that takes a fifth of the frame needs a fifth of
+the rows, and the rows needed depend on the Fit, since Cover on a tall narrow
+Target still fills its height.
+
 Screen Shares: the engine is the Viewer (`live-viewer.ts`, one `live-slot.ts`
 per slot), kept beside the loader in `engine-media.ts`, which is the `media`
 context the instances get, and outside the GPU resources like it. The host hands
@@ -2482,7 +2544,10 @@ The Preview (`difracta-studio/src/preview/`) renders an Output, a Surface flat
 or a Layer inside Studio with a compositor of its own (`preview-canvas.ts`), fed
 the document of Studio's view as deltas change it and the Cues the view hears.
 It is not an Output Session: it never attaches, reports no telemetry and appears
-on no Output card. Its header picks what is shown, Follow selection or a named
+on no Output card. Its videos play from the smallest proxy whatever a Layer's
+Resolution says (`maxVideoHeight`), since the picture is small and the Outputs
+may be decoding the same videos on the same machine, and it asks the runtime to
+bake nothing. Its header picks what is shown, Follow selection or a named
 Output, and while following the closest framing allowed, Output, Surface or
 Layer; the choice (`preview-choice.ts`) is remembered per Installation in
 localStorage. A named Output stays whatever is selected and shows the active
@@ -2600,14 +2665,14 @@ channel and is not undoable.
 The Media section, below Surfaces, lists the Packs and the Screen Shares. The
 Bundled Pack comes first with a Bundled badge and no Detach, then the attached
 Packs by name, then the Screen Shares in their order. A Pack row reads its state
-from `live/packs/<id>` (`entities/pack/pack-status.ts`): "preparing 42/310" with
-a thin bar while the baker works, "missing" with Locate…, a read-only badge, and
-a warning for a scan limit or a runtime without ffmpeg. The section's "+" offers
-Add Pack ▸ From folder…, Add Pack ▸ each Pack the runtime's machine knows and
-the Installation does not attach (`packs.known`), and Screen Share. Packs and
-Screen Shares are two entity kinds (`entities/pack/`, `entities/share/`) sharing
-one section (`entities/media/`); the collapsed section's warning count is the
-missing Packs plus the interrupted slots.
+from `live/packs/<id>` (`entities/pack/pack-status.ts`): "preparing, 4 to go"
+with a thin bar while the baker works, "missing" with Locate…, a read-only
+badge, and a warning for a scan limit or a runtime without ffmpeg. The section's
+"+" offers Add Pack ▸ From folder…, Add Pack ▸ each Pack the runtime's machine
+knows and the Installation does not attach (`packs.known`), and Screen Share.
+Packs and Screen Shares are two entity kinds (`entities/pack/`,
+`entities/share/`) sharing one section (`entities/media/`); the collapsed
+section's warning count is the missing Packs plus the interrupted slots.
 
 Naming a folder (`packs.add`, `packs.locate`) is allowed where `documents.open`
 is (`entities/pack/pack-gate.ts`): inside Difracta Desktop, through its

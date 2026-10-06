@@ -25,13 +25,19 @@ export async function writeTree(
 }
 
 /**
- * A runner standing in for ffmpeg and ffprobe: ffprobe answers a 64×36
- * picture, 2 s long for a video; ffmpeg writes a few bytes to its output,
- * the last argument. Every call is recorded. `failing` names files whose
- * jobs fail.
+ * A runner standing in for ffmpeg and ffprobe: ffprobe answers a picture
+ * of `size`, 64×36 unless said, 2 s long for a video; ffmpeg writes a few
+ * bytes to its output, the last argument. Every call is recorded.
+ * `failing` names files whose jobs fail, `failingOutputs` the endings of
+ * the outputs ffmpeg fails to write.
  */
 export function fakeRunner(
-  options: { readonly failing?: readonly string[] } = {},
+  options: {
+    readonly failing?: readonly string[] | undefined;
+    readonly failingOutputs?: readonly string[] | undefined;
+    readonly size?:
+      { readonly width: number; readonly height: number } | undefined;
+  } = {},
 ): BakeRunner & {
   readonly calls: { command: string; args: readonly string[] }[];
 } {
@@ -50,12 +56,14 @@ export function fakeRunner(
         return {
           exitCode: 0,
           stdout: JSON.stringify({
-            streams: [{ width: 64, height: 36 }],
+            streams: [options.size ?? { width: 64, height: 36 }],
             format: video ? { duration: "2.000000" } : {},
           }),
         };
       }
       const out = args.at(-1) ?? "";
+      if (options.failingOutputs?.some((end) => out.endsWith(end)) === true)
+        return { exitCode: 1, stdout: "Conversion failed" };
       await mkdir(path.dirname(out), { recursive: true });
       await writeFile(out, `baked ${path.basename(out)}`);
       return { exitCode: 0, stdout: "" };

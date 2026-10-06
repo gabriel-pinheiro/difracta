@@ -20,7 +20,7 @@ const neon: PackLive = {
       fingerprint: "0123456789abcdef-1",
       status: "ok",
       hasThumbnail: true,
-      hasProxy: true,
+      proxies: [480],
     },
   },
 };

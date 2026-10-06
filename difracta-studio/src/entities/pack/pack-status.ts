@@ -4,7 +4,8 @@ import type { PackLive } from "@difracta/protocol";
  * A Pack's state in the words the navigator row and its inspector use,
  * from its entry under `["live", "packs", id]`. Loading while the runtime
  * scans the folder, missing while nothing on this machine is the Pack,
- * preparing while thumbnails and proxies bake, else ready and silent.
+ * preparing while thumbnails and proxies bake, a proxy size a Layer's
+ * Resolution asked for included, else ready and silent.
  */
 export type PackRowStatus =
   | { readonly kind: "loading" }
@@ -39,10 +40,15 @@ export function packWarning(live: PackLive | undefined): string | undefined {
   return live.ffmpeg ? undefined : FFMPEG_MISSING;
 }
 
-/** "42 of 310 prepared", or "Prepared" once every entry has its files. */
+/** How many entries still wait for a file to be baked. */
+export function toGo(prepared: PackLive["prepared"]): number {
+  return Math.max(0, prepared.total - prepared.done);
+}
+
+/** "Preparing, 4 to go", or "Prepared" once every entry has its files. */
 export function preparedText(prepared: PackLive["prepared"]): string {
-  if (prepared.done >= prepared.total) return "Prepared";
-  return `${String(prepared.done)} of ${String(prepared.total)} prepared`;
+  const left = toGo(prepared);
+  return left === 0 ? "Prepared" : `Preparing, ${String(left)} to go`;
 }
 
 /** "310 entries, 2 missing"; "1 entry"; "No entries". */

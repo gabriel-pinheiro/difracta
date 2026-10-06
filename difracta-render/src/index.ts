@@ -34,6 +34,7 @@ export {
 } from "./media-loader.ts";
 export {
   packSources,
+  type MediaUrl,
   type PackEntryView,
   type PackView,
   type PacksView,

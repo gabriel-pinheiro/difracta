@@ -1,5 +1,5 @@
 import { bundledRoot } from "@difracta/visuals";
-import type { Patch } from "@difracta/core";
+import { BASE_PROXY_HEIGHT, type Patch } from "@difracta/core";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -124,14 +124,14 @@ describe("PackStore", () => {
     expect(baked.prepared).toEqual({ done: 2, total: 2 });
     expect(baked.entries["loops-a"]).toMatchObject({
       hasThumbnail: true,
-      hasProxy: true,
+      proxies: [BASE_PROXY_HEIGHT],
       width: 64,
       height: 36,
       duration: 2,
     });
     expect(baked.entries.b).toMatchObject({
       hasThumbnail: true,
-      hasProxy: false,
+      proxies: [],
       width: 64,
     });
     // Baking travels as the entry's own properties and the count, never the whole Pack again.
@@ -145,7 +145,7 @@ describe("PackStore", () => {
     expect(
       neonPatches.some(
         (patch) =>
-          patch.path.join("/") === "packs/neon-ssss/entries/loops-a/hasProxy",
+          patch.path.join("/") === "packs/neon-ssss/entries/loops-a/proxies",
       ),
     ).toBe(true);
     expect(

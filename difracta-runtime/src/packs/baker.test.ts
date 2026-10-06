@@ -1,4 +1,4 @@
-import { settings } from "@difracta/core";
+import { BASE_PROXY_HEIGHT, settings } from "@difracta/core";
 import { access, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -12,7 +12,7 @@ import {
 import { Baker, spawnRunner, type BakeJob, type BakeResult } from "./baker.ts";
 import { FAKE_TOOLS, fakeRunner, tempDir, writeTree } from "./fixtures.ts";
 import { loadPackFolder } from "./pack-folder.ts";
-import { bakeJobsFor } from "./pack-loading.ts";
+import { bakeJobsFor, proxyJob } from "./pack-loading.ts";
 import { locateTools } from "./tools.ts";
 
 const realTools = await locateTools();
@@ -42,7 +42,9 @@ describe("bake plans", () => {
     expect(thumbnailArgs("/p/a.png", "/d/t.webp", "image", 0)).not.toContain(
       "-ss",
     );
-    expect(proxyArgs("/p/a.mp4", "/d/p.mp4")).toEqual([
+    expect(
+      proxyArgs("/p/a.mp4", "/d/p.mp4", settings.packs.proxy.sizes[0]),
+    ).toEqual([
       "-y",
       "-i",
       "/p/a.mp4",
@@ -61,6 +63,12 @@ describe("bake plans", () => {
       "+faststart",
       "/d/p.mp4",
     ]);
+    const sized = proxyArgs("/p/a.mp4", "/d/p.1080.mp4", {
+      height: 1080,
+      bitrateKbps: 12_000,
+    });
+    expect(sized).toContain("scale=-2:'min(1080,ih)'");
+    expect(sized[sized.indexOf("-b:v") + 1]).toBe("12000k");
     expect(defaultThumbnailAt(8)).toBe(8 * settings.packs.thumbnail.defaultAt);
     expect(defaultThumbnailAt(undefined)).toBe(0);
   });
@@ -114,8 +122,8 @@ describe("Baker", () => {
     const { data } = await stagedPack();
     const jobs = bakeJobsFor("neon", data);
     expect(jobs.map((job) => [job.entryId, job.needs])).toEqual([
-      ["a", { probe: true, thumbnail: true, proxy: true }],
-      ["c", { probe: true, thumbnail: true, proxy: true }],
+      ["a", { probe: true, thumbnail: true, proxies: [BASE_PROXY_HEIGHT] }],
+      ["c", { probe: true, thumbnail: true, proxies: [BASE_PROXY_HEIGHT] }],
     ]);
     const runner = fakeRunner();
     const results: BakeResult[] = [];
@@ -131,13 +139,14 @@ describe("Baker", () => {
       results.map((result) => [
         result.entryId,
         result.hasThumbnail,
-        result.hasProxy,
+        result.proxies,
+        result.failed,
         result.probe?.duration,
         result.error,
       ]),
     ).toEqual([
-      ["a", true, true, 2, undefined],
-      ["c", true, true, 2, undefined],
+      ["a", true, [BASE_PROXY_HEIGHT], [], 2, undefined],
+      ["c", true, [BASE_PROXY_HEIGHT], [], 2, undefined],
     ]);
     expect(runner.calls.map((call) => path.basename(call.command))).toEqual([
       "ffprobe",
@@ -178,13 +187,74 @@ describe("Baker", () => {
         result.packId,
         result.entryId,
         result.error === undefined,
+        result.failed,
       ]),
     ).toEqual([
-      ["neon", "a", false],
-      ["neon", "c", true],
+      ["neon", "a", false, [BASE_PROXY_HEIGHT]],
+      ["neon", "c", true, []],
     ]);
     expect(logged[0]).toContain("a.mp4");
     expect(baker.pending("other")).toBe(0);
+  });
+
+  it("bakes a proxy at each height asked, under its own name, and says which it could not", async () => {
+    const { data } = await stagedPack();
+    const a = data.manifest.entries.find((entry) => entry.id === "a")!;
+    const runner = fakeRunner({ failingOutputs: [".1440.mp4"] });
+    const results: BakeResult[] = [];
+    const baker = new Baker({
+      tools: FAKE_TOOLS,
+      runner,
+      onBaked: (result) => results.push(result),
+      log: () => undefined,
+    });
+    baker.enqueue([
+      {
+        ...proxyJob("neon", data, a, 720),
+        needs: { probe: false, thumbnail: false, proxies: [720, 1440, 2160] },
+      },
+    ]);
+    await baker.idle();
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      entryId: "a",
+      proxies: [720],
+      failed: [1440, 2160],
+    });
+    expect(results[0]?.error).toContain("The proxy");
+    expect(runner.calls).toHaveLength(2);
+    expect(runner.calls[0]?.args).toContain("scale=-2:'min(720,ih)'");
+    await access(
+      path.join(data.dataDir, "proxies", `${a.fingerprint}.720.mp4`),
+    );
+    await expect(
+      access(path.join(data.dataDir, "proxies", `${a.fingerprint}.1440.mp4`)),
+    ).rejects.toThrow();
+  });
+
+  it("takes the jobs queued ahead before the ones waiting", async () => {
+    const { data } = await stagedPack();
+    const [first, second] = bakeJobsFor("neon", data);
+    const a = data.manifest.entries.find((entry) => entry.id === "a")!;
+    const results: BakeResult[] = [];
+    const baker = new Baker({
+      tools: FAKE_TOOLS,
+      runner: fakeRunner(),
+      onBaked: (result) => results.push(result),
+      log: () => undefined,
+    });
+    // The first job starts at once; the asked ones pass the one still waiting.
+    baker.enqueue([first!, second!]);
+    baker.enqueue([proxyJob("neon", data, a, 1080)], true);
+    baker.enqueue([proxyJob("neon", data, a, 720)], true);
+    expect(baker.pending("neon")).toBe(3);
+    await baker.idle();
+    expect(results.map((result) => [result.entryId, result.proxies])).toEqual([
+      ["a", [BASE_PROXY_HEIGHT]],
+      ["a", [1080]],
+      ["a", [720]],
+      ["c", [BASE_PROXY_HEIGHT]],
+    ]);
   });
 
   it.skipIf(realTools === undefined)(
@@ -229,7 +299,7 @@ describe("Baker", () => {
       const video = results.find((result) => result.entryId === "test");
       expect(video).toMatchObject({
         hasThumbnail: true,
-        hasProxy: true,
+        proxies: [BASE_PROXY_HEIGHT],
         error: undefined,
       });
       expect(video?.probe).toMatchObject({ width: 64, height: 36 });
@@ -238,7 +308,7 @@ describe("Baker", () => {
         results.find((result) => result.entryId === "still"),
       ).toMatchObject({
         hasThumbnail: true,
-        hasProxy: false,
+        proxies: [],
         probe: { width: 1, height: 1 },
       });
     },

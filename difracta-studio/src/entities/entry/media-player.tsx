@@ -10,6 +10,7 @@ import {
   packProxyUrl,
   packThumbUrl,
 } from "@/entities/pack/pack-urls";
+import { hasBaseProxy } from "@/library/media-search";
 
 /** What a browser read of an original: its size and, for a video, its length. */
 export interface Measured {
@@ -103,7 +104,7 @@ function VideoPlayer({
   const video = useRef<HTMLVideoElement>(null);
   const [time, setTime] = useState(0);
   const [length, setLength] = useState(entry.duration ?? 0);
-  const original = !entry.hasProxy;
+  const original = !hasBaseProxy(entry);
   return (
     <div className="grid gap-1.5">
       <video

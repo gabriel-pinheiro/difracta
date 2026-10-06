@@ -13,6 +13,7 @@ export * from "./document/media.ts";
 export * from "./document/media-uses.ts";
 export * from "./packs/ids.ts";
 export * from "./packs/manifest.ts";
+export * from "./packs/proxies.ts";
 export * from "./packs/reference.ts";
 export * from "./document/tree.ts";
 export * from "./document/names.ts";

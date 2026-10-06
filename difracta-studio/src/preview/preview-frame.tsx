@@ -1,7 +1,8 @@
 import type { DocumentView } from "@difracta/client";
-import { settings } from "@difracta/core";
+import { BASE_PROXY_HEIGHT, settings } from "@difracta/core";
 import { useEffect, useRef, useState } from "react";
 
+import { packEntryUrl, packProxyHeightUrl } from "@/entities/pack/pack-urls";
 import { studioRuntimeOrigin } from "@/lib/runtime-origin";
 import { useShareViewer } from "@/lib/share-viewer";
 
@@ -14,6 +15,9 @@ import type { PreviewTarget } from "./preview-target";
  * The Preview's picture: the target rendered from the view's document as it
  * changes, letterboxed to `aspect` inside the space it is given. The canvas
  * is made here rather than rendered, so it never outlives its compositor.
+ * A video plays from its smallest proxy whatever its Layer's Resolution
+ * says, since the picture is small and the Outputs may be decoding the same
+ * videos on this machine; the Preview asks the runtime to bake nothing.
  */
 export function PreviewFrame({
   view,
@@ -44,8 +48,11 @@ export function PreviewFrame({
     parent.append(element);
     const runtime = studioRuntimeOrigin();
     host.current = new PreviewCanvas(element, {
-      mediaUrl: (reference) =>
-        `${runtime}${settings.runtime.packsPath}/${reference.split("/").map(encodeURIComponent).join("/")}`,
+      mediaUrl: (reference, proxy) =>
+        proxy === undefined
+          ? packEntryUrl(reference)
+          : packProxyHeightUrl(reference, proxy),
+      maxVideoHeight: BASE_PROXY_HEIGHT,
       fontUrl: (file) =>
         `${runtime}${settings.runtime.fontsPath}/${encodeURIComponent(file)}`,
       viewer: shares.claim(),

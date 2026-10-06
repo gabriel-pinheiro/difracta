@@ -24,7 +24,11 @@ import {
 } from "@difracta/core";
 
 import { calibrationDraws } from "./plan-calibration.ts";
-import { regionCorners, regionPaths } from "./region-targets.ts";
+import {
+  regionCorners,
+  regionPaths,
+  targetPhysicalSize,
+} from "./region-targets.ts";
 
 export type SurfaceStyle = "fill" | "pattern" | "outline";
 
@@ -302,13 +306,7 @@ function layerDraw(
     corners,
     surfaceCorners,
     rect,
-    size:
-      surface.size === null || region === undefined
-        ? surface.size
-        : {
-            width: surface.size.width * rect.width,
-            height: surface.size.height * rect.height,
-          },
+    size: targetPhysicalSize(resolved),
     masks: masksOf(surface),
     paths: region === undefined ? paths : regionPaths(region, paths),
     hidden: layer.opacity <= 0,

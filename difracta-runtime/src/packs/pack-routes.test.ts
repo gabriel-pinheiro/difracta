@@ -1,10 +1,10 @@
-import { settings } from "@difracta/core";
+import { BASE_PROXY_HEIGHT, settings } from "@difracta/core";
 import Fastify, { type FastifyInstance } from "fastify";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { FAKE_TOOLS, fakeRunner, tempDir, writeTree } from "./fixtures.ts";
-import { addPack } from "./pack-operations.ts";
+import { addPack, prepareProxy } from "./pack-operations.ts";
 import { registerPackRoutes } from "./pack-routes.ts";
 import { PackStore } from "./pack-store.ts";
 import { PackRegistry } from "./registry.ts";
@@ -29,7 +29,7 @@ async function stage() {
     registry,
     cacheRoot: path.join(temp.dir, "cache"),
     tools: FAKE_TOOLS,
-    runner: fakeRunner(),
+    runner: fakeRunner({ size: { width: 3840, height: 2160 } }),
     log: () => undefined,
     random: () => 0.5,
   });
@@ -134,5 +134,28 @@ describe("GET /packs/<packId>/<entryId>", () => {
     const imageProxy = await app.inject({ url: `${route}/${id}/b/proxy` });
     expect(imageProxy.statusCode).toBe(404);
     expect(imageProxy.json<{ error: string }>().error).toContain("is an image");
+
+    // A proxy of another height: 404 until asked for and baked, then served under its height.
+    const base = await app.inject({
+      url: `${route}/${id}/a/proxy/${String(BASE_PROXY_HEIGHT)}`,
+    });
+    expect(base.statusCode).toBe(200);
+    expect(base.body).toBe(proxy.body);
+    const early = await app.inject({ url: `${route}/${id}/a/proxy/1080` });
+    expect(early.statusCode).toBe(404);
+    expect(early.json<{ error: string }>().error).toContain(
+      "no proxy 1080 pixels high",
+    );
+    await prepareProxy(store, id, "a", 1080);
+    await store.idle();
+    const sized = await app.inject({ url: `${route}/${id}/a/proxy/1080` });
+    expect(sized.statusCode).toBe(200);
+    expect(sized.headers["content-type"]).toBe("video/mp4");
+    expect(sized.body).toMatch(/^baked .*\.1080\.mp4$/);
+    const odd = await app.inject({ url: `${route}/${id}/a/proxy/tall` });
+    expect(odd.statusCode).toBe(404);
+    expect(odd.json<{ error: string }>().error).toContain(
+      "is not a proxy height",
+    );
   });
 });

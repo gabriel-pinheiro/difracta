@@ -1,4 +1,4 @@
-import { settings, type FileMediaType } from "@difracta/core";
+import { proxySize, settings, type FileMediaType } from "@difracta/core";
 import { spawn } from "node:child_process";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
@@ -36,17 +36,23 @@ export interface BakeJob {
   readonly needs: {
     readonly probe: boolean;
     readonly thumbnail: boolean;
-    readonly proxy: boolean;
+    /** The proxy heights to bake, each one of `settings.packs.proxy.sizes`. */
+    readonly proxies: readonly number[];
   };
 }
 
-/** What a job produced: measurements when probed, and which files exist now. */
+/**
+ * What a job produced: measurements when probed, whether the thumbnail
+ * exists now, the proxy heights it baked and the ones it was to bake and
+ * did not.
+ */
 export interface BakeResult {
   readonly packId: string;
   readonly entryId: string;
   readonly probe: Probe | undefined;
   readonly hasThumbnail: boolean;
-  readonly hasProxy: boolean;
+  readonly proxies: readonly number[];
+  readonly failed: readonly number[];
   readonly error: string | undefined;
 }
 
@@ -102,14 +108,17 @@ export function spawnRunner(
 /**
  * The bake queue: entries that lack a measurement, a thumbnail or a proxy,
  * done `settings.packs.bake.concurrency` at a time, each job probing first
- * so a video's default thumbnail time has a duration to work from. Every
- * finished entry, failed ones included, is reported; a failure is logged
- * and the entry is not tried again this run. A Pack's pending jobs are
- * dropped when it unloads.
+ * so a video's default thumbnail time has a duration to work from. Jobs
+ * queued `ahead` (a proxy size something asked for) are taken before the
+ * rest, in the order they came. Every finished entry, failed ones
+ * included, is reported; a failure is logged, ends the job, and the entry
+ * is not tried again this run. A Pack's pending jobs are dropped when it
+ * unloads.
  */
 export class Baker {
   readonly #options: BakerOptions;
   readonly #runner: BakeRunner;
+  readonly #ahead: BakeJob[] = [];
   readonly #queue: BakeJob[] = [];
   readonly #cancelled = new Set<string>();
   #running = 0;
@@ -120,10 +129,10 @@ export class Baker {
     this.#runner = options.runner ?? spawnRunner();
   }
 
-  enqueue(jobs: readonly BakeJob[]): void {
+  enqueue(jobs: readonly BakeJob[], ahead = false): void {
     for (const job of jobs) {
       this.#cancelled.delete(job.packId);
-      this.#queue.push(job);
+      (ahead ? this.#ahead : this.#queue).push(job);
     }
     this.#pump();
   }
@@ -131,19 +140,25 @@ export class Baker {
   /** Drops the pending jobs of `packId`; one running finishes and is reported. */
   cancel(packId: string): void {
     this.#cancelled.add(packId);
-    for (let index = this.#queue.length - 1; index >= 0; index -= 1)
-      if (this.#queue[index]?.packId === packId) this.#queue.splice(index, 1);
+    for (const queue of [this.#ahead, this.#queue])
+      for (let index = queue.length - 1; index >= 0; index -= 1)
+        if (queue[index]?.packId === packId) queue.splice(index, 1);
   }
 
-  /** Whether `packId` has jobs waiting or running. */
+  /** How many jobs of `packId` wait their turn. */
   pending(packId: string): number {
-    return this.#queue.filter((job) => job.packId === packId).length;
+    return [...this.#ahead, ...this.#queue].filter(
+      (job) => job.packId === packId,
+    ).length;
+  }
+
+  get #waiting(): number {
+    return this.#ahead.length + this.#queue.length;
   }
 
   /** Resolves once nothing is queued or running. */
   idle(): Promise<void> {
-    if (this.#running === 0 && this.#queue.length === 0)
-      return Promise.resolve();
+    if (this.#running === 0 && this.#waiting === 0) return Promise.resolve();
     return new Promise((resolve) => this.#idle.push(resolve));
   }
 
@@ -151,7 +166,7 @@ export class Baker {
     const concurrency =
       this.#options.concurrency ?? settings.packs.bake.concurrency;
     while (this.#running < concurrency) {
-      const job = this.#queue.shift();
+      const job = this.#ahead.shift() ?? this.#queue.shift();
       if (job === undefined) break;
       this.#running += 1;
       void this.#bake(job).then((result) => {
@@ -160,7 +175,7 @@ export class Baker {
         this.#pump();
       });
     }
-    if (this.#running === 0 && this.#queue.length === 0) {
+    if (this.#running === 0 && this.#waiting === 0) {
       const waiting = this.#idle;
       this.#idle = [];
       for (const resolve of waiting) resolve();
@@ -169,18 +184,24 @@ export class Baker {
 
   async #bake(job: BakeJob): Promise<BakeResult> {
     const { ffmpeg, ffprobe } = this.#options.tools;
+    const baked: number[] = [];
     const result = {
       packId: job.packId,
       entryId: job.entryId,
       probe: undefined as Probe | undefined,
       hasThumbnail: !job.needs.thumbnail,
-      hasProxy: !job.needs.proxy && job.type === "video",
+      proxies: baked as readonly number[],
+      failed: [] as readonly number[],
       error: undefined as string | undefined,
     };
     const fail = (what: string, detail: string): BakeResult => {
       const error = `${what} of ${job.file} failed: ${detail}`;
       this.#options.log(error);
-      return { ...result, error };
+      return {
+        ...result,
+        failed: job.needs.proxies.filter((height) => !baked.includes(height)),
+        error,
+      };
     };
     try {
       let duration = job.duration;
@@ -209,15 +230,21 @@ export class Baker {
         }
         result.hasThumbnail = true;
       }
-      if (job.needs.proxy) {
-        const out = proxyPath(job.dataDir, job.fingerprint);
+      for (const height of job.needs.proxies) {
+        const size = proxySize(height);
+        if (size === undefined)
+          return fail("The proxy", `${String(height)} is not a proxy size`);
+        const out = proxyPath(job.dataDir, job.fingerprint, height);
         await mkdir(path.dirname(out), { recursive: true });
-        const ran = await this.#runner.run(ffmpeg, proxyArgs(job.file, out));
+        const ran = await this.#runner.run(
+          ffmpeg,
+          proxyArgs(job.file, out, size),
+        );
         if (ran.exitCode !== 0) {
           await rm(out, { force: true });
           return fail("The proxy", ran.stdout);
         }
-        result.hasProxy = true;
+        baked.push(height);
       }
       return result;
     } catch (error) {

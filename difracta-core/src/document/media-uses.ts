@@ -1,7 +1,11 @@
 import { resolveAddress, type AddressSource } from "../address/address.ts";
 import type { Catalog } from "../catalog/catalog.ts";
 import { layerDefinition } from "../address/address.ts";
-import type { Document } from "./document.ts";
+import type {
+  ParameterDefinition,
+  ParameterSchema,
+} from "../catalog/parameters.ts";
+import type { Document, Layer } from "./document.ts";
 import type { MediaType } from "./media.ts";
 import { orderedEntries } from "./order.ts";
 import type { Patch } from "./patch.ts";
@@ -20,6 +24,8 @@ export type MediaUse =
       readonly parameter: string;
       /** The Parameter's label, "Image" or "Video". */
       readonly label: string;
+      /** The Layer's Resolution, when its definition has one for this Parameter. */
+      readonly resolution?: string;
     }
   | {
       readonly kind: "macro";
@@ -28,14 +34,37 @@ export type MediaUse =
       readonly macroId: string;
       /** The index of the action in the Macro's list. */
       readonly action: number;
+      /** The Layer whose Parameter the action sets, and its Resolution as for a Layer's use. */
+      readonly layerId: string;
+      readonly resolution?: string;
     };
+
+/**
+ * The value of the Resolution Parameter `parameter` names, when it names
+ * one: the Layer's, or the Parameter's default for a Layer saved before
+ * its Visual had one.
+ */
+function resolutionOf(
+  layer: Layer,
+  parameters: ParameterSchema,
+  parameter: ParameterDefinition | undefined,
+): { readonly resolution?: string } {
+  if (layer.kind === "group") return {};
+  if (parameter?.kind !== "media" || parameter.resolution === undefined)
+    return {};
+  const value =
+    layer.parameters[parameter.resolution] ??
+    parameters[parameter.resolution]?.default;
+  return typeof value === "string" ? { resolution: value } : {};
+}
 
 /**
  * Every Media reference the document holds and where: the `media`
  * Parameter values of every Visual and Filter Layer whose definition the
  * Catalog knows (only the definition says which Parameter is a media one),
  * in navigator order, then the set actions of every Macro whose Address
- * resolves to a media one. Empty values are left out. The render loader
+ * resolves to a media one. Empty values are left out. A use of a Parameter
+ * that names a Resolution carries the Layer's. The render loader
  * preloads what it names, `media.replace` rewrites it and Studio counts it
  * before a Pack is detached.
  */
@@ -59,6 +88,7 @@ export function mediaReferencesInUse(
         layerId: layer.id,
         parameter: name,
         label: parameter.label,
+        ...resolutionOf(layer, definition.parameters, parameter),
       });
     }
   }
@@ -69,12 +99,20 @@ export function mediaReferencesInUse(
       if (typeof action.value !== "string" || action.value === "") return;
       const resolved = resolveAddress(document, action.address, catalog);
       if (resolved?.type !== "media") return;
+      // A media Address is a Layer's Parameter: layers/<id>/parameters/<name>.
+      const [, layerId, , name] = resolved.path;
+      const layer =
+        typeof layerId === "string" ? document.layers[layerId] : undefined;
+      if (layer === undefined || typeof name !== "string") return;
+      const parameters = layerDefinition(layer, catalog)?.parameters ?? {};
       uses.push({
         kind: "macro",
         reference: action.value,
         accepts: resolved.accepts ?? "image",
         macroId: macro.id,
         action: index,
+        layerId: layer.id,
+        ...resolutionOf(layer, parameters, parameters[name]),
       });
     });
   }

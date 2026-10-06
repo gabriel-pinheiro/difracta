@@ -1,16 +1,24 @@
-import type { PackEntry, Patch } from "@difracta/core";
+import { BASE_PROXY_HEIGHT, type PackEntry, type Patch } from "@difracta/core";
 import type { PackEntryLive, PackLive } from "@difracta/protocol";
 
 import type { PackData } from "./pack-folder.ts";
 
-/** Whether an entry has everything baked: its thumbnail, and for a video its proxy. */
+/**
+ * Whether an entry has everything baked: its thumbnail, for a video its
+ * proxy at the first size, and every proxy height in `asked`.
+ */
 export function entryPrepared(
-  entry: Pick<PackEntryLive, "type" | "hasThumbnail" | "hasProxy">,
+  entry: Pick<PackEntryLive, "type" | "hasThumbnail" | "proxies">,
+  asked: ReadonlySet<number> = new Set(),
 ): boolean {
-  return entry.hasThumbnail && (entry.type === "image" || entry.hasProxy);
+  if (!entry.hasThumbnail) return false;
+  if (entry.type === "image") return true;
+  if (!entry.proxies.includes(BASE_PROXY_HEIGHT)) return false;
+  for (const height of asked) if (!entry.proxies.includes(height)) return false;
+  return true;
 }
 
-/** The live entry for a manifest entry, from what the Pack's folder holds. */
+/** The live entry for a manifest entry, from what the Pack's folder holds: its proxy heights smallest first. */
 export function entryLive(
   entry: PackEntry,
   pack: Pick<PackData, "missing" | "thumbnails" | "proxies">,
@@ -19,20 +27,27 @@ export function entryLive(
     ...entry,
     status: pack.missing.has(entry.id) ? "missing" : "ok",
     hasThumbnail: pack.thumbnails.has(entry.fingerprint),
-    hasProxy: pack.proxies.has(entry.fingerprint),
+    proxies: [...(pack.proxies.get(entry.fingerprint) ?? [])].sort(
+      (a, b) => a - b,
+    ),
   };
 }
 
-/** `prepared` over the entries whose file is there: the missing ones cannot be baked. */
+/**
+ * `prepared` over the entries whose file is there: the missing ones cannot
+ * be baked. An entry with a proxy height in `asked` (by entry id) still to
+ * bake is not done.
+ */
 export function preparedCount(
   entries: Readonly<Record<string, PackEntryLive>>,
+  asked: ReadonlyMap<string, ReadonlySet<number>> = new Map(),
 ): PackLive["prepared"] {
   let done = 0;
   let total = 0;
   for (const entry of Object.values(entries)) {
     if (entry.status === "missing") continue;
     total += 1;
-    if (entryPrepared(entry)) done += 1;
+    if (entryPrepared(entry, asked.get(entry.id))) done += 1;
   }
   return { done, total };
 }
@@ -49,7 +64,7 @@ export function packLive(pack: PackData, ffmpeg: boolean): PackLive {
     folder: pack.folder,
     ...(pack.warning === undefined ? {} : { warning: pack.warning }),
     ffmpeg,
-    prepared: preparedCount(entries),
+    prepared: preparedCount(entries, pack.asked),
     entries,
   };
 }
@@ -60,8 +75,8 @@ const same = (a: unknown, b: unknown): boolean =>
 /**
  * The patches that take `["packs", packId]` from `previous` to `next`: one
  * per Pack property that changed and one per entry property, so a tag edit
- * travels as one small patch and baking as the one entry's flags and the
- * `prepared` count. A Pack not there before is set whole.
+ * travels as one small patch and baking as the one entry's `hasThumbnail`
+ * and `proxies` and the `prepared` count. A Pack not there before is set whole.
  */
 export function diffPackLive(
   packId: string,

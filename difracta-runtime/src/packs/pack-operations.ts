@@ -1,23 +1,31 @@
-import { BUNDLED_PACK_ID } from "@difracta/core";
+import { BUNDLED_PACK_ID, proxySize, wantedRendition } from "@difracta/core";
 
+import type { BakeJob } from "./baker.ts";
 import { renamePack, updateEntry, type EntryUpdate } from "./edits.ts";
 import {
   existingFolder,
   fail,
   loadedPack,
+  presentEntry,
   writablePack,
   type StoreOutcome,
 } from "./pack-files.ts";
 import { loadPackFolder } from "./pack-folder.ts";
-import { bakeJobsFor, relativeHint } from "./pack-loading.ts";
+import {
+  bakeJobsFor,
+  proxyJob,
+  relativeHint,
+  withAsked,
+} from "./pack-loading.ts";
 import type { PackStore } from "./pack-store.ts";
 
 /**
  * What the Pack requests do to the store (`live/pack-requests.ts` calls
  * these): make a folder a Pack, say where a missing one is, walk one again,
- * rename one and change an entry's metadata. Each writes the Pack's folder
- * or the Registry and shows the result through the store; a read-only Pack
- * refuses every write.
+ * rename one, change an entry's metadata and bake an entry's proxy at a
+ * size. Each writes the Pack's folder or the Registry and shows the result
+ * through the store; a read-only Pack refuses every write, and is left as
+ * it is by a proxy asked for.
  */
 
 /**
@@ -153,4 +161,66 @@ export async function updatePackEntry(
   if (!changed.ok) return changed;
   store.bake(changed.result);
   return { ok: true, result: { packId, entryId } };
+}
+
+/**
+ * Bakes an entry's proxy so it can play at `height`: the file
+ * `wantedRendition` says that size plays from, which may be a smaller
+ * proxy than asked. `baking` is that height, already asked for or queued
+ * now ahead of the scan's work, or null when there is nothing to bake: the
+ * runtime has no ffmpeg, the Pack is read-only, the entry is an image,
+ * `height` is not a proxy size, the original serves it or the proxy is
+ * there.
+ */
+export async function prepareProxy(
+  store: PackStore,
+  packId: string,
+  entryId: string,
+  height: number,
+): Promise<
+  StoreOutcome<{ packId: string; entryId: string; baking: number | null }>
+> {
+  const present = presentEntry(store.loaded(), packId, entryId);
+  if (!present.ok) return present;
+  const answer = (baking: number | null) => ({
+    ok: true as const,
+    result: { packId, entryId, baking },
+  });
+  const { data, live } = present.result;
+  if (!store.ffmpeg || data.readOnly || live.type !== "video")
+    return answer(null);
+  if (proxySize(height) === undefined) return answer(null);
+  const changed = await store.change(packId, (current) => {
+    const unchanged = (baking: number | null) => ({
+      ok: true as const,
+      result: {
+        data: current,
+        persist: false,
+        result: { baking, jobs: [] as BakeJob[] },
+      },
+    });
+    const entry = current.manifest.entries.find((it) => it.id === entryId);
+    if (entry === undefined || current.missing.has(entryId))
+      return fail(`Entry “${entryId}” is gone.`);
+    const wanted = wantedRendition(entry, height);
+    if (wanted === "original") return unchanged(null);
+    if (current.proxies.get(entry.fingerprint)?.has(wanted) === true)
+      return unchanged(null);
+    if (current.asked.get(entryId)?.has(wanted) === true)
+      return unchanged(wanted);
+    return {
+      ok: true,
+      result: {
+        data: withAsked(current, entryId, wanted),
+        persist: false,
+        result: {
+          baking: wanted,
+          jobs: [proxyJob(packId, current, entry, wanted)],
+        },
+      },
+    };
+  });
+  if (!changed.ok) return changed;
+  store.bake(changed.result.jobs, true);
+  return answer(changed.result.baking);
 }

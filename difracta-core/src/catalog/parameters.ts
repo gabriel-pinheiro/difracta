@@ -82,12 +82,15 @@ export interface BooleanParameter extends ParameterBase {
  * image or video entry of a Pack for `accepts` image or video, a Screen
  * Share's id for live, or `""` for none. Its value is a reference, not a
  * value, so the Address is not linkable; a reference whose entry is gone
- * stays and reads as missing.
+ * stays and reads as missing. `resolution` names the choice Parameter of
+ * the same definition, with `RESOLUTION_OPTIONS`, that says which of a
+ * video's files the Layer plays (`packs/proxies.ts`).
  */
 export interface MediaParameter extends ParameterBase {
   readonly kind: "media";
   readonly accepts: MediaType;
   readonly default: "";
+  readonly resolution?: string;
 }
 
 /**

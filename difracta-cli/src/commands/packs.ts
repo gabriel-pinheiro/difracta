@@ -29,7 +29,7 @@ export function registerPacks(program: Command, cli: Cli): void {
   packs
     .command("list")
     .description(
-      "List the Installation's Packs: the Bundled Pack, then the attached ones by name, each with id, state (ok; preparing done/total while thumbnails and proxies bake; missing when this machine lacks it, see `packs locate`; loading), entry count, read-only, and its folder on the runtime's machine or the Installation's relative hint. A warning line follows a Pack that hit a scan limit or lacks ffmpeg.",
+      "List the Installation's Packs: the Bundled Pack, then the attached ones by name, each with id, state (ok; `preparing, N to go` while N entries wait for a thumbnail or a proxy to bake, a proxy size a Layer's Resolution asked for included; missing when this machine lacks it, see `packs locate`; loading), entry count, read-only, and its folder on the runtime's machine or the Installation's relative hint. A warning line follows a Pack that hit a scan limit or lacks ffmpeg.",
     )
     .action(() =>
       cli.withDocument(async (client, summary) => {

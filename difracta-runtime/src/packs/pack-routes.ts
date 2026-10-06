@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 
 import {
   entryFile,
+  fail,
   proxyFile,
   thumbnailFile,
   type StoreOutcome,
@@ -18,9 +19,10 @@ interface Params {
 /**
  * `GET /packs/<packId>/<entryId>` streams a Pack entry's original file
  * (`send-file.ts`: content type, ETag, `no-cache`, Range, any origin);
- * `/thumb` and `/proxy` under it stream what the runtime baked. 404, naming
- * the problem, for a Pack that is not loaded, an entry the Pack lacks, a
- * missing file and a thumbnail or proxy not baked yet.
+ * `/thumb` and `/proxy` under it stream what the runtime baked, `/proxy`
+ * the proxy at the first size and `/proxy/<height>` the one of that
+ * height. 404, naming the problem, for a Pack that is not loaded, an entry
+ * the Pack lacks, a missing file and a thumbnail or proxy not baked.
  */
 export function registerPackRoutes(
   app: FastifyInstance,
@@ -62,5 +64,18 @@ export function registerPackRoutes(
       proxyFile(store.loaded(), request.params.packId, request.params.entryId),
       request.headers,
     ),
+  );
+  app.get<{ Params: Params & { readonly height: string } }>(
+    `${prefix}/proxy/:height`,
+    (request, reply) => {
+      const { packId, entryId, height } = request.params;
+      return serve(
+        reply,
+        /^[1-9]\d*$/.test(height)
+          ? proxyFile(store.loaded(), packId, entryId, Number(height))
+          : fail(`“${height}” is not a proxy height.`),
+        request.headers,
+      );
+    },
   );
 }

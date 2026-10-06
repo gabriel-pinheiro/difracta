@@ -1,7 +1,7 @@
 import type { PackLive } from "@difracta/protocol";
 import { describe, expect, it } from "vitest";
 
-import { diffPackLive, preparedCount } from "./pack-live.ts";
+import { diffPackLive, entryLive, preparedCount } from "./pack-live.ts";
 
 const entry = (
   over: Partial<PackLive["entries"][string]> = {},
@@ -14,7 +14,7 @@ const entry = (
   fingerprint: "0000000000000000-1",
   status: "ok",
   hasThumbnail: false,
-  hasProxy: false,
+  proxies: [],
   ...over,
 });
 const pack = (over: Partial<PackLive> = {}): PackLive => ({
@@ -41,7 +41,7 @@ describe("diffPackLive", () => {
         a: entry({
           tags: ["loop"],
           hasThumbnail: true,
-          hasProxy: true,
+          proxies: [480],
           width: 64,
         }),
         b: entry({ id: "b", file: "b.png", type: "image", status: "missing" }),
@@ -67,8 +67,8 @@ describe("diffPackLive", () => {
       },
       {
         op: "set",
-        path: ["packs", "p", "entries", "a", "hasProxy"],
-        value: true,
+        path: ["packs", "p", "entries", "a", "proxies"],
+        value: [480],
       },
       { op: "set", path: ["packs", "p", "entries", "a", "width"], value: 64 },
       {
@@ -94,8 +94,8 @@ describe("diffPackLive", () => {
       },
       {
         op: "set",
-        path: ["packs", "p", "entries", "a", "hasProxy"],
-        value: false,
+        path: ["packs", "p", "entries", "a", "proxies"],
+        value: [],
       },
       { op: "remove", path: ["packs", "p", "entries", "a", "width"] },
     ]);
@@ -105,11 +105,55 @@ describe("diffPackLive", () => {
   it("counts prepared entries among those whose file is there", () => {
     expect(
       preparedCount({
-        a: entry({ hasThumbnail: true, hasProxy: true }),
+        a: entry({ hasThumbnail: true, proxies: [480] }),
         b: entry({ id: "b", type: "image", hasThumbnail: true }),
         c: entry({ id: "c", hasThumbnail: true }),
         d: entry({ id: "d", status: "missing" }),
+        e: entry({ id: "e", hasThumbnail: true, proxies: [1080] }),
       }),
-    ).toEqual({ done: 2, total: 3 });
+    ).toEqual({ done: 2, total: 4 });
+  });
+
+  it("counts an entry with an asked proxy height still to bake as not prepared", () => {
+    const entries = {
+      a: entry({ hasThumbnail: true, proxies: [480] }),
+      b: entry({ id: "b", hasThumbnail: true, proxies: [480, 1080] }),
+    };
+    expect(preparedCount(entries)).toEqual({ done: 2, total: 2 });
+    expect(
+      preparedCount(
+        entries,
+        new Map([
+          ["a", new Set([1080])],
+          ["b", new Set([1080])],
+        ]),
+      ),
+    ).toEqual({ done: 1, total: 2 });
+  });
+
+  it("lists an entry's proxy heights smallest first", () => {
+    const { fingerprint } = entry();
+    const manifest = {
+      id: "a",
+      file: "a.mp4",
+      type: "video" as const,
+      name: "A",
+      tags: [],
+      fingerprint,
+    };
+    expect(
+      entryLive(manifest, {
+        missing: new Set(),
+        thumbnails: new Set([fingerprint]),
+        proxies: new Map([[fingerprint, new Set([1080, 480, 720])]]),
+      }),
+    ).toMatchObject({ hasThumbnail: true, proxies: [480, 720, 1080] });
+    expect(
+      entryLive(manifest, {
+        missing: new Set(),
+        thumbnails: new Set(),
+        proxies: new Map(),
+      }).proxies,
+    ).toEqual([]);
   });
 });

@@ -1,4 +1,9 @@
-import { hasTag, mediaReference, type FileMediaType } from "@difracta/core";
+import {
+  BASE_PROXY_HEIGHT,
+  hasTag,
+  mediaReference,
+  type FileMediaType,
+} from "@difracta/core";
 import type { LiveState, PackEntryLive, PackLive } from "@difracta/protocol";
 
 import { matchTier } from "./search";
@@ -203,12 +208,18 @@ export function subfolders(
 }
 
 /**
- * What a tile plays while the pointer is on it: the baked proxy when there
- * is one, the original for a video without one, nothing for an image.
+ * What a tile plays while the pointer is on it: the smallest baked proxy
+ * when it is there, the original for a video without it, nothing for an
+ * image.
  */
 export function hoverSource(
-  entry: Pick<PackEntryLive, "type" | "hasProxy">,
+  entry: Pick<PackEntryLive, "type" | "proxies">,
 ): "proxy" | "original" | undefined {
   if (entry.type !== "video") return undefined;
-  return entry.hasProxy ? "proxy" : "original";
+  return hasBaseProxy(entry) ? "proxy" : "original";
+}
+
+/** Whether the proxy every video gets, the smallest size, is baked: what `/proxy` serves. */
+export function hasBaseProxy(entry: Pick<PackEntryLive, "proxies">): boolean {
+  return entry.proxies.includes(BASE_PROXY_HEIGHT);
 }

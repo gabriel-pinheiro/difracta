@@ -1,4 +1,4 @@
-import { BUNDLED_PACK_ID } from "@difracta/core";
+import { BASE_PROXY_HEIGHT, BUNDLED_PACK_ID } from "@difracta/core";
 import type { PackEntryLive, PackLive } from "@difracta/protocol";
 import { stat } from "node:fs/promises";
 import path from "node:path";
@@ -100,19 +100,28 @@ export function thumbnailFile(
   return { ok: true, result: thumbnailPath(data.dataDir, live.fingerprint) };
 }
 
-/** The entry's baked proxy, or why there is none. */
+/** The entry's baked proxy of `height`, the first size unless said, or why there is none. */
 export function proxyFile(
   packs: ReadonlyMap<string, Loaded>,
   packId: string,
   entryId: string,
+  height: number = BASE_PROXY_HEIGHT,
 ): StoreOutcome<string> {
   const entry = presentEntry(packs, packId, entryId);
   if (!entry.ok) return entry;
   const { data, live } = entry.result;
   if (live.type !== "video")
     return fail(`“${live.name}” is an image; it has no proxy.`);
-  if (!live.hasProxy) return fail(`“${live.name}” has no proxy yet.`);
-  return { ok: true, result: proxyPath(data.dataDir, live.fingerprint) };
+  if (!live.proxies.includes(height))
+    return fail(
+      height === BASE_PROXY_HEIGHT
+        ? `“${live.name}” has no proxy yet.`
+        : `“${live.name}” has no proxy ${String(height)} pixels high.`,
+    );
+  return {
+    ok: true,
+    result: proxyPath(data.dataDir, live.fingerprint, height),
+  };
 }
 
 /** An absolute path to an existing folder, normalized, or why it is not one. */

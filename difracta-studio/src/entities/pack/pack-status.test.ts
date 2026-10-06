@@ -7,6 +7,7 @@ import {
   packRowStatus,
   packWarning,
   preparedText,
+  toGo,
 } from "./pack-status";
 
 const entry = (id: string, status: "ok" | "missing"): PackEntryLive => ({
@@ -18,7 +19,7 @@ const entry = (id: string, status: "ok" | "missing"): PackEntryLive => ({
   fingerprint: "0123456789abcdef-1",
   status,
   hasThumbnail: status === "ok",
-  hasProxy: false,
+  proxies: [],
 });
 
 const pack = (over: Partial<PackLive>): PackLive => ({
@@ -62,7 +63,9 @@ describe("A Pack's row status", () => {
   });
 
   it("counts entries and prepared files as a person reads them", () => {
-    expect(preparedText({ done: 42, total: 310 })).toBe("42 of 310 prepared");
+    expect(preparedText({ done: 42, total: 310 })).toBe("Preparing, 268 to go");
+    expect(toGo({ done: 64, total: 68 })).toBe(4);
+    expect(toGo({ done: 3, total: 3 })).toBe(0);
     expect(preparedText({ done: 3, total: 3 })).toBe("Prepared");
     expect(entriesText(pack({}).entries)).toBe("2 entries, 1 missing");
     expect(entriesText({ a: entry("a", "ok") })).toBe("1 entry");

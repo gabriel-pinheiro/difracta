@@ -66,12 +66,12 @@ export function listPacks(
   return rows;
 }
 
-/** `ok`, `preparing 42/310`, `missing`, `loading`, or `…` while the runtime has not said. */
+/** `ok`, `preparing, 4 to go` while entries wait for a bake, `missing`, `loading`, or `…` while the runtime has not said. */
 export function describePackState(pack: PackListing): string {
   if (pack.status === undefined) return "…";
   if (pack.status !== "ok") return pack.status;
   if (pack.prepared !== null && pack.prepared.done < pack.prepared.total)
-    return `preparing ${String(pack.prepared.done)}/${String(pack.prepared.total)}`;
+    return `preparing, ${String(pack.prepared.total - pack.prepared.done)} to go`;
   return "ok";
 }
 

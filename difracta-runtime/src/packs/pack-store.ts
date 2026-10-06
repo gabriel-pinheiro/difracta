@@ -318,9 +318,9 @@ export class PackStore {
     return this.#wanted.has(packId);
   }
 
-  /** Queues bake jobs; none without ffmpeg. */
-  bake(jobs: readonly BakeJob[]): void {
-    this.#baker?.enqueue(jobs);
+  /** Queues bake jobs, before the ones waiting when `ahead`; none without ffmpeg. */
+  bake(jobs: readonly BakeJob[], ahead = false): void {
+    this.#baker?.enqueue(jobs, ahead);
   }
 
   get registry(): PackRegistry {

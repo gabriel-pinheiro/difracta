@@ -28,7 +28,8 @@ export interface EntryListing {
   readonly tags: readonly string[];
   readonly status: EntryStatus;
   readonly thumbnail: boolean;
-  readonly proxy: boolean;
+  /** The heights the entry's proxy is baked at, smallest first; none for an image. */
+  readonly proxies: readonly number[];
 }
 
 /** One Pack's entries, in path order, each as a listing row. */
@@ -50,7 +51,7 @@ export function listEntries(packId: string, pack: PackLive): EntryListing[] {
       tags: entry.tags,
       status: entry.status,
       thumbnail: entry.hasThumbnail,
-      proxy: entry.hasProxy,
+      proxies: entry.proxies,
     }));
 }
 
@@ -77,7 +78,14 @@ function describeEntryBeats(entry: EntryListing): string {
     : beats;
 }
 
-/** One row per entry: reference, path, type, size, duration, beats, tags, and `missing` when the file is gone. */
+/** `proxies 480p, 1080p`, `no proxy` for a video with none baked yet, empty for an image. */
+function describeProxies(entry: EntryListing): string {
+  if (entry.type !== "video") return "";
+  if (entry.proxies.length === 0) return "no proxy";
+  return `proxies ${entry.proxies.map((height) => `${String(height)}p`).join(", ")}`;
+}
+
+/** One row per entry: reference, path, type, size, duration, beats, baked proxies, tags, and `missing` when the file is gone. */
 export function formatEntries(entries: readonly EntryListing[]): string {
   if (entries.length === 0) return "  No entries.";
   return formatTable(
@@ -88,6 +96,7 @@ export function formatEntries(entries: readonly EntryListing[]): string {
       describeSize(entry),
       describeDuration(entry),
       describeEntryBeats(entry),
+      describeProxies(entry),
       entry.tags.join(", "),
       entry.status === "missing" ? "missing" : "",
     ]),

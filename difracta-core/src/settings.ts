@@ -137,9 +137,26 @@ export const settings = {
       defaultAt: 0.25,
     },
     proxy: {
-      /** The baked proxy's height, H.264 without audio, and its bitrate. */
-      height: 480,
-      bitrateKbps: 1500,
+      /**
+       * The sizes a video's proxy is baked at, H.264 without audio,
+       * smallest first: its height, the bitrate it is baked at, and
+       * `budgetKbps`, the most an original no taller than it may run at to
+       * be played as it is at that size. The first is baked for every
+       * video; the others when something plays the video at that size.
+       * A hardware decoder keeps up with several videos at these bitrates
+       * and not with one camera original after another.
+       */
+      sizes: [
+        { height: 480, bitrateKbps: 1500, budgetKbps: 4000 },
+        { height: 720, bitrateKbps: 6000, budgetKbps: 12_000 },
+        { height: 1080, bitrateKbps: 12_000, budgetKbps: 25_000 },
+        { height: 1440, bitrateKbps: 18_000, budgetKbps: 35_000 },
+        { height: 2160, bitrateKbps: 25_000, budgetKbps: 45_000 },
+      ],
+      /** How far past a size Auto stretches it before taking the next: 1.25 plays 1080 rows over up to 1350. */
+      upscale: 1.25,
+      /** How long a video already loaded keeps its file after the size it should play at changes, so a corner dragged or a window resized loads once. */
+      settleMs: 2000,
     },
     bake: {
       /** How many ffmpeg jobs run at once, and at which `nice` priority. */

@@ -9,7 +9,12 @@ import {
   type MediaSources,
   type VideoCount,
 } from "./media-loader.ts";
-import { NO_PACKS, packSources, type PacksView } from "./pack-sources.ts";
+import {
+  NO_PACKS,
+  packSources,
+  type MediaUrl,
+  type PacksView,
+} from "./pack-sources.ts";
 import type { LiveSource } from "./shared-viewer.ts";
 import type {
   MediaContext,
@@ -17,16 +22,21 @@ import type {
   MediaLive,
   MediaVideo,
 } from "./sdk/media.ts";
+import { NO_FRAME, VideoFiles, type MediaFrame } from "./video-files.ts";
 
 export interface EngineMediaOptions {
   readonly catalog: Catalog;
-  /** Where a Media reference's file is; undefined for one this page cannot reach. */
-  readonly mediaUrl: (reference: string) => string | undefined;
+  /** Where a Media reference's file is, the original or a proxy of it; undefined for one this page cannot reach. */
+  readonly mediaUrl: MediaUrl;
   readonly shares: ShareSignalling | undefined;
   /** A Viewer shared with the rest of the page, in place of one of its own over `shares`. */
   readonly viewer?: LiveSource | undefined;
   /** How the loader makes its elements; the browser's by default. */
   readonly loader?: MediaLoaderOptions | undefined;
+  /** The tallest video file this page plays, a proxy size, whatever a Layer's Resolution asks. */
+  readonly maxVideoHeight?: number | undefined;
+  /** Asks the runtime to bake a video's proxy of a height this page wants and does not find; without it nothing is asked. */
+  readonly prepare?: ((reference: string, height: number) => void) | undefined;
 }
 
 /**
@@ -42,10 +52,14 @@ export interface EngineMediaOptions {
  * immutable per revision. A source's URL comes from `mediaUrl`, its
  * revision from the entry's fingerprint and its beats from the entry, so
  * an edit to an entry's beats reaches a playing clip with no reload.
+ * A video's source names the file `VideoFiles` says it plays from on this
+ * Output (`video-files.ts`), so a change of file is a change of source
+ * and the loader loads it again.
  */
 export class EngineMedia implements MediaContext {
   readonly #catalog: Catalog;
-  readonly #mediaUrl: (reference: string) => string | undefined;
+  readonly #mediaUrl: MediaUrl;
+  readonly #videos: VideoFiles;
   readonly #loader: MediaLoader;
   readonly #viewer: LiveSource;
   #packs: PacksView = NO_PACKS;
@@ -58,6 +72,7 @@ export class EngineMedia implements MediaContext {
   constructor(options: EngineMediaOptions) {
     this.#catalog = options.catalog;
     this.#mediaUrl = options.mediaUrl;
+    this.#videos = new VideoFiles(options);
     this.#loader = new MediaLoader(options.loader);
     this.#viewer =
       options.viewer ?? new LiveViewer({ signalling: options.shares });
@@ -68,28 +83,40 @@ export class EngineMedia implements MediaContext {
     this.#packs = packs;
   }
 
-  sync(document: Document, outputId: string): void {
+  sync(
+    document: Document,
+    outputId: string,
+    frame: MediaFrame = NO_FRAME,
+  ): void {
     const packs = this.#packs;
+    const switched = this.#videos.sync(document, packs, outputId, frame);
     if (
+      switched ||
       this.#sourcesFor?.document !== document ||
       this.#sourcesFor.packs !== packs
     )
       this.#sourcesFor = {
         document,
         packs,
-        sources: packSources(document, this.#catalog, packs, this.#mediaUrl),
+        sources: packSources(
+          document,
+          this.#catalog,
+          packs,
+          this.#mediaUrl,
+          (reference) => this.#videos.playing(reference),
+        ),
       };
     this.#loader.sync(this.#sourcesFor.sources);
-    const last = this.#wantedFor;
-    if (last?.document !== document || last.outputId !== outputId) {
+    const wanted = this.#wantedFor;
+    if (wanted?.document !== document || wanted.outputId !== outputId) {
       const shares = wantedShares(document, outputId, this.#catalog);
       // The same shares as before keep their set, so the Viewer sees no change.
       this.#wantedFor = {
         document,
         outputId,
         shares:
-          last !== undefined && same(last.shares, shares)
-            ? last.shares
+          wanted !== undefined && same(wanted.shares, shares)
+            ? wanted.shares
             : shares,
       };
     }
@@ -129,6 +156,7 @@ export class EngineMedia implements MediaContext {
     this.#viewer.dispose();
     this.#loader.dispose();
     this.#sourcesFor = undefined;
+    this.#videos.clear();
     this.#wantedFor = undefined;
   }
 }

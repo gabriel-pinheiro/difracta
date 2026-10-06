@@ -25,7 +25,7 @@ const entry = (
   fingerprint: "0123456789abcdef-1",
   status: "ok",
   hasThumbnail: true,
-  hasProxy: false,
+  proxies: [],
   ...over,
 });
 
@@ -140,8 +140,10 @@ describe("The Library's media rows", () => {
   });
 
   it("plays the proxy on hover, the original for a video without one, nothing for an image", () => {
-    expect(hoverSource({ type: "video", hasProxy: true })).toBe("proxy");
-    expect(hoverSource({ type: "video", hasProxy: false })).toBe("original");
-    expect(hoverSource({ type: "image", hasProxy: false })).toBeUndefined();
+    expect(hoverSource({ type: "video", proxies: [480, 1080] })).toBe("proxy");
+    expect(hoverSource({ type: "video", proxies: [] })).toBe("original");
+    // A larger size alone is not what the Library's proxy route serves.
+    expect(hoverSource({ type: "video", proxies: [1080] })).toBe("original");
+    expect(hoverSource({ type: "image", proxies: [] })).toBeUndefined();
   });
 });
