@@ -6,7 +6,7 @@ import { colorKey } from "./color-key.ts";
 import { colorize } from "./colorize.ts";
 import { crop } from "./crop.ts";
 import { edgeFade } from "./edge-fade.ts";
-import { hueOf, hueShift } from "./hue-shift.ts";
+import { hueOf, hueShift, saturationOf } from "./hue-shift.ts";
 import { invert } from "./invert.ts";
 import { kaleido } from "./kaleido.ts";
 import { mirror } from "./mirror.ts";
@@ -146,22 +146,53 @@ describe("Hue Shift", () => {
     expect(hueOf([0, 0, 0, 1])).toBeUndefined();
   });
 
-  it("shifts by the turn from From to To, and is identity when either has no hue", () => {
+  it("measures saturation from 0 for a grey to 1 for a pure hue", () => {
+    expect(saturationOf([1, 0, 0, 1])).toBe(1);
+    expect(saturationOf([1, 0.5, 0.5, 1])).toBeCloseTo(0.5, 6);
+    expect(saturationOf([0.4, 0.4, 0.4, 1])).toBe(0);
+    expect(saturationOf([0, 0, 0, 1])).toBe(0);
+  });
+
+  it("shifts by the turn from From to To and scales saturation in their ratio", () => {
     const frame = player(hueShift);
     const red = [1, 0, 0, 1];
     const toGreen = frame({ from: red, to: [0, 1, 0, 1] });
     expect(toGreen.uniforms.shift).toBeCloseTo(1 / 3, 6);
+    expect(toGreen.uniforms.saturation).toBeCloseTo(1, 6);
     expect(toGreen.identity).toBe(false);
     // Going the other way round the wheel is the short way written long.
     expect(frame({ from: [0, 1, 0, 1], to: red }).uniforms.shift).toBeCloseTo(
       2 / 3,
       6,
     );
-    expect(frame({ from: red, to: [0.4, 0.4, 0.4, 1] }).identity).toBe(true);
-    expect(frame({ from: [1, 1, 1, 1], to: red }).identity).toBe(true);
+    // A paler To of the same hue only drains; a To past From's saturation lifts.
+    const toPink = frame({ from: red, to: [1, 0.5, 0.5, 1] });
+    expect(toPink.uniforms.shift).toBeCloseTo(0, 6);
+    expect(toPink.uniforms.saturation).toBeCloseTo(0.5, 6);
+    expect(toPink.identity).toBe(false);
+    expect(
+      frame({ from: [1, 0.5, 0.5, 1], to: red }).uniforms.saturation,
+    ).toBeCloseTo(2, 6);
     // A still Scene under a still shift costs nothing after the first frame.
     frame({ from: red, to: [0, 1, 0, 1] });
     expect(frame({ from: red, to: [0, 1, 0, 1] }).changed).toBe(false);
+  });
+
+  it("drains the colour for a To with no hue, and skips for a From with none", () => {
+    const frame = player(hueShift);
+    const red = [1, 0, 0, 1];
+    for (const to of [
+      [1, 1, 1, 1],
+      [0.4, 0.4, 0.4, 1],
+      [0, 0, 0, 1],
+    ]) {
+      const drained = frame({ from: red, to });
+      expect(drained.identity).toBe(false);
+      expect(drained.uniforms.saturation).toBe(0);
+      expect(drained.uniforms.shift).toBe(0);
+    }
+    expect(frame({ from: [1, 1, 1, 1], to: red }).identity).toBe(true);
+    expect(frame({ from: red, to: red }).identity).toBe(true);
   });
 });
 
@@ -180,6 +211,13 @@ describe("choice Filters", () => {
       "rectangle",
       "oval",
     ]);
+    expect(colorize.parameters.mode.options.map((o) => o.value)).toEqual([
+      "tritone",
+      "tint",
+      "hue",
+      "hue-saturation",
+    ]);
+    expect(colorize.fragment).toContain("u_mode == 3");
     expect(mirror.fragment).toContain("u_keep == 0");
     expect(edgeFade.fragment).toContain("u_shape == 0");
   });
