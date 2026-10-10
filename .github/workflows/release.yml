@@ -1,23 +1,19 @@
-# Packages Difracta Desktop on each OS: on every push to main, as workflow
-# artifacts kept for 7 days, and on a `vX.Y.Z` tag, also as a GitHub Release
-# of that tag.
+# Packages Difracta Desktop on each OS when a version tag is pushed, keeping
+# workflow artifacts for 7 days and publishing a GitHub Release of that tag.
 #
-# The version is X.Y.Z from a vX.Y.Z tag, or package.json's version plus
-# -g<short sha> for a push to main. It reaches electron-builder as
+# The version is X.Y.Z from a vX.Y.Z tag. It reaches electron-builder as
 # `-c.extraMetadata.version`, which writes it into the packaged package.json
 # and the file names and leaves the checkout alone.
 name: Release
 
 on:
   push:
-    branches: [main]
     tags: ["v*"]
 
 concurrency:
   group: release-${{ github.ref }}
-  # A newer push to main replaces the packages of the older one; a tag's run
-  # always finishes.
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+  # A version tag's run always finishes.
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -47,12 +43,7 @@ jobs:
         id: version
         shell: bash
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-          else
-            base="$(node -p "require('./difracta-desktop/package.json').version")"
-            echo "version=$base-g${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-          fi
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
       # Linux: both AppImages; macOS: both dmgs; Windows: the installer
       # (`difracta-desktop/electron-builder.yml`).
       - name: Package
@@ -80,7 +71,6 @@ jobs:
           retention-days: 7
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
     needs: package
     runs-on: ubuntu-latest
     permissions:

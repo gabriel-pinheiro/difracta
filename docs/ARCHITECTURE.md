@@ -1790,11 +1790,11 @@ without an AppArmor profile, and an AppImage cannot ship one or a setuid
 `chrome-sandbox`; the AppImage's `AppRun` probes with `unshare -Ur true` and
 passes `--no-sandbox` only when that fails. package.json's `productName` makes
 the user data folder `~/.config/Difracta` on Linux, for a checkout's Desktop
-too. `.github/workflows/release.yml` builds each OS on its own runner, takes the
-version from a `vX.Y.Z` tag (package.json's version plus `-g<sha>` on main),
-runs the Desktop suite against the x86_64 AppImage
-(`DIFRACTA_DESKTOP_EXECUTABLE` points the harness at a packaged executable) and
-attaches the packages to the tag's GitHub Release.
+too. `.github/workflows/release.yml` runs only when a version tag is pushed,
+builds each OS on its own runner, takes the version from the `vX.Y.Z` tag, runs
+the Desktop suite against the x86_64 AppImage (`DIFRACTA_DESKTOP_EXECUTABLE`
+points the harness at a packaged executable) and attaches the packages to the
+tag's GitHub Release.
 
 ## Settings
 
