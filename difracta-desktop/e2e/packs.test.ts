@@ -25,6 +25,10 @@ useDesktop();
 describe("Packs in Studio", () => {
   it("adds a Pack, shows its entry on an Output, and locates it after moving its folder while loaded", async () => {
     const port = env.DIFRACTA_PORT;
+    // Loading and locating Packs must work without optional baking tools.
+    // Disable them explicitly so this test never depends on the host's ffmpeg.
+    env.DIFRACTA_FFMPEG = path.join(dir, "missing-ffmpeg");
+    env.DIFRACTA_FFPROBE = path.join(dir, "missing-ffprobe");
     const studio = await launch(
       await installationFile("Clips"),
       SOFTWARE_WEBGL,
@@ -93,11 +97,14 @@ describe("Packs in Studio", () => {
     );
     expect([red, green, blue]).toHaveLength(3);
 
-    // A folder moved while loaded still reads as ready. Locate must be
+    // A folder moved while loaded still reads as loaded. Locate must be
     // available beside its Location without reopening the Installation.
     await row.click();
     const inspector = studio.getByTestId("pack-inspector");
-    await inspector.getByText("Prepared", { exact: false }).waitFor();
+    await inspector.getByTestId("pack-counts").waitFor();
+    await inspector
+      .getByText("ffmpeg was not found", { exact: false })
+      .waitFor();
     const reference = await tile.getAttribute("data-id");
     expect(reference).toBeTruthy();
     await studio.getByRole("button", { name: "Close the Library" }).click();
