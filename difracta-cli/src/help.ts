@@ -54,8 +54,8 @@ Working from a shell
              makes a folder a Pack and attaches it (from the runtime's own
              machine only); "packs known" lists the Packs this machine
              knows and "packs attach <pack>" attaches one from anywhere;
-             "packs detach", "packs locate <pack> <folder>" for a missing
-             one, "packs rescan" after files changed.
+             "packs detach", "packs locate <pack> <folder>" after moving
+             its folder, "packs rescan" after files changed.
 
   Media      An image or video is an entry of a Pack. A Visual's media
              Parameter holds a Media reference, "<pack>/<entry>" by ids, or

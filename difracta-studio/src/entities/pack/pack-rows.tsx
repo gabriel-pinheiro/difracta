@@ -115,14 +115,14 @@ export function PackRow({
         }
       />
       <ContextMenuContent>
-        <ContextMenuItem onClick={show}>Browse</ContextMenuItem>
+        <ContextMenuItem onClick={show}>Browse media</ContextMenuItem>
         <ContextMenuItem
           disabled={status.kind === "missing" || status.kind === "loading"}
           onClick={() => actions.rescan(pack.id)}
         >
           <RefreshCw /> Rescan
         </ContextMenuItem>
-        {status.kind === "missing" && (
+        {!pack.bundled && (
           <ContextMenuItem
             disabled={actions.gate !== undefined}
             onClick={locate}

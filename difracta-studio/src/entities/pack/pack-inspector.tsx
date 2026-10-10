@@ -27,10 +27,10 @@ import {
 /**
  * A Pack's inspector: its name (a copy the Installation keeps, editable
  * unless the Pack is read-only), where it is on the runtime's disk, how
- * many entries it has and how many are prepared, Rescan, Locate… while it
- * is missing, Browse, and Remove from Installation after a confirm that
- * counts the Layers and Macro actions using it. The Bundled Pack is
- * attached to every Installation and cannot be removed.
+ * many entries it has and how many are prepared, Rescan, Locate… to pick
+ * its folder even while loaded, Browse media, and Remove from Installation
+ * after a confirm that counts the Layers and Macro actions using it. The
+ * Bundled Pack is attached to every Installation and cannot be removed.
  */
 export function PackInspector({
   view,
@@ -102,6 +102,18 @@ export function PackInspector({
               folder carrying it opens anywhere.
             </p>
           )}
+          {!bundled && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="justify-self-start"
+              disabled={actions.gate !== undefined}
+              title={actions.gate ?? "Pick this Pack's folder after moving it"}
+              onClick={() => actions.locate(id, name)}
+            >
+              <FolderSearch /> Locate…
+            </Button>
+          )}
         </div>
         {live?.status === "ok" && (
           <div className="grid gap-1" data-testid="pack-counts">
@@ -123,7 +135,7 @@ export function PackInspector({
         )}
         <div className="flex flex-wrap gap-1">
           <Button size="sm" variant="outline" onClick={() => openPack(id)}>
-            <LayoutGrid /> Browse
+            <LayoutGrid /> Browse media
           </Button>
           <Button
             size="sm"
@@ -134,17 +146,6 @@ export function PackInspector({
           >
             <RefreshCw /> Rescan
           </Button>
-          {status.kind === "missing" && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={actions.gate !== undefined}
-              title={actions.gate ?? "Name the folder that is this Pack"}
-              onClick={() => actions.locate(id, name)}
-            >
-              <FolderSearch /> Locate…
-            </Button>
-          )}
         </div>
         {!bundled && (
           <Button

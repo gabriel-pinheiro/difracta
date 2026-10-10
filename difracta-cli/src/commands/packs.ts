@@ -107,7 +107,7 @@ export function registerPacks(program: Command, cli: Cli): void {
   packs
     .command("locate <pack> <folder>")
     .description(
-      "Say where a missing Pack is on the runtime's machine: the folder's `.difracta/pack.json` must carry the Pack's id. The Registry learns it and the Pack loads. Only from the runtime's own machine, like `packs add`.",
+      "Say where a Pack is on the runtime's machine after moving its folder, even while loaded: the folder's `.difracta/pack.json` must carry the Pack's id. The Registry learns it and the Pack loads. Only from the runtime's own machine, like `packs add`.",
     )
     .action((pack: string, folder: string) =>
       cli.withDocument(async (client, summary) => {

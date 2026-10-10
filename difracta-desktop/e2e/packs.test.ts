@@ -1,3 +1,5 @@
+import { rename } from "node:fs/promises";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -21,7 +23,7 @@ import { SOFTWARE_WEBGL } from "./sharing.ts";
 useDesktop();
 
 describe("Packs in Studio", () => {
-  it("adds a Pack from a folder, picks its entry for an Image Layer, and an Output shows it", async () => {
+  it("adds a Pack, shows its entry on an Output, and locates it after moving its folder while loaded", async () => {
     const port = env.DIFRACTA_PORT;
     const studio = await launch(
       await installationFile("Clips"),
@@ -90,5 +92,30 @@ describe("Packs in Studio", () => {
       ([r = 0, g = 0, b = 0]) => g > 180 && r < 90 && b < 90,
     );
     expect([red, green, blue]).toHaveLength(3);
+
+    // A folder moved while loaded still reads as ready. Locate must be
+    // available beside its Location without reopening the Installation.
+    await row.click();
+    const inspector = studio.getByTestId("pack-inspector");
+    await inspector.getByText("Prepared", { exact: false }).waitFor();
+    const reference = await tile.getAttribute("data-id");
+    expect(reference).toBeTruthy();
+    await studio.getByRole("button", { name: "Close the Library" }).click();
+    await inspector.getByRole("button", { name: "Browse media" }).click();
+    await tile.waitFor();
+    const moved = path.join(dir, "moved-neon");
+    await rename(folder, moved);
+    await app?.evaluate(({ dialog }, picked) => {
+      dialog.showOpenDialog = () =>
+        Promise.resolve({ canceled: false, filePaths: [picked] });
+    }, moved);
+    await inspector.getByRole("button", { name: "Locate…" }).click();
+    await inspector.getByText(moved, { exact: true }).waitFor();
+    expect(await tile.getAttribute("data-id")).toBe(reference);
+    // The same entry reference now serves the image from the new folder.
+    const response = await fetch(
+      `http://127.0.0.1:${port ?? ""}/packs/${reference ?? ""}`,
+    );
+    expect(response.ok).toBe(true);
   });
 });

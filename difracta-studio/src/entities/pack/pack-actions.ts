@@ -18,7 +18,7 @@ import { folderGate } from "./pack-gate";
  * Everything a person does to a Pack from Studio, wherever the button sits
  * (the Media section's "+", a row's menu, the Pack's inspector, a media
  * chip): add one from a folder, attach one the runtime's machine knows,
- * locate a missing one, rescan, rename, detach, which asks first as every
+ * locate one after moving it, rescan, rename, detach, which asks first as every
  * Remove of a Pack does. `gate` is why naming a folder is refused here, or undefined
  * when it is allowed. Requests go to the runtime; failures are toasts.
  */

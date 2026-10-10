@@ -2680,11 +2680,11 @@ is (`entities/pack/pack-gate.ts`): inside Difracta Desktop, through its
 typed; elsewhere From folder… and Locate… are disabled with the reason and a
 known Pack is attached instead. Selecting a Pack shows its inspector
 (`pack-inspector.tsx`: name through `packs.rename` unless read-only, location on
-disk, entry and prepared counts, Rescan, Locate… when missing, Remove from
-Installation) and opens the Library on it to browse. Every Remove of a Pack, the
-Delete key's included, first says how many Layers and Macro actions use its
-entries (`usesMatching`), then sends `packs.detach`; those references read as
-missing afterwards.
+disk with Locate… to pick its folder even while loaded, entry and prepared
+counts, Browse media, Rescan, Remove from Installation) and opens the Library on
+it to browse. Every Remove of a Pack, the Delete key's included, first says how
+many Layers and Macro actions use its entries (`usesMatching`), then sends
+`packs.detach`; those references read as missing afterwards.
 
 The Library (`library/`) has three bindings (`browser-state.tsx`): a Layer,
 which browses the Catalog (`layer-library.tsx`); a Pack, browse mode

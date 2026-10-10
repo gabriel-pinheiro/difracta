@@ -1,6 +1,6 @@
 /**
  * Whether this Studio may name a folder on the runtime's disk: adding a
- * Pack from a folder and locating a missing one. It may inside Difracta
+ * Pack from a folder and locating one after moving it. It may inside Difracta
  * Desktop showing its own runtime (the bridge is there) and from a Studio
  * on the runtime's own machine when that runtime is free, the same places
  * `documents.open` is allowed. A remote Studio attaches Packs the runtime's
