@@ -28,7 +28,7 @@ import { packsCacheDir, registryFile } from "./packs/platform-dirs.ts";
 import { PackRegistry } from "./packs/registry.ts";
 import { locateTools } from "./packs/tools.ts";
 
-export const RUNTIME_VERSION = "0.3.1";
+export const RUNTIME_VERSION = "0.4.0";
 
 export interface Runtime {
   readonly app: FastifyInstance;
