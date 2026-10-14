@@ -57,7 +57,12 @@ export async function buildRuntime(
   config: RuntimeConfig,
   options: { readonly logger?: boolean } = {},
 ): Promise<Runtime> {
-  const app = Fastify({ logger: options.logger ?? false });
+  const app = Fastify({
+    logger: options.logger ?? false,
+    // Closing drops every connection, a page's half-streamed video included;
+    // left alone, one of those holds `close` until its keep-alive runs out.
+    forceCloseConnections: true,
+  });
   const log = (message: string): void => {
     app.log.warn(message);
   };

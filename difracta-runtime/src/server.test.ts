@@ -1,5 +1,6 @@
 import { settings } from "@difracta/core";
 import { builtInCatalog } from "@difracta/visuals";
+import type { FastifyInstance } from "fastify";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -12,7 +13,10 @@ let dir: string;
 const runtimes: Runtime[] = [];
 const route = settings.runtime.fontsPath;
 
-async function runtimeWith(config: Partial<RuntimeConfig>): Promise<Runtime> {
+async function runtimeWith(
+  config: Partial<RuntimeConfig>,
+  routes?: (app: FastifyInstance) => void,
+): Promise<Runtime> {
   const runtime = await buildRuntime({
     host: "127.0.0.1",
     port: 0,
@@ -32,12 +36,13 @@ async function runtimeWith(config: Partial<RuntimeConfig>): Promise<Runtime> {
     ...config,
   });
   runtimes.push(runtime);
+  routes?.(runtime.app);
   await runtime.app.ready();
   return runtime;
 }
 
 beforeEach(async () => {
-  dir = await mkdtemp(path.join(tmpdir(), "difracta-fonts-"));
+  dir = await mkdtemp(path.join(tmpdir(), "difracta-server-"));
 });
 
 afterEach(async () => {
@@ -89,5 +94,27 @@ describe("the Bundled Fonts' route", () => {
     expect(
       (await app.inject({ url: `${route}/../secret.txt` })).statusCode,
     ).toBe(404);
+  });
+});
+
+describe("closing", () => {
+  it("closes at once while a page is still reading a response", async () => {
+    const runtime = await runtimeWith(
+      {
+        packsFile: path.join(dir, "packs.json"),
+        packsCacheDir: path.join(dir, "cache"),
+      },
+      (app) =>
+        // Headers and a first byte, then nothing: a video half streamed.
+        app.get("/held", (_request, reply) => {
+          reply.hijack();
+          reply.raw.writeHead(200);
+          reply.raw.write("x");
+        }),
+    );
+    const response = await fetch(`${await runtime.listen()}/held`);
+    expect(response.status).toBe(200);
+    await runtime.close();
+    await expect(response.text()).rejects.toThrow();
   });
 });
