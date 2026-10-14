@@ -1,3 +1,5 @@
+import type { DragLocationHistory } from "@atlaskit/pragmatic-drag-and-drop/types";
+
 /**
  * What a dragged row carries: its list's kind, its id and list, and its
  * own variant within the kind (a Layer's kind), which a list or a row
@@ -28,4 +30,17 @@ export function takesVariant(
   variant: unknown,
 ): boolean {
   return variants === undefined || variants.includes(asVariant(variant) ?? "");
+}
+
+/**
+ * Whether the pointer is over the dragged row itself, or over the rows an
+ * open Group holds under it. A drop there moves nothing.
+ */
+export function overSource(
+  source: { readonly element: Element },
+  location: DragLocationHistory,
+): boolean {
+  return location.current.dropTargets.some(
+    (target) => target.element === source.element,
+  );
 }

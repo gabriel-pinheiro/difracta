@@ -23,7 +23,7 @@ import {
 
 import { cn } from "@/lib/utils";
 
-import { dragData, takesVariant } from "./sortable-data";
+import { dragData, overSource, takesVariant } from "./sortable-data";
 
 interface SortableContext {
   readonly kind: string;
@@ -84,6 +84,7 @@ export function SortableList({
     const stopMonitoring = monitorForElements({
       canMonitor: ({ source }) => source.data.kind === kind,
       onDrop: ({ source, location }) => {
+        if (overSource(source, location)) return;
         const target = location.current.dropTargets[0];
         if (target === undefined) return;
         // Drops inside a row are the row's own business.
@@ -231,12 +232,16 @@ export function SortableItem({
       }),
       dropTargetForElements({
         element,
+        // The dragged row takes its own drag, so letting go over it is not a
+        // drop on the Group or Scene whose wrapper holds it.
         canDrop: ({ source }) =>
-          source.data.id !== id &&
-          (acceptsBeside(source.data) || acceptsInside(source.data)),
+          source.element === element ||
+          (source.data.id !== id &&
+            (acceptsBeside(source.data) || acceptsInside(source.data))),
         getData: ({ input, element: self, source }) => {
           const sameKind = acceptsBeside(source.data);
           const data = { kind, id, listId, variant };
+          if (source.element === self) return data;
           // The row is the first child; an open Group's wrapper also holds
           // its children's rows, which must not count as the row.
           const row = self.firstElementChild ?? self;
@@ -260,9 +265,10 @@ export function SortableItem({
           });
         },
         // Every row up the chain hears the drag; only the innermost shows it.
-        onDrag: ({ self, location }) =>
+        onDrag: ({ self, source, location }) =>
           setEdge(
-            location.current.dropTargets[0]?.element !== element
+            overSource(source, location) ||
+              location.current.dropTargets[0]?.element !== element
               ? null
               : self.data.inside === true
                 ? "inside"
@@ -273,6 +279,7 @@ export function SortableItem({
           setEdge(null);
           // Every row up the chain gets the drop (a Scene row wraps its
           // Layers); only the innermost one takes it.
+          if (overSource(source, location)) return;
           if (location.current.dropTargets[0]?.element !== element) return;
           const sourceId = source.data.id;
           if (self.data.inside === true && typeof sourceId === "string")
