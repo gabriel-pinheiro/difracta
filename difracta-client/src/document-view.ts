@@ -13,6 +13,20 @@ import {
 } from "@difracta/protocol";
 
 import { Signal, type ReadonlySignal } from "./signal.ts";
+import type { UnreadablePart } from "./snapshot-reading.ts";
+
+/** What this client left out of a snapshot it read, and whether it could read it at all. */
+export interface SnapshotReading {
+  /**
+   * Tables (`surfaces`) and live sections (`live/packs`) the runtime sent
+   * that this client could not read; each holds its empty value.
+   */
+  readonly unreadable: readonly UnreadablePart[];
+  /** Why the last snapshot could not be read at all; the view then holds none. */
+  readonly failure?: string;
+}
+
+const READ_IN_FULL: SnapshotReading = { unreadable: [] };
 
 /** Root segment under which the live state is addressed in paths. */
 export const LIVE_ROOT = "live";
@@ -23,6 +37,11 @@ export const LIVE_ROOT = "live";
  * when a change touches it, so a control bound to `["outputs", id, "name"]`
  * re-renders for that value alone. Live values sit under the `live` root:
  * `["live", "outputs", id, "sessions"]`.
+ *
+ * A runtime built from other code than this client still replicates: the
+ * snapshot is read a table at a time, what did not read is named in
+ * `reading`, and later patches into it or into tables this client does not
+ * know are dropped.
  */
 export class DocumentView {
   readonly documentId: string;
@@ -31,6 +50,9 @@ export class DocumentView {
   readonly document: Signal<Document | undefined>;
   readonly liveState: Signal<LiveState>;
   readonly revision: Signal<number>;
+  readonly reading = new Signal<SnapshotReading>(READ_IN_FULL);
+  #skipped: ReadonlySet<string> = new Set();
+  #liveSkipped: ReadonlySet<string> = new Set();
   readonly #pathListeners = new Map<string, Set<() => void>>();
   readonly #eventListeners = new Set<(address: string) => void>();
 
@@ -98,7 +120,17 @@ export class DocumentView {
     document: Document,
     revision: number,
     live: LiveState = EMPTY_LIVE_STATE,
+    left: {
+      readonly reading?: SnapshotReading;
+      /** Tables whose patches are dropped. */
+      readonly skipped?: ReadonlySet<string>;
+      /** Live sections whose patches are dropped. */
+      readonly liveSkipped?: ReadonlySet<string>;
+    } = {},
   ): void {
+    this.#skipped = left.skipped ?? new Set();
+    this.#liveSkipped = left.liveSkipped ?? new Set();
+    this.reading.set(left.reading ?? READ_IN_FULL);
     this.document.set(document);
     this.liveState.set(live);
     this.revision.set(revision);
@@ -107,25 +139,44 @@ export class DocumentView {
     }
   }
 
-  /** Returns false on a revision gap; the caller must resubscribe. */
+  /**
+   * Returns false on a revision gap; the caller must resubscribe. A view
+   * whose snapshot could not be read ignores deltas instead: subscribing
+   * again would only send the same snapshot.
+   */
   applyDelta(
     patches: readonly Patch[],
     fromRevision: number,
     revision: number,
   ): boolean {
+    if (this.reading.get().failure !== undefined) return true;
     const current = this.document.get();
     if (current === undefined || fromRevision !== this.revision.get())
       return false;
-    this.document.set(applyPatches(current, patches));
+    const kept = this.#keep(patches, this.#skipped);
+    this.document.set(applyPatches(current, kept));
     this.revision.set(revision);
-    this.#notify(patches.map((patch) => patch.path));
+    this.#notify(kept.map((patch) => patch.path));
     return true;
   }
 
   /** Live patches are relative to the live root and carry no revision. */
   applyLive(patches: readonly Patch[]): void {
-    this.liveState.set(applyPatches(this.liveState.get(), patches));
-    this.#notify(patches.map((patch) => [LIVE_ROOT, ...patch.path]));
+    const kept = this.#keep(patches, this.#liveSkipped);
+    this.liveState.set(applyPatches(this.liveState.get(), kept));
+    this.#notify(kept.map((patch) => [LIVE_ROOT, ...patch.path]));
+  }
+
+  /** @internal The runtime sent a snapshot this client could not read: no document until the next one. */
+  refuseSnapshot(failure: string): void {
+    this.reading.set({ unreadable: [], failure });
+    this.document.set(undefined);
+  }
+
+  #keep(patches: readonly Patch[], skipped: ReadonlySet<string>): Patch[] {
+    return skipped.size === 0
+      ? [...patches]
+      : patches.filter((patch) => !skipped.has(patch.path[0] ?? ""));
   }
 
   #notify(changed: readonly PatchPath[]): void {

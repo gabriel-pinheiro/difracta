@@ -5,3 +5,4 @@ export * from "./runtime-origin.ts";
 export * from "./screen-share/sharing.ts";
 export * from "./screen-share/viewing.ts";
 export * from "./signal.ts";
+export * from "./snapshot-reading.ts";

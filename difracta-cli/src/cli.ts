@@ -1,4 +1,8 @@
-import type { DifractaClient, DocumentView } from "@difracta/client";
+import {
+  describeReading,
+  type DifractaClient,
+  type DocumentView,
+} from "@difracta/client";
 import { settings, type Document } from "@difracta/core";
 import type { DocumentSummary } from "@difracta/protocol";
 import type { Command } from "commander";
@@ -81,20 +85,43 @@ export class Cli {
     });
   }
 
-  /** Subscribes with live state and resolves once the snapshot has landed. */
+  /**
+   * Subscribes with live state and resolves once the snapshot has landed.
+   * Fails when the runtime sends one this CLI cannot read, or none in time;
+   * a table it could read only in part is named on stderr.
+   */
   replica(client: DifractaClient, documentId: string): Promise<Replica> {
     const view = client.openDocument(documentId, { live: true });
-    return new Promise((resolve) => {
-      const current = view.get();
-      if (current !== undefined) {
-        resolve({ document: current, view });
-        return;
-      }
-      const unsubscribe = view.document.subscribe((document) => {
-        if (document === undefined) return;
-        unsubscribe();
-        resolve({ document, view });
-      });
+    return new Promise((resolve, reject) => {
+      const stops: (() => void)[] = [];
+      const settle = (): void => {
+        const { failure } = view.reading.get();
+        const document = view.get();
+        if (failure !== undefined) {
+          for (const stop of stops) stop();
+          reject(new Error(describeReading(view.reading.get()) ?? failure));
+        } else if (document !== undefined) {
+          for (const stop of stops) stop();
+          const warning = describeReading(view.reading.get());
+          if (warning !== undefined && !this.options().json)
+            console.error(`warning: ${warning}`);
+          resolve({ document, view });
+        }
+      };
+      const timer = setTimeout(() => {
+        for (const stop of stops) stop();
+        reject(
+          new Error(
+            `The runtime sent no Installation within ${String(settings.cli.snapshotTimeoutMs / 1000)} s.`,
+          ),
+        );
+      }, settings.cli.snapshotTimeoutMs);
+      stops.push(
+        () => clearTimeout(timer),
+        view.document.subscribe(settle),
+        view.reading.subscribe(settle),
+      );
+      settle();
     });
   }
 }

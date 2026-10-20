@@ -1,4 +1,3 @@
-import { DocumentSchema } from "@difracta/core";
 import { z } from "zod";
 
 import {
@@ -6,11 +5,7 @@ import {
   DisplayHostReportSchema,
   DisplayOutcomeSchema,
 } from "./display-hosts.ts";
-import {
-  LiveRequestSchema,
-  LiveStateSchema,
-  OutputTelemetrySchema,
-} from "./live.ts";
+import { LiveRequestSchema, OutputTelemetrySchema } from "./live.ts";
 import {
   SHARE_CLIENT_MESSAGES,
   SHARE_SERVER_MESSAGES,
@@ -226,8 +221,13 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
       type: z.literal("snapshot"),
       documentId: DocumentIdSchema,
       revision: z.number().int().nonnegative(),
-      document: DocumentSchema,
-      live: LiveStateSchema.optional(),
+      /**
+       * A `Document` and a `LiveState`, read by the client one table and one
+       * section at a time (`@difracta/client`'s `snapshot-reading.ts`), so a
+       * runtime built from other code than the client still reads.
+       */
+      document: z.unknown(),
+      live: z.unknown().optional(),
     })
     .strict(),
   /** Live-state patches, relative to the live root; not revisioned. */

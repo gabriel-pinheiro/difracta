@@ -322,6 +322,8 @@ export const settings = {
     connectTimeoutMs: 3_000,
     /** How long a reply waits for its own change to reach the CLI's replica, to name what a command created. */
     replicaCatchUpTimeoutMs: 1_000,
+    /** How long the CLI waits for the open Installation's snapshot before it gives up. */
+    snapshotTimeoutMs: 5_000,
   },
   desktop: {
     /** How long Desktop waits for the runtime it started to answer `/health`. */

@@ -27,6 +27,7 @@ export function SharePage(props: SharePageProps) {
   const ended = useSignal(sharer.ended);
   const slots = useSignal(installation.slots);
   const open = useSignal(installation.installation);
+  const problem = useSignal(installation.problem);
   const phase = useSignal(client.phase);
   const [adding, setAdding] = useState(false);
   const starting = adding || shares.length === 0;
@@ -46,6 +47,16 @@ export function SharePage(props: SharePageProps) {
           </p>
         )}
       </header>
+
+      {problem !== null && (
+        <p
+          role="alert"
+          className="rounded-md border border-destructive/50 px-3 py-2 text-xs text-destructive"
+          data-testid="share-problem"
+        >
+          {problem}
+        </p>
+      )}
 
       {ended.map((entry) => (
         <p
@@ -77,7 +88,7 @@ export function SharePage(props: SharePageProps) {
           onAdd={() => setAdding(true)}
         />
       )}
-      {starting && open !== null && (
+      {starting && open !== null && problem === null && (
         <StartFlow
           {...props}
           slots={slots}

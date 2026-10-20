@@ -1,4 +1,4 @@
-import { settings, type Document } from "@difracta/core";
+import { settings } from "@difracta/core";
 import {
   ClientMessageSchema,
   PROTOCOL_VERSION,
@@ -19,6 +19,7 @@ import { OfferedDisplays } from "./offered-displays.ts";
 import { Sharing } from "./screen-share/sharing.ts";
 import { Viewing } from "./screen-share/viewing.ts";
 import { Signal } from "./signal.ts";
+import { receiveSnapshot } from "./snapshot-reading.ts";
 
 export type ConnectionPhase =
   "connecting" | "connected" | "reconnecting" | "closed";
@@ -301,15 +302,13 @@ export class DifractaClient {
           if (documentId !== parsed.summary?.id) this.#views.delete(documentId);
         }
         break;
-      case "snapshot":
-        this.#views
-          .get(parsed.documentId)
-          ?.replaceSnapshot(
-            parsed.document as Document,
-            parsed.revision,
-            parsed.live,
-          );
+      case "snapshot": {
+        const view = this.#views.get(parsed.documentId);
+        const problem =
+          view === undefined ? undefined : receiveSnapshot(view, parsed);
+        if (problem !== undefined) this.lastError.set(problem);
         break;
+      }
       case "delta": {
         const view = this.#views.get(parsed.documentId);
         if (

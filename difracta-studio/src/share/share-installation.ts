@@ -6,6 +6,7 @@ import {
 import { generateId, type Share, type Table } from "@difracta/core";
 
 import { shareSlots, type ShareSlot } from "@/entities/share/share-slots";
+import { readingProblem } from "./share-reading";
 import type { Sharer } from "./sharer";
 
 /** The open Installation, as far as the share window names it. */
@@ -23,6 +24,8 @@ export interface OpenInstallation {
 export class ShareInstallation {
   readonly installation = new Signal<OpenInstallation | null>(null);
   readonly slots = new Signal<readonly ShareSlot[]>([]);
+  /** Why the Screen Shares cannot be shown, or null (`readingProblem`). */
+  readonly problem = new Signal<string | null>(null);
   readonly #client: DifractaClient;
   readonly #sharer: Sharer;
   readonly #unsubscribe: (() => void)[];
@@ -90,6 +93,7 @@ export class ShareInstallation {
           : [
               this.#view.subscribePath(["shares"], read),
               this.#view.subscribePath(["live", "shares"], read),
+              this.#view.reading.subscribe(read),
             ];
     }
     if (before?.id !== open?.id || before?.name !== open?.name)
@@ -99,6 +103,7 @@ export class ShareInstallation {
 
   #read(): void {
     const view = this.#view;
+    this.problem.set(readingProblem(view?.reading.get()));
     const slots = shareSlots(
       view?.valueAt<Table<Share>>(["shares"]),
       view?.liveState.get().shares ?? {},
