@@ -48,6 +48,7 @@ const tables = {
     beam: { id: "beam", outputId: "b" },
     stray: { id: "stray", outputId: "gone" },
   },
+  slices: { center: { id: "center", outputId: "b" } },
   layers: {
     glow: { id: "glow", kind: "visual", target: "window", sceneId: "intro" },
     lost: { id: "lost", kind: "visual", target: null, sceneId: "intro" },
@@ -146,6 +147,17 @@ describe("resolvePreview", () => {
         picked: none,
       }),
     ).toEqual(shows("a"));
+  });
+
+  it("follows a Slice to its Output, in Output framing", () => {
+    expect(
+      resolvePreview({
+        document: tables,
+        choice: follow("a", "surface", "wall"),
+        selection: { kind: "slice", id: "center" },
+        picked: none,
+      }),
+    ).toEqual(shows("b"));
   });
 
   it("follows a Surface, and what belongs to one, to its only Output", () => {

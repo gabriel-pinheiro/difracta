@@ -123,11 +123,12 @@ export class PreviewCanvas {
 
   #create(): Compositor {
     try {
-      const compositor = createCompositor(
-        this.#canvas,
-        builtInCatalog,
-        this.#options,
-      );
+      // The Preview shows the stage: an Output with Slices is drawn as its
+      // Projection Frame, not packed as its processor receives it.
+      const compositor = createCompositor(this.#canvas, builtInCatalog, {
+        ...this.#options,
+        projectionFrame: true,
+      });
       compositor.setPacks(this.#packs);
       return compositor;
     } catch (error: unknown) {

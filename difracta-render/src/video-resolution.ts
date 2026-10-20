@@ -61,7 +61,10 @@ function larger(a: Rendition, b: Rendition): Rendition {
  * more than. Undefined when the Layer is not drawn here.
  */
 export function targetVideoRows(
-  document: Pick<Document, "layers" | "surfaces" | "regions">,
+  document: Pick<
+    Document,
+    "layers" | "surfaces" | "regions" | "outputs" | "slices"
+  >,
   layerId: string,
   aspect: number,
   frame: VideoFrame,
@@ -70,7 +73,7 @@ export function targetVideoRows(
   if (layer?.kind !== "visual") return undefined;
   const target = resolveTarget(document, layer.target);
   if (target === undefined) return undefined;
-  const mapping = enabledCorners(target.surface, frame.outputId);
+  const mapping = enabledCorners(document, target.surface, frame.outputId);
   if (mapping === undefined) return undefined;
   const corners =
     target.region === undefined

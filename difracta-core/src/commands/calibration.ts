@@ -24,7 +24,8 @@ type Payload = z.infer<typeof CalibrationPayload>;
 /**
  * Enters or changes Calibration Mode with the whole state at once: the
  * Surface, Mask, Path or Region being aligned and the one Output showing
- * it; or, with no Surface, the Output alone or one of its Output Masks; the
+ * it; or, with no Surface, the Output alone, one of its Output Masks or
+ * its Slice test card with one Slice selected; the
  * highlighted corner or point; the view.
  * Performance kind: replicated to the Output at once, never in undo history.
  */
@@ -32,7 +33,7 @@ export const calibrationSet = defineCommand({
   name: "calibration.set",
   kind: "performance",
   description:
-    "Show a Surface, or a Mask, Path or Region of it, as a calibration pattern on one of its Outputs; or every Surface of an Output, alone or under one of its Output Masks.",
+    "Show a Surface, or a Mask, Path or Region of it, as a calibration pattern on one of its Outputs; or every Surface of an Output, alone or under one of its Output Masks; or, with sliceId, the Output's Slice test card.",
   payload: CalibrationPayload,
   apply({ document, payload }) {
     return payload.surfaceId === null
@@ -57,7 +58,17 @@ function applyOutput(document: Document, payload: Payload): CommandOutcome {
     return rejected(
       "Calibrating an Output aligns no Mask, Path, Region or corner; name a Surface for those.",
     );
-  if (payload.outputMaskId !== null) {
+  if (payload.sliceId !== null) {
+    const slice = document.slices[payload.sliceId];
+    if (slice?.outputId !== output.id)
+      return rejected(
+        `Slice “${payload.sliceId}” is not a Slice of “${output.name}”.`,
+      );
+    if (payload.outputMaskId !== null || payload.point !== null)
+      return rejected(
+        "The Slice test card aligns Slices alone, with no Output Mask or point.",
+      );
+  } else if (payload.outputMaskId !== null) {
     const mask = document.outputMasks[payload.outputMaskId];
     if (mask?.outputId !== output.id)
       return rejected(
@@ -83,6 +94,10 @@ function applySurface(
   if (payload.outputMaskId !== null)
     return rejected(
       "An Output Mask is calibrated on its Output alone, with no Surface.",
+    );
+  if (payload.sliceId !== null)
+    return rejected(
+      "The Slice test card shows on its Output alone, with no Surface.",
     );
   const picked = pickOutput(document, surface, payload.outputId);
   if (!picked.ok) return rejected(picked.error);
@@ -149,6 +164,7 @@ function sameCalibration(a: Calibration, b: Calibration): boolean {
     a.surfaceId === b.surfaceId &&
     a.outputId === b.outputId &&
     a.outputMaskId === b.outputMaskId &&
+    a.sliceId === b.sliceId &&
     a.maskId === b.maskId &&
     a.pathId === b.pathId &&
     a.regionId === b.regionId &&

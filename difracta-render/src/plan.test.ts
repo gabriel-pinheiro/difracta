@@ -178,6 +178,7 @@ describe("planFrame", () => {
       blackout: false,
       draws: [],
       outputMaskOutline: undefined,
+      sliceCard: [],
       layers: [],
       filters: [],
       outputMasks: [
@@ -497,6 +498,7 @@ describe("planFrame", () => {
       blackout: true,
       draws: [],
       outputMaskOutline: undefined,
+      sliceCard: [],
       layers: [],
       filters: [],
       outputMasks: [],

@@ -1,8 +1,10 @@
 import type { DocumentView } from "@difracta/client";
 import {
   isEnabledOn,
+  isSliced,
   orderedEntries,
   type Output,
+  type Slice,
   type Surface,
   type Table,
 } from "@difracta/core";
@@ -19,6 +21,7 @@ import { useCommand, useDocumentPath } from "@/lib/client";
 import { pickMappingOutput } from "@/lib/mapping-output";
 import { useSelection } from "@/selection/selection";
 
+import { DisplaySizeField } from "./display-size-field";
 import { OpenOutputDialog } from "./open-output-dialog";
 import { outputPageUrl } from "./output-url";
 
@@ -34,6 +37,7 @@ export function OutputInspector({
   const [opening, setOpening] = useState(false);
   const output = useDocumentPath<Output>(view, ["outputs", id]);
   const surfaces = useDocumentPath<Table<Surface>>(view, ["surfaces"]) ?? {};
+  const slices = useDocumentPath<Table<Slice>>(view, ["slices"]) ?? {};
 
   // The Output was removed (here or elsewhere): fall back to the Installation.
   useEffect(() => {
@@ -75,14 +79,18 @@ export function OutputInspector({
           open={opening}
           onOpenChange={setOpening}
         />
-        <SwitchField
-          label="Limit pixel ratio"
-          description="Render at 1× device pixel ratio. Improves performance on weak GPUs such as TVs."
-          checked={output.limitPixelRatio}
-          onCheckedChange={(limitPixelRatio) =>
-            void command("output.update", { outputId: id, limitPixelRatio })
-          }
-        />
+        <DisplaySizeField view={view} output={output} />
+        {/* Slices must land on device pixels, so a sliced Output ignores it. */}
+        {!isSliced(slices, id) && (
+          <SwitchField
+            label="Limit pixel ratio"
+            description="Render at 1× device pixel ratio. Improves performance on weak GPUs such as TVs."
+            checked={output.limitPixelRatio}
+            onCheckedChange={(limitPixelRatio) =>
+              void command("output.update", { outputId: id, limitPixelRatio })
+            }
+          />
+        )}
         <div className="grid grid-cols-[minmax(0,1fr)] gap-1">
           <span className="text-xs text-muted-foreground">Surfaces</span>
           {mapped.length === 0 ? (

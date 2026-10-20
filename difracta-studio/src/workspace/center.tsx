@@ -11,6 +11,8 @@ import { cn } from "@/lib/utils";
 import { useBrowser } from "@/library/browser-state";
 import { LibraryView } from "@/library/library-view";
 import { PreviewTab } from "@/preview/preview-tab";
+import { SliceEditor } from "@/entities/slice/slice-editor";
+import { useSliceEditor } from "@/entities/slice/slice-editor-state";
 
 import { OutputsTab } from "./outputs-tab";
 
@@ -31,20 +33,27 @@ const isShare = (candidate: unknown): candidate is number =>
  * except while it picks something the Preview shows at once, a Layer's
  * Visual or Filter or a media Address, and the Preview is the tab: then it
  * sits under the Preview, which stays as it is, so every candidate shows
- * above. Browsing a Pack previews nothing, so it takes the whole column.
+ * above. Browsing a Pack previews nothing, so it takes the whole column,
+ * and so does an Output's Slice editor, which also takes the Library's.
  * The Preview stays mounted while hidden, where it renders nothing, so
  * coming back to it starts no Visual again.
  */
 export function Center({ view }: { readonly view: DocumentView }) {
   const { binding } = useBrowser();
+  const slicing = useSliceEditor().outputId;
   const [tab, setTab] = useStoredState<CenterTab>(TAB_KEY, "preview", isTab);
   const [share, setShare] = useStoredState(SPLIT_KEY, 50, isShare);
   const library =
-    binding === undefined ? undefined : (
+    slicing !== undefined ? (
+      <SliceEditor view={view} outputId={slicing} />
+    ) : binding === undefined ? undefined : (
       <LibraryView view={view} binding={binding} />
     );
   const split =
-    library !== undefined && binding?.kind !== "pack" && tab === "preview";
+    library !== undefined &&
+    slicing === undefined &&
+    binding?.kind !== "pack" &&
+    tab === "preview";
   const whole = library !== undefined && !split;
   return (
     <Tabs

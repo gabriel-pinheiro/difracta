@@ -128,6 +128,21 @@ Working from a shell
              output-mask.update, .rename, .remove and .point.* follow the
              Mask ones with "outputMaskId". entity.move reorders both.
 
+  Slices     For an LED processor whose input packs panels wherever they
+             fit. A Slice is a rectangle of an Output's Display Frame (what
+             the processor receives) and its place in the Projection Frame,
+             which is then laid out like the stage: everything renders there
+             and each Slice is copied back to its rectangle. Set the Display
+             size first: output.update '{"outputId":"LED","displaySize":
+             {"width":1920,"height":1080}}'. slice.create '{"outputId":"LED",
+             "name":"Panel"}' covers the whole input; slice.split '{"sliceId":
+             "Panel","columns":3,"rows":1}' cuts it in three; slice.update
+             takes rect (Display pixels), position (Projection pixels),
+             rotation (0, 90, 180, 270) and scale; slice.nudge moves by
+             pixels. surface.follow '{"surfaceId":"Logo","follow":"Panel 2"}'
+             puts a Surface on a Slice, "frame" on the whole Projection
+             Frame, null back on its own corners.
+
   Addresses  layer/<id|name>/enabled | opacity | blend (Visual Layers)
              layer/<id|name>/mix (Filter Layers)
              layer/<id|name>/param/<key>      layer/<id|name>/cue/<key>

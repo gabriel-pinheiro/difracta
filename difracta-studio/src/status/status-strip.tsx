@@ -5,6 +5,7 @@ import {
   type Mask,
   type Output,
   type OutputMask,
+  type Slice,
   type Path,
   type Surface,
   type Table,
@@ -133,6 +134,7 @@ function CalibrationStatus({ view }: { readonly view: DocumentView }) {
   const paths = useDocumentPath<Table<Path>>(view, ["paths"]);
   const outputs = useDocumentPath<Table<Output>>(view, ["outputs"]);
   const outputMasks = useDocumentPath<Table<OutputMask>>(view, ["outputMasks"]);
+  const slices = useDocumentPath<Table<Slice>>(view, ["slices"]);
   if (calibration === null) return null;
   const output = outputs?.[calibration.outputId]?.name;
   if (output === undefined) return null;
@@ -142,6 +144,7 @@ function CalibrationStatus({ view }: { readonly view: DocumentView }) {
     masks,
     paths,
     outputMasks,
+    slices,
   });
   if (subject === undefined) return null;
   return (
@@ -160,8 +163,8 @@ function CalibrationStatus({ view }: { readonly view: DocumentView }) {
 }
 
 /**
- * What the calibration pattern is of: a Mask, Path or Surface by name, or
- * an Output Mask; null when the Output itself is calibrated; undefined when
+ * What the calibration pattern is of: a Mask, Path or Surface by name, an
+ * Output Mask, or the Slice test card; null when the Output itself is calibrated; undefined when
  * the entry names something gone.
  */
 function calibratedName(
@@ -171,8 +174,15 @@ function calibratedName(
     readonly masks: Table<Mask> | undefined;
     readonly paths: Table<Path> | undefined;
     readonly outputMasks: Table<OutputMask> | undefined;
+    readonly slices: Table<Slice> | undefined;
   },
 ): string | null | undefined {
+  if (calibration.surfaceId === null && calibration.sliceId !== null) {
+    const slice = tables.slices?.[calibration.sliceId];
+    return slice?.outputId === calibration.outputId
+      ? `Slices (${slice.name})`
+      : undefined;
+  }
   if (calibration.surfaceId === null) {
     if (calibration.outputMaskId === null) return null;
     const outputMask = tables.outputMasks?.[calibration.outputMaskId];

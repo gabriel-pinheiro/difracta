@@ -67,12 +67,15 @@ export class FilterChain {
     this.resume();
   }
 
-  /** Copies the active target to the screen and ends the filtered frame. */
-  present(): void {
+  /**
+   * Copies the active target to the frame, the screen or (on an Output with
+   * Slices) the offscreen Projection Frame, and ends the filtered frame.
+   */
+  present(frame: WebGLFramebuffer | null = null): void {
     const target = this.#targets[this.#active];
     if (target === undefined) return;
     const gl = this.#gl;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, frame);
     gl.viewport(0, 0, this.#width, this.#height);
     this.#programs.copy(target.texture);
   }

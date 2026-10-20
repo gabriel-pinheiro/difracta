@@ -4,8 +4,12 @@ import {
   enabledCorners,
   isEnabledOn,
   orderedEntries,
+  outputSlices,
+  placedRect,
+  rectQuad,
   tableEntries,
   type Output,
+  type Slice,
   type Surface,
   type Table,
 } from "@difracta/core";
@@ -25,7 +29,10 @@ import { useCommand, useDocumentPath } from "@/lib/client";
 import { pickMappingOutput, useMappingOutput } from "@/lib/mapping-output";
 
 import { useOutputAspect } from "@/entities/output/output-aspect";
+import { pixelFrame } from "@/entities/output/output-frame";
 
+import { snapCorner } from "./corner-snap";
+import { MappingPosition } from "./mapping-position";
 import { QuadEditor, quadPoints } from "./quad-editor";
 
 /**
@@ -138,7 +145,12 @@ export function SurfaceOutputs({
   );
 }
 
-/** Corner editing for one Output's mapping; other Surfaces on that Output give context. */
+/**
+ * Corner editing for one Output's mapping; other Surfaces on that Output
+ * give context. On an Output with Slices the mapping may follow one or the
+ * whole frame instead, with no corners to drag; free corners snap to the
+ * Slices' edges, Alt held turning that off.
+ */
 function Mapping({
   view,
   surface,
@@ -150,6 +162,8 @@ function Mapping({
 }) {
   const command = useCommand(view);
   const surfaces = useDocumentPath<Table<Surface>>(view, ["surfaces"]) ?? {};
+  const outputs = useDocumentPath<Table<Output>>(view, ["outputs"]) ?? {};
+  const slices = useDocumentPath<Table<Slice>>(view, ["slices"]) ?? {};
   const aspect = useOutputAspect(view, outputId);
   const { calibration } = useCalibration(view);
   // Open on the corner the Output already highlights, if it does.
@@ -157,17 +171,59 @@ function Mapping({
     const corner = calibrationFor(calibration, surface.id, null)?.corner;
     return corner == null ? 0 : CORNERS.indexOf(corner);
   });
-  const corners = enabledCorners(surface, outputId);
-  if (corners === undefined) return null;
+  const corners = enabledCorners({ outputs, slices }, surface, outputId);
+  const mapping = surface.mappings[outputId];
+  if (corners === undefined || mapping === undefined) return null;
+  const output = outputs[outputId];
+  const own = outputSlices(slices, outputId);
+  const frame = pixelFrame(output, slices);
+  const sliceQuads =
+    frame === undefined
+      ? []
+      : own.map((slice) => rectQuad(placedRect(slice), frame));
+  const calibrate = (
+    <CalibrationControls
+      view={view}
+      surfaceId={surface.id}
+      maskId={null}
+      corner={CORNERS[selected] ?? "topLeft"}
+      point={null}
+      outputPicker={false}
+    />
+  );
+  const position =
+    own.length === 0 && mapping.follow === undefined ? null : (
+      <MappingPosition
+        view={view}
+        surfaceId={surface.id}
+        outputId={outputId}
+        mapping={mapping}
+        slices={own}
+      />
+    );
+  if (mapping.follow !== undefined)
+    return (
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
+        {position}
+        {calibrate}
+      </div>
+    );
   const others = tableEntries(surfaces).flatMap((other) => {
-    const quad = enabledCorners(other, outputId);
+    const quad = enabledCorners({ outputs, slices }, other, outputId);
     return other.id !== surface.id && quad !== undefined
       ? [{ name: other.name, points: quadPoints(quad) }]
       : [];
   });
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-1">
+      {position}
       <QuadEditor
+        backdrop={own.map((slice, index) => ({
+          name: slice.name,
+          points: quadPoints(sliceQuads[index] ?? corners),
+        }))}
+        snap={(point, context) => snapCorner(point, sliceQuads, context)}
+        pixels={frame}
         corners={corners}
         others={others}
         aspect={aspect}
@@ -190,14 +246,7 @@ function Mapping({
           })
         }
       />
-      <CalibrationControls
-        view={view}
-        surfaceId={surface.id}
-        maskId={null}
-        corner={CORNERS[selected] ?? "topLeft"}
-        point={null}
-        outputPicker={false}
-      />
+      {calibrate}
     </div>
   );
 }

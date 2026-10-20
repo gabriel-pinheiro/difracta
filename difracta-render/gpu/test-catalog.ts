@@ -143,6 +143,21 @@ export const shiftRight = defineFilter({
 }`,
 });
 
+/** Smears the picture right by up to a tenth of the frame's width: a blur that only reaches one way. */
+export const smearRight = defineFilter({
+  id: "test-smear-right",
+  name: "Smear right",
+  description:
+    "Each pixel takes the brightest of the tenth of the frame to its left.",
+  parameters: {},
+  fragment: `vec4 filter_image(vec2 uv) {
+  vec4 color = sample_input(uv);
+  for (int i = 1; i <= 10; i++)
+    color = max(color, sample_input(uv - vec2(0.01 * float(i), 0.0)));
+  return color;
+}`,
+});
+
 export const testCatalog = new Catalog({
   visuals: [
     ...builtInCatalog.visuals(),
@@ -158,6 +173,7 @@ export const testCatalog = new Catalog({
     halve,
     mirrorUp,
     shiftRight,
+    smearRight,
   ],
   fonts: builtInCatalog.fonts(),
 });

@@ -49,6 +49,7 @@ export function OutputCalibrationControls({
             surfaceId: null,
             outputId,
             outputMaskId,
+            sliceId: null,
             maskId: null,
             pathId: null,
             regionId: null,

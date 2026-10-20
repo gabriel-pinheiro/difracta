@@ -185,6 +185,21 @@ export const settings = {
     /** A new Output Mask is the Projection Frame minus this fraction on each side. */
     defaultInset: 0.25,
   },
+  slices: {
+    /** A Slice's scale bounds; scale is kept to a thousandth. */
+    minScale: 0.25,
+    maxScale: 8,
+    /** The most columns, and the most rows, one split makes. */
+    maxSplit: 16,
+    /**
+     * The Slice test card's checker cell, in Display pixels, counted from
+     * each Slice's Display top-left so cells line up with LED modules of
+     * this size or a multiple of it.
+     */
+    testCardCell: 64,
+    /** The Display Frame size Studio assumes when no Display or Output Session reports one. */
+    fallbackDisplaySize: { width: 1920, height: 1080 },
+  },
   paths: {
     /** A new Path runs around the Surface this fraction in from each side. */
     defaultInset: 0.15,

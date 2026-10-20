@@ -11,6 +11,7 @@ import {
   type MaskId,
   type OutputMaskId,
   type ShareId,
+  type SliceId,
   type PathId,
   type RegionId,
   type SceneId,
@@ -58,17 +59,38 @@ export const InstallationSchema = z
   .strict();
 export type Installation = Entity<typeof InstallationSchema, InstallationId>;
 
+/** A Display Frame's size in whole pixels. */
+export const DisplaySizeSchema = z
+  .object({
+    width: z.number().int().positive(),
+    height: z.number().int().positive(),
+  })
+  .strict();
+export type DisplaySize = z.infer<typeof DisplaySizeSchema>;
+
 export const OutputSchema = z
   .object({
     id: z.string().min(1),
     name: EntityName,
     /** Render at 1× device pixel ratio; eases the load on weak GPUs such as TVs. */
     limitPixelRatio: z.boolean().default(false),
+    /**
+     * The Display Frame's pixel size: what the Display receives, such as a
+     * processor's 1920×1080 HDMI input. Studio fills it in; null until then.
+     */
+    displaySize: DisplaySizeSchema.nullable().default(null),
     /** Position among Outputs; see `order.ts`. */
     order: z.string().min(1).default(DEFAULT_ORDER_KEY),
   })
   .strict();
 export type Output = Entity<typeof OutputSchema, OutputId>;
+
+/** What a Surface Mapping follows instead of its corners: one Slice, or the whole frame. */
+export const MappingFollowSchema = z.union([
+  z.object({ slice: z.string().min(1) }).strict(),
+  z.object({ frame: z.literal(true) }).strict(),
+]);
+export type MappingFollow = z.infer<typeof MappingFollowSchema>;
 
 /** How one Surface lands in one Output's Projection Frame. */
 export const SurfaceMappingSchema = z
@@ -80,6 +102,12 @@ export const SurfaceMappingSchema = z
     enabled: z.boolean(),
     /** Where Surface Space's corners fall, in normalized Projection Frame coordinates. */
     corners: QuadSchema,
+    /**
+     * On an Output with Slices, a Slice's placed rectangle or the whole
+     * Projection Frame that Surface Space lands on instead of `corners`,
+     * which lie dormant meanwhile.
+     */
+    follow: MappingFollowSchema.optional(),
   })
   .strict();
 export type SurfaceMapping = z.infer<typeof SurfaceMappingSchema>;
@@ -208,6 +236,61 @@ export const OutputMaskSchema = z
   .strict();
 export type OutputMask = Entity<typeof OutputMaskSchema, OutputMaskId>;
 
+export const SLICE_ROTATIONS = [0, 90, 180, 270] as const;
+export const SliceRotationSchema = z.union(
+  SLICE_ROTATIONS.map((rotation) => z.literal(rotation)),
+);
+export type SliceRotation = z.infer<typeof SliceRotationSchema>;
+
+/** A rectangle in whole Display Frame pixels. */
+export const SliceRectSchema = z
+  .object({
+    x: z.number().int().min(0),
+    y: z.number().int().min(0),
+    width: z.number().int().min(1),
+    height: z.number().int().min(1),
+  })
+  .strict();
+export type SliceRect = z.infer<typeof SliceRectSchema>;
+
+/** A placed top-left in whole Projection pixels; may be negative. */
+export const SlicePositionSchema = z
+  .object({ x: z.number().int(), y: z.number().int() })
+  .strict();
+export type SlicePosition = z.infer<typeof SlicePositionSchema>;
+
+export const SliceScaleSchema = z
+  .number()
+  .min(settings.slices.minScale)
+  .max(settings.slices.maxScale);
+
+/**
+ * A rectangle of one Output's Display Frame, the picture an LED processor
+ * receives, and where that piece sits on stage in the Output's Projection
+ * Frame: `rect` in Display pixels, `position` the placed top-left in
+ * Projection pixels, `rotation` clockwise from the Display rectangle to its
+ * place, `scale` uniform. Everything renders into the Projection Frame and
+ * a last pass copies each Slice to its `rect`, in order, so where two
+ * overlap in the Display Frame (allowed while arranging, and flagged) the
+ * later wins. A rectangle is set inside the Display Frame; one left past
+ * its edge by a smaller Display size stays valid. Names are unique among
+ * the Slices of one Output.
+ */
+export const SliceSchema = z
+  .object({
+    id: z.string().min(1),
+    name: EntityName,
+    outputId: z.string().min(1),
+    rect: SliceRectSchema,
+    position: SlicePositionSchema,
+    rotation: SliceRotationSchema,
+    scale: SliceScaleSchema,
+    /** Position among the Slices of the same Output. */
+    order: z.string().min(1).default(DEFAULT_ORDER_KEY),
+  })
+  .strict();
+export type Slice = Entity<typeof SliceSchema, SliceId>;
+
 /** The smallest side a Region may have, as a fraction of Surface Space. */
 export const REGION_MIN_SIDE = 0.01;
 /** Slack under the minimum side for float noise in rounded coordinates. */
@@ -321,7 +404,7 @@ export type CalibrationView = z.infer<typeof CalibrationViewSchema>;
  * Calibration Mode: one Surface (or one of its Masks, Paths or Regions)
  * shown as a pattern on its Output instead of the dim fill; or, with no
  * Surface, one Output showing every Surface on it as a pattern, alone or
- * while one of its Output Masks is aligned. `owner` is the live session that
+ * while one of its Output Masks is aligned, or its Slice test card. `owner` is the live session that
  * entered it, so the runtime can clear it when that session goes away.
  */
 export const CalibrationSchema = z
@@ -332,6 +415,11 @@ export const CalibrationSchema = z
     outputId: z.string().min(1),
     /** Output Mask being aligned, over the Output's patterns; needs `surfaceId` null. */
     outputMaskId: z.string().min(1).nullable().default(null),
+    /**
+     * Slice selected while the Output shows its Slice test card instead of
+     * its Surfaces; needs `surfaceId` null.
+     */
+    sliceId: z.string().min(1).nullable().default(null),
     /** Mask being aligned, with its Masks applied; null aligns the quad. */
     maskId: z.string().min(1).nullable(),
     /** Path being aligned, with the Masks applied; exclusive with `maskId`. */
@@ -606,6 +694,7 @@ export const DocumentSchema = z
     masks: z.record(z.string(), MaskSchema),
     paths: z.record(z.string(), PathSchema),
     outputMasks: z.record(z.string(), OutputMaskSchema),
+    slices: z.record(z.string(), SliceSchema),
     packs: z.record(z.string(), PackAttachmentSchema),
     shares: z.record(z.string(), ShareSchema),
     scenes: z.record(z.string(), SceneSchema),
@@ -625,6 +714,7 @@ export interface Document {
   readonly masks: Table<Mask>;
   readonly paths: Table<Path>;
   readonly outputMasks: Table<OutputMask>;
+  readonly slices: Table<Slice>;
   readonly packs: Table<PackAttachment>;
   readonly shares: Table<Share>;
   readonly scenes: Table<Scene>;
@@ -643,6 +733,7 @@ export const TABLE_SCHEMAS = {
   masks: MaskSchema,
   paths: PathSchema,
   outputMasks: OutputMaskSchema,
+  slices: SliceSchema,
   packs: PackAttachmentSchema,
   shares: ShareSchema,
   scenes: SceneSchema,
@@ -661,6 +752,7 @@ export const ORDERED_TABLES = [
   "masks",
   "paths",
   "outputMasks",
+  "slices",
   "shares",
   "scenes",
   "layers",
@@ -680,6 +772,7 @@ export const PARENT_FIELDS: Partial<
   masks: ["surfaceId"],
   paths: ["surfaceId"],
   outputMasks: ["outputId"],
+  slices: ["outputId"],
   layers: ["sceneId", "parentId"],
   controllers: ["parentId"],
   macros: ["parentId"],
@@ -719,6 +812,7 @@ export function emptyDocument(name: string): Document {
     masks: {},
     paths: {},
     outputMasks: {},
+    slices: {},
     packs: {},
     shares: {},
     scenes: {},

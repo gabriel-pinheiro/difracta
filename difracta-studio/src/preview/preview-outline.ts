@@ -1,5 +1,8 @@
 import {
   enabledCorners,
+  outputSlices,
+  placedRect,
+  projectionFrame,
   regionRect,
   type Document,
   type Point,
@@ -13,8 +16,8 @@ import { framedOn, type PreviewTarget } from "./preview-target";
 
 /**
  * The selection's outline in the Preview's frame, 0..1 with y down, corners
- * clockwise from the top left: a Surface or a Region of one on the Output
- * shown, or a Region of the Surface shown flat, a Layer being shown on
+ * clockwise from the top left: a Slice of the Output shown at its place on
+ * stage, a Surface or a Region of one on the Output shown, or a Region of the Surface shown flat, a Layer being shown on
  * either. Undefined for anything else, and for a mapping too degenerate to
  * project through.
  */
@@ -23,11 +26,33 @@ export function previewOutline({
   target,
   selection,
 }: {
-  readonly document: Pick<Document, "surfaces" | "regions">;
+  readonly document: Pick<
+    Document,
+    "surfaces" | "regions" | "outputs" | "slices"
+  >;
   readonly target: PreviewTarget;
   readonly selection: Selection | undefined;
 }): readonly Point[] | undefined {
   const on = framedOn(target);
+  if (selection?.kind === "slice") {
+    const slice = document.slices[selection.id];
+    const output =
+      on.framing === "output" ? document.outputs[on.outputId] : undefined;
+    if (slice === undefined || output === undefined) return undefined;
+    if (slice.outputId !== output.id) return undefined;
+    const frame = projectionFrame(
+      output,
+      outputSlices(document.slices, output.id),
+    );
+    if (frame === undefined) return undefined;
+    const placed = placedRect(slice);
+    return rectangle({
+      x: (placed.x - frame.x) / frame.width,
+      y: (placed.y - frame.y) / frame.height,
+      width: placed.width / frame.width,
+      height: placed.height / frame.height,
+    });
+  }
   const region =
     selection?.kind === "region" ? document.regions[selection.id] : undefined;
   if (on.framing === "surface")
@@ -39,7 +64,7 @@ export function previewOutline({
   const surface =
     surfaceId === undefined ? undefined : document.surfaces[surfaceId];
   if (surface === undefined) return undefined;
-  const corners = enabledCorners(surface, on.outputId);
+  const corners = enabledCorners(document, surface, on.outputId);
   if (corners === undefined) return undefined;
   if (region === undefined)
     return [

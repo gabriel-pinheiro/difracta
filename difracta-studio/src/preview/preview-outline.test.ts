@@ -34,7 +34,9 @@ const document = {
       bounds: { topLeft: { x: 0.5, y: 0 }, bottomRight: { x: 1, y: 0.5 } },
     },
   },
-} as unknown as Pick<Document, "surfaces" | "regions">;
+  outputs: {},
+  slices: {},
+} as unknown as Pick<Document, "surfaces" | "regions" | "outputs" | "slices">;
 
 const output = (outputId: string): PreviewTarget => ({
   framing: "output",
@@ -110,5 +112,54 @@ describe("previewOutline", () => {
     ] as const;
     for (const { target, selection } of nothing)
       expect(previewOutline({ document, target, selection })).toBeUndefined();
+  });
+});
+
+describe("previewOutline of a Slice", () => {
+  const sliced = {
+    ...document,
+    outputs: { led: { id: "led", displaySize: { width: 200, height: 100 } } },
+    slices: {
+      left: {
+        id: "left",
+        outputId: "led",
+        order: "a0",
+        rect: { x: 0, y: 0, width: 100, height: 100 },
+        position: { x: 0, y: 0 },
+        rotation: 0,
+        scale: 1,
+      },
+      right: {
+        id: "right",
+        outputId: "led",
+        order: "a1",
+        rect: { x: 100, y: 0, width: 100, height: 100 },
+        position: { x: 300, y: 0 },
+        rotation: 0,
+        scale: 1,
+      },
+    },
+  } as unknown as typeof document;
+
+  it("is the Slice's placed rectangle in the Projection Frame of its Output", () => {
+    expect(
+      previewOutline({
+        document: sliced,
+        target: output("led"),
+        selection: { kind: "slice", id: "right" },
+      }),
+    ).toEqual([
+      { x: 0.75, y: 0 },
+      { x: 1, y: 0 },
+      { x: 1, y: 1 },
+      { x: 0.75, y: 1 },
+    ]);
+    expect(
+      previewOutline({
+        document: sliced,
+        target: output("a"),
+        selection: { kind: "slice", id: "right" },
+      }),
+    ).toBeUndefined();
   });
 });

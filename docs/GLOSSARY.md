@@ -10,8 +10,8 @@ terms in code, UI text, docs, and conversation.
 
 One complete projection setup and its configuration.
 
-An Installation owns Outputs, Output Masks, Surfaces, Surface Mappings, Regions,
-Masks, Paths, Media, Scenes, Controllers, Parameter Links, and Macros.
+An Installation owns Outputs, Output Masks, Slices, Surfaces, Surface Mappings,
+Regions, Masks, Paths, Media, Scenes, Controllers, Parameter Links, and Macros.
 
 ### Projector
 
@@ -24,7 +24,8 @@ Hardware control is not part of the initial engine.
 
 A logical rendering destination associated with a fullscreen Output browser and
 a projector-connected display. An Installation may contain multiple Outputs. An
-Output may own Output Masks, which cut its Projection Frame.
+Output may own Output Masks, which cut its Projection Frame, and Slices, which
+rearrange its Projection Frame into its Display Frame.
 
 Do not use Output as a synonym for a Surface or Scene.
 
@@ -34,8 +35,22 @@ The complete pixel image rendered for one Output at one instant. It ultimately
 has the Output display's width and height and contains no unresolved
 transparency.
 
+On an Output with Slices the Projection Frame is laid out like the stage
+instead: its size, in Projection pixels, is the bounding box of the placed
+Slices, and the Slices copy it into the Display Frame. Everything an Output
+draws, root Filters and Output Masks included, works in the Projection Frame, so
+a blur crosses only edges that touch on stage.
+
 Use `canvas` for the HTML5 `<canvas>` implementation element, not for this
 domain concept.
+
+### Display Frame
+
+The picture an Output's Display receives, such as an LED processor's 1920×1080
+HDMI input. Its pixel size is a saved fact of the Output, its Display size,
+which Studio fills from the Display showing the Output and which stays editable.
+Without Slices the Display Frame is the Projection Frame; with them it is what
+the Slices pack the Projection Frame into, black where no Slice lands.
 
 ### Surface
 
@@ -147,6 +162,24 @@ mean side and extends the dark side, as a Mask's does.
 An Output Mask has no Address: it is edited in Studio or through its commands,
 never from a Macro or OSC during a show, the same boundary a Mask has.
 
+### Slice
+
+A named rectangle of an Output's Display Frame together with where that piece
+sits on stage, in the Output's Projection Frame: one LED panel as an LED
+processor's input map packs it. Its rectangle is in whole Display pixels; its
+placement is a position in Projection pixels, a rotation in quarter turns and
+one uniform scale. A Slice's rectangle stays inside the Display Frame. Slices of
+one Output are ordered and named uniquely within that Output, and may overlap on
+stage. They may overlap in the Display Frame too while being arranged, but a
+processor pixel has one source, so the later Slice wins there and Studio flags
+the overlap, on the Output card too, until it is fixed.
+
+An Output with no Slices is unsliced and renders as it always has. Once it has
+one, the Output renders into a Projection Frame laid out like the stage and a
+last pass copies each Slice to its rectangle of the Display Frame. A Slice has
+no Address, the boundary an Output Mask has. Moving Slices keeps every Surface
+Mapping corner and Output Mask point on its stage pixel.
+
 ### Surface Mapping
 
 The calibration of one Surface for one Output: the ordered four-corner
@@ -159,6 +192,13 @@ disabled mapping keeps its corners, so putting the Surface back on an Output
 restores that projector's calibration. A Surface with no enabled mapping is
 projected by nothing. Changing the enabled Outputs changes the Installation, not
 its Scenes.
+
+On an Output with Slices a mapping may follow one Slice, or the whole Projection
+Frame, instead of using its corners: Surface Space then lands on that Slice's
+placed rectangle, or on the whole stage, and moves with it, while the corners
+lie dormant. Unlinking writes where it was into the corners. A Surface over
+several Slices, such as a strip folded across two panels, uses corners. A new
+mapping on an Output with Slices follows the whole frame.
 
 ### Calibration
 
@@ -182,7 +222,13 @@ operator sees them follow the corners.
 Calibration Mode may also be on an Output with no Surface: every Surface on the
 Output is then drawn as a pattern at once, to see which moved together after a
 projector was bumped, and while one of the Output's Output Masks is aligned its
-polygon and points are drawn over them in the Projection Frame.
+polygon and points are drawn over them in the Projection Frame. On an Output
+with Slices it may instead show the Slice test card: each Slice as an LED test
+pattern, a checkerboard in its own colour with its border, diagonals, a circle,
+and its name and Display size, the selected one at full brightness and the
+others dimmed. It is sliced like everything else, so a misplaced panel shows
+another's name, a turned one shows its name turned, and a faulty module breaks
+the checkerboard.
 
 Blackout takes precedence: while it is on, the calibrated Output shows black and
 the pattern returns when Blackout is released.

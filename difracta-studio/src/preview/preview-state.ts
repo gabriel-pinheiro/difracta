@@ -3,8 +3,11 @@ import {
   enabledCorners,
   settings,
   type Document,
+  type Output,
   type Point,
+  type Slice,
   type Surface,
+  type Table,
 } from "@difracta/core";
 import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
 
@@ -13,6 +16,7 @@ import {
   sessionList,
   type SessionTable,
 } from "@/entities/output/output-live";
+import { knownFrameSize } from "@/entities/output/output-frame";
 import { useDocumentPath } from "@/lib/client";
 import {
   pickedMappingOutput,
@@ -165,16 +169,25 @@ export function useTargetAspect(
     "surfaces",
     on.framing === "surface" ? on.surfaceId : "",
   ]);
+  const outputs = useDocumentPath<Table<Output>>(view, ["outputs"]) ?? {};
+  const slices = useDocumentPath<Table<Slice>>(view, ["slices"]) ?? {};
   if (on.framing === "output" || surface === undefined) return output;
   const corners =
-    outputId === null ? undefined : enabledCorners(surface, outputId);
+    outputId === null
+      ? undefined
+      : enabledCorners({ outputs, slices }, surface, outputId);
   return {
     ...output,
     aspect: surfaceAspect(surface.size, corners, output.aspect),
   };
 }
 
-/** The ratio picked for an Output, remembered per browser, and the ratio that makes. */
+/**
+ * The ratio picked for an Output, remembered per browser, and the ratio
+ * that makes. The Output's own ratio is its Projection Frame's: from its
+ * Slices when it has some, else what its session reports, else its
+ * Display size.
+ */
 function useOutputAspect(
   view: DocumentView,
   outputId: string,
@@ -186,6 +199,9 @@ function useOutputAspect(
   const [aspects, setAspects] = useStoredState(ASPECTS_KEY, {}, isAspects);
   const choice = aspects[outputId] ?? "output";
   const reported = useReportedSize(view, outputId);
+  const output = useDocumentPath<Output>(view, ["outputs", outputId]);
+  const slices = useDocumentPath<Table<Slice>>(view, ["slices"]) ?? {};
+  const known = knownFrameSize(output, slices, reported);
   const pick = useCallback(
     (next: AspectChoice) =>
       setAspects(
@@ -193,7 +209,7 @@ function useOutputAspect(
       ),
     [aspects, outputId, setAspects],
   );
-  return { choice, aspect: previewAspect(choice, reported), pick };
+  return { choice, aspect: previewAspect(choice, known), pick };
 }
 
 /**

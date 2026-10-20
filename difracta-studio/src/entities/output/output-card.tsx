@@ -34,6 +34,7 @@ import {
   type SessionTable,
 } from "./output-live";
 import { OpenOutputDialog } from "./open-output-dialog";
+import { SliceOverlapWarning, SliceSizeWarning } from "./slice-size-warning";
 import { outputPageUrl } from "./output-url";
 
 const workloadKinds = [
@@ -153,6 +154,12 @@ export function OutputCard({
           </TooltipContent>
         </Tooltip>
       </div>
+      <SliceOverlapWarning view={view} outputId={output.id} />
+      <SliceSizeWarning
+        view={view}
+        output={output}
+        telemetry={primary?.telemetry}
+      />
       {sessions.length > 0 && (
         <ul className="grid gap-px text-[0.6875rem]">
           {sessions.map((session) => (

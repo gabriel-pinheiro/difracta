@@ -10,6 +10,7 @@ import { readStored, writeStored } from "@/lib/storage";
 import { Navigator } from "@/navigator/navigator";
 import { CalibrationFollowsSelection } from "@/lib/calibration-follows-selection";
 import { BrowserProvider } from "@/library/browser-state";
+import { SliceEditorProvider } from "@/entities/slice/slice-editor-state";
 import { ExpansionProvider } from "@/navigator/expansion";
 import { SelectionKeys } from "@/selection/selection-keys";
 import { NavigatorKeys } from "@/keyboard/navigator-keys";
@@ -32,10 +33,12 @@ export function Workspace({ view }: { readonly view: DocumentView }) {
   return (
     <ExpansionProvider key={view.documentId}>
       <BrowserProvider>
-        <SelectionKeys />
-        <NavigatorKeys />
-        <CalibrationFollowsSelection view={view} />
-        <Columns view={view} />
+        <SliceEditorProvider>
+          <SelectionKeys />
+          <NavigatorKeys />
+          <CalibrationFollowsSelection view={view} />
+          <Columns view={view} />
+        </SliceEditorProvider>
       </BrowserProvider>
     </ExpansionProvider>
   );

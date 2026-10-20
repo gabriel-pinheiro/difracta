@@ -35,6 +35,15 @@ function moveCorner(
   const mapping = surface.mappings[picked.outputId];
   if (mapping === undefined)
     return rejected(`Surface “${surface.name}” has no mapping for its Output.`);
+  if (mapping.follow !== undefined) {
+    const followed =
+      "frame" in mapping.follow
+        ? "the whole frame"
+        : `Slice “${document.slices[mapping.follow.slice]?.name ?? mapping.follow.slice}”`;
+    return rejected(
+      `Surface “${surface.name}” follows ${followed} there; unlink it (surface.follow with null) to move its corners.`,
+    );
+  }
   const current = mapping.corners[corner];
   const point = roundPoint(next(current));
   if (point.x === current.x && point.y === current.y) return accepted([]);

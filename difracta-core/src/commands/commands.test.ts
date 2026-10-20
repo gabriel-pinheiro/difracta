@@ -27,6 +27,7 @@ describe("built-in commands", () => {
       id: "out_a",
       name: "Projector",
       limitPixelRatio: false,
+      displaySize: null,
       order: "a0",
     });
     expect(created.label).toBe("Create Output “Projector”");

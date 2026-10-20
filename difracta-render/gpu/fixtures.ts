@@ -310,6 +310,12 @@ export class Stage {
     return this;
   }
 
+  /** Any command, for what has no helper of its own (Slices, following). */
+  command(name: string, payload: unknown): this {
+    this.#document = run(this.#document, name, payload);
+    return this;
+  }
+
   /** The document with the Scene playing. */
   document(): Document {
     return run(this.#document, "scene.play", { sceneId: SCENE });

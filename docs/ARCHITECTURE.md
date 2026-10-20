@@ -210,6 +210,64 @@ the projector emits, so it is applied once to the finished frame, after the root
 Filters, and catches the blur or displacement that pushes light past a Surface
 Mask. **Why black, not transparent:** nothing lies beneath an Output's frame.
 
+### Slices
+
+An Output's `displaySize` is its Display Frame's pixel size, null until Studio
+fills it (from a Display Host's Display showing the Output, else the freshest
+Output Session's telemetry, else `settings.slices.fallbackDisplaySize`) or
+`output.update` sets it; the runtime never sets it by itself. A Slice lives in
+its own table with an `outputId` and an `order` scoped to that Output: `rect` in
+whole Display pixels, `position` in whole Projection pixels (may be negative),
+`rotation` 0, 90, 180 or 270 clockwise, and a uniform `scale`
+(`settings.slices`, kept to a thousandth). `document/slices.ts` is the one place
+that reads them, for core, render and Studio alike: `placedRect` turns and
+scales a Slice's rectangle to its place on stage, and `projectionFrame` is the
+bounding box of an Output's placed Slices, rounded up to whole pixels, or the
+Display Frame when it has none.
+
+`slice.create` is refused until the Output has a Display size. Without `rect` it
+takes the largest empty rectangle of the Display Frame
+(`document/slice-placement.ts`): the whole frame for the first Slice, exactly
+the remaining space when that is a rectangle, the top-left quarter when the
+frame is full. Without `position` it sits on stage where it sits in the Display
+Frame, or just right of the Projection Frame when a placed Slice already covers
+that spot. `slice.update` and `slice.nudge` move the rectangle and the
+placement, `slice.split` replaces a Slice with a grid of pieces placed
+consistently under its rotation, the first keeping its id, and `slice.rename`
+and `slice.remove` finish the set. A rectangle is set inside the Display Frame
+on all four sides (`slice.nudge` stops at the edges); one left past the edge by
+a smaller Display size stays valid and may be edited back in. Display overlap is
+allowed, so Slices can be created first and arranged after: the slice pass draws
+in order, the later Slice winning, and `displayOverlaps` gives Studio what to
+flag. Removing an Output removes its Slices. There is no Address for them.
+
+**Why overlap is allowed:** refusing it blocked every intermediate step of
+arranging panels (a new Slice in a full frame, one dragged across another),
+while the mistake it guards against is visible: the Slice editor, the Slice
+inspector and the Output card flag it until fixed.
+
+A Surface Mapping may carry `follow`, `{ slice }` or `{ frame: true }`, accepted
+only on an Output with Slices (`surface.follow`, null to unlink).
+`enabledCorners` takes the document and resolves it, so every reader of where a
+Surface lands gets the Slice's placed rectangle or the whole frame, normalized,
+and the compositor learns nothing about following. Unlinking, and removing the
+followed Slice or an Output's last Slice, write the resolved quad into
+`corners`, so nothing jumps. A mapping created on an Output with Slices starts
+on `{ frame: true }`. Corner commands are refused on a following mapping.
+
+Free corners and Output Mask points are normalized to the Projection Frame,
+whose bounds the Slices decide, so every Slice command that moves those bounds
+rewrites them in the same undo step to keep each on its Projection pixel
+(`commands/slice-edits.ts`); following mappings move with what they follow.
+
+**Why a Slice on the Output, not on the Surface Mapping:** packing is a fact
+about the cable and the processor, and Slices and Surfaces are many to many: a
+strip folded across two panels is one Surface over two Slices, and the Stage
+Surface covers them all. **Why a computed Projection Frame:** where the panels
+hang already says how big the stage is; asking for it as well would only let the
+two disagree. **Why the Display size is saved:** the Slices are drawn against
+it, and it must be known before any Display is connected.
+
 ### Paths
 
 A Path is a polyline in Surface Space, two to sixteen points, open or closed,
@@ -624,7 +682,8 @@ highlighted corner or point, the view for the Output's other Surfaces (hidden,
 outlines, patterns) and the live session that entered it. With `surfaceId` null
 it names the Output alone, which then shows every Surface on it as a pattern, or
 one of the Output's Output Masks (`outputMaskId`), drawn over those patterns
-with its points; the view is ignored and nothing of a Surface may come along.
+with its points, or, with `sliceId`, the Output's Slice test card with that
+Slice selected; the view is ignored and nothing of a Surface may come along.
 `calibration.set` replaces the whole entry and `calibration.exit` clears it;
 both are performance commands, so they replicate at once and never enter undo
 history. The runtime clears the entry when its owner's session closes. Authoring
@@ -1862,6 +1921,44 @@ displacement pushes past a Surface Mask. Studio's Preview applies it in Output
 framing, the real Output, and not in Surface framing, whose synthetic Output is
 in no document.
 
+An Output with Slices (`slice-pass.ts`) draws all of the above into an offscreen
+framebuffer at its Projection Frame's size instead of the canvas, laid out like
+the stage, and every size derived from the frame (Layer canvases, video
+resolution, Filter and Layer-chain targets, Mask and Output Mask textures) is in
+Projection pixels. A last pass then copies each Slice from that texture into the
+canvas: its Display rectangle drawn as two triangles whose corners sample where
+`placedCorners` put them, turned and scaled back, black where no Slice lands.
+The Display Frame is fitted into the canvas at one scale,
+`min(canvasWidth / width, canvasHeight / height)`, anchored top-left, so it is
+pixel-exact when the canvas has the Display size or matches it on one side and
+is larger on the other (a 1920×1200 input for a 1920×1080 map, the extra rows
+black), and a smaller window shows the whole map. Blackout returns before the
+offscreen frame; an Output with no Slices takes neither the framebuffer nor the
+pass. A Projection Frame past the GPU's texture limit is drawn scaled down
+uniformly and logged once. Slices are copied in Slice order, so where two
+overlap in the Display Frame the later one wins those pixels. The offscreen
+texture is left bound to no texture unit, since drawing into it while the
+Surface program's Mask sampler holds it is a feedback loop WebGL refuses.
+Studio's Preview creates its compositor with `projectionFrame`, which skips
+slicing and draws the Projection Frame straight into its canvas, so it shows the
+stage. On an Output with Slices the Output page ignores Limit Pixel Ratio, since
+Slices must land on device pixels and a lower ratio would not make the
+Projection Frame cheaper.
+
+Calibrating an Output with Slices with a `sliceId` draws the Slice test card in
+place of the Surfaces (`slice-card.ts`, planned in `plan-calibration.ts`): each
+Slice's placed rectangle painted as an LED test pattern (`slice-card-paint.ts`)
+with Canvas 2D into a texture kept until what it shows changes. A checkerboard
+of `settings.slices.testCardCell` Display pixels, counted from the Slice's
+Display top-left so its cells line up with LED modules whatever the rotation, in
+the Slice's hue and a dimmer shade of it (hues a golden angle apart); a white
+border, both diagonals and an inscribed circle; the name and Display size on a
+dark plate, sized to the card with a minimum. The selected Slice is at full
+brightness, the others dimmed. It is drawn in the Projection Frame and sliced
+like the Scene, so a panel showing another's name, or its name turned, is placed
+or turned wrong, and a dead or shifted module breaks the grid. There is no
+arrow: the text already shows which way is up.
+
 Each planned Layer has a Visual instance (`layer-players.ts`). A canvas Visual's
 draws on its own canvas, sized by `surfaceCanvasSize` and capped at the GPU's
 texture limit, with a texture uploaded on the frames the instance drew; a shader
@@ -2428,11 +2525,11 @@ tab, which shows one card per Output; the tab last used is remembered per
 browser. Selection is Studio-local state and never reaches the runtime; the
 selected row and card carry an outline so the inspector's subject is visible at
 a glance. Rows with children open and close with a chevron: Output rows start
-open so their Output Masks and live sessions stay in view, the masks first,
-Surface rows start closed so Regions, Masks and Paths do not crowd the list;
-creating a child or selecting one from an inspector opens its parent. Column
-sizes and section open states are remembered per browser in localStorage; row
-open states live in memory and reset with the Installation. An empty section
+open so their Output Masks, Slices and live sessions stay in view, in that
+order, Surface rows start closed so Regions, Masks and Paths do not crowd the
+list; creating a child or selecting one from an inspector opens its parent.
+Column sizes and section open states are remembered per browser in localStorage;
+row open states live in memory and reset with the Installation. An empty section
 says how to add its first entity, and an open row without children says so in
 one dim line.
 
@@ -2540,6 +2637,46 @@ in step. **Why the center column rather than a dialog:** the navigator and the
 inspector stay usable, so a Layer's other settings can change while candidates
 are compared.
 
+The Slice editor (`entities/slice/slice-editor.tsx`) takes the whole center
+column the same way while open, in place of the tabs and of a Library: Edit
+Slices on an Output or a Slice's row opens it, Done or Escape closes it, and
+which Output it shows is Studio-local (`slice-editor-state.tsx`). Adding a Slice
+always creates one and opens the editor on it, selected, whether from the Output
+row's "+ Slice", its context menu's Add Slice, the Output inspector's Add Slice
+or the toolbar's New Slice (`use-create-slice.ts`): it sends `slice.create` with
+no rectangle, so core picks the place, after filling the Display size if the
+Output has none. Its toolbar holds New Slice, the Display size and, for the
+selected Slice, Rotate and a split into columns and rows. The left pane is the
+Display Frame at the Display size: Slices drag, resize from their corners and
+sides, and are drawn by dragging on empty space, all kept inside the frame on
+every side; the right pane is the Projection Frame, the same Slices as tiles
+laid out like the stage, which drag and scale from their bottom-right corner,
+each with its Display top edge marked so a turned panel reads at a glance, and
+the computed frame size under it. Edges snap to whole pixels, to the frame's
+edges and to other Slices' edges within a few screen pixels, and Alt turns that
+off (`slice-snap.ts`). Slices may overlap in the Display Frame while being
+arranged: overlapping ones are outlined red in both panes, their inspector names
+what they overlap, and the Output's row and card warn (`sliceOverlapWarning`)
+until none do. Drags send `slice.update` with one field, one send in flight at a
+time, so each drag is one undo step. Selection is the navigator's, so the
+inspector beside it has the exact numbers. Before the first Slice the editor
+writes the Output's Display size, from a Display Host's Display showing the
+Output (bounds × scale factor), else the freshest Output Session's size, else
+`settings.slices.fallbackDisplaySize` (`entities/output/display-size.ts`). The
+Output inspector shows the Display size with "Use <Display>'s size" when a
+Display shows the Output, the computed Projection Frame size and Edit Slices,
+and hides Limit Pixel Ratio once the Output has Slices. A Slice's inspector has
+its rectangle and placement in pixels, its rotation and scale, the Surfaces
+following it, Calibrate for the Output's Slice test card and Edit Slices. An
+Output card warns when its Output Session draws at a size other than the Display
+Frame of a sliced Output, with a button to adopt that size, and while its Slices
+overlap in the Display Frame, naming them.
+
+**Why two panes rather than one:** the processor's map and the stage are two
+pictures of the same Slices, and the operator copies the first from the
+processor's software and the second from the room; each pane shows one of them
+as it is, and selecting a Slice in either shows where it is in the other.
+
 The Preview (`difracta-studio/src/preview/`) renders an Output, a Surface flat
 or a Layer inside Studio with a compositor of its own (`preview-canvas.ts`), fed
 the document of Studio's view as deltas change it and the Cues the view hears.
@@ -2553,18 +2690,19 @@ Layer; the choice (`preview-choice.ts`) is remembered per Installation in
 localStorage. A named Output stays whatever is selected and shows the active
 Scene, so it shows what is on stage.
 
-Following (`preview-target.ts`), a selected Output is shown. A selected Surface,
-Region, Mask or Path names its Surface (`selection/selection-surface.ts`, which
-calibration follows too) and a Visual Layer the Surface of its Target. With the
-framing at Output the Preview moves to the Output that Surface is on: the one
-shown now when the Surface is on it, else the one picked for the Surface in its
-inspector, else the only one it is on. A Surface on several Outputs with none of
-those to prefer leaves the Preview where it is, and the header lists the Outputs
-to click. With the framing at Surface or Layer the Surface is shown flat,
-whether it is on an Output or not; Surface framing shows a Visual Layer as the
-flat Surface of its Target. With the framing at Layer a selected Layer is shown
-with only what it draws with: a Visual Layer on the flat Surface of its Target,
-a Filter Layer or a Group on the Output shown, since neither has a Target. The
+Following (`preview-target.ts`), a selected Output is shown, and so is the
+Output of a selected Output Mask or Slice. A selected Surface, Region, Mask or
+Path names its Surface (`selection/selection-surface.ts`, which calibration
+follows too) and a Visual Layer the Surface of its Target. With the framing at
+Output the Preview moves to the Output that Surface is on: the one shown now
+when the Surface is on it, else the one picked for the Surface in its inspector,
+else the only one it is on. A Surface on several Outputs with none of those to
+prefer leaves the Preview where it is, and the header lists the Outputs to
+click. With the framing at Surface or Layer the Surface is shown flat, whether
+it is on an Output or not; Surface framing shows a Visual Layer as the flat
+Surface of its Target. With the framing at Layer a selected Layer is shown with
+only what it draws with: a Visual Layer on the flat Surface of its Target, a
+Filter Layer or a Group on the Output shown, since neither has a Target. The
 Layer stays shown while a selection that does not move the Preview is made,
 until another target is shown, a Scene is selected, or its Scene is no longer
 the one shown. A selected Scene, or the Scene of a selected Layer, is shown
@@ -2593,13 +2731,14 @@ it, so the stack is drawn up to and including it and nothing above. A Layer's
 own enabled switch is kept, and the header says Disabled while that leaves
 nothing of the Layer to draw.
 
-The frame is letterboxed. An Output's ratio is the one its freshest Output
-Session reports, 16:9 while none does, or one picked in the header and
-remembered per Output. A Surface's is its size when it has one, else the shape
-of its mapping on the Output it is on, measured along its longer edges as its
-canvases are, else 16:9 (`preview-aspect.ts`); the header offers no ratio then.
-The canvas takes the size it is shown at, in device pixels, once the panel has
-kept that size for `settings.preview.resizeSettleMs`, and the old frame is
+The frame is letterboxed. An Output's ratio is its Projection Frame's: worked
+out from its Slices when it has some, else the one its freshest Output Session
+reports, else its Display size, 16:9 while it has none; or one picked in the
+header and remembered per Output. A Surface's is its size when it has one, else
+the shape of its mapping on the Output it is on, measured along its longer edges
+as its canvases are, else 16:9 (`preview-aspect.ts`); the header offers no ratio
+then. The canvas takes the size it is shown at, in device pixels, once the panel
+has kept that size for `settings.preview.resizeSettleMs`, and the old frame is
 stretched meanwhile. Frames are rendered only while the Preview is the tab in
 use and the page is visible; under the Outputs tab it stays mounted and idle, so
 coming back starts no Visual again.
@@ -2608,9 +2747,9 @@ With Outline selection on in the header, off at first and remembered with the
 choice, an SVG over the frame (`preview-overlay.tsx`) outlines the selected
 Surface on the Output shown, by its mapping's corners; a selected Region there,
 by its bounds projected through that mapping with the compositor's `homography`;
-and a selected Region of the Surface shown flat, by its bounds
-(`preview-outline.ts`). The overlay takes no pointer events and is no part of
-the rendered frame.
+a selected Region of the Surface shown flat, by its bounds; and a selected Slice
+of the Output shown, at its place on stage (`preview-outline.ts`). The overlay
+takes no pointer events and is no part of the rendered frame.
 
 **Why a compositor in Studio rather than the Output's pixels:** composing needs
 no display attached, and a stream of frames would cost the Output encoding work
@@ -2641,22 +2780,25 @@ show reopens on what plays.
 The Surface, Mask, Path and Region inspectors carry a Calibrate toggle and,
 while active, the view for the other Surfaces; the Output and Output Mask
 inspectors carry the Output-level one, which calibrates the Output with no
-Surface and shows no view select. Calibrating is on the Surface's mapping Output
-(`lib/mapping-output.ts`): the Output showing its pattern now, else the one this
-Studio picked for the Surface, else the only one it is on. On several Outputs
-with none picked there is none and Calibrate is disabled, with a "Show on"
-select over the Surface's Outputs above it; the pick is Studio's own, kept per
-Surface and never saved. The corner or point selected in the inspector is
-mirrored to the Output as it changes, and focusing a corner or point button
-selects it, so Tab and the arrow keys agree. While the mode is on, selecting
-another Surface, Mask, Path or Region moves the pattern to it, on the same
-Output when that Surface is on it, on its only Output otherwise, and not at all
-when it is on several others (`followedOutput`); selecting anything else leaves
-it on. A Visual Layer whose Visual follows Paths shows one row per Path below
-its Target, a select over the Target's Paths with a "+" that creates one named
-after the Layer, binds it and selects it. The status strip shows what is being
-calibrated with an exit link, so a forgotten Calibration Mode stays visible.
-Escape clears the selection outside text fields and dialogs.
+Surface and shows no view select, and the Slice inspector one that shows the
+Output's Slice test card with that Slice selected. Calibrating is on the
+Surface's mapping Output (`lib/mapping-output.ts`): the Output showing its
+pattern now, else the one this Studio picked for the Surface, else the only one
+it is on. On several Outputs with none picked there is none and Calibrate is
+disabled, with a "Show on" select over the Surface's Outputs above it; the pick
+is Studio's own, kept per Surface and never saved. The corner or point selected
+in the inspector is mirrored to the Output as it changes, and focusing a corner
+or point button selects it, so Tab and the arrow keys agree. While the mode is
+on, selecting another Surface, Mask, Path or Region moves the pattern to it, on
+the same Output when that Surface is on it, on its only Output otherwise, and
+not at all when it is on several others (`followedOutput`); selecting an Output
+Mask or a Slice moves it to that mask, or to the Slice test card with that Slice
+selected, on its Output; selecting anything else leaves it on. A Visual Layer
+whose Visual follows Paths shows one row per Path below its Target, a select
+over the Target's Paths with a "+" that creates one named after the Layer, binds
+it and selects it. The status strip shows what is being calibrated with an exit
+link, so a forgotten Calibration Mode stays visible. Escape clears the selection
+outside text fields and dialogs.
 
 Blackout sits in the menu bar because it is the one control a performer must
 reach without looking; it writes `installation/blackout` through the input
@@ -2795,3 +2937,13 @@ one is reporting. Corner buttons take arrow keys for nudging and two fields show
 the selected corner as percentages of the frame. Dragging shows the handle at
 the pointer and sends absolute sets with one in flight at a time
 (`lib/use-latest-wins.ts`); everything else shows confirmed document values.
+When the Output's Projection Frame has a known pixel size, from its Slices or
+its Display size, the fields show the corner in pixels and arrow keys move it by
+one pixel, Shift by ten; stored values stay normalized
+(`inspector/fields/point-fields.tsx`). On an Output with Slices the row starts
+with a Position select (`mapping-position.tsx`): Corners, Whole frame, or one of
+the Output's Slices, sending `surface.follow`. A following mapping shows what it
+follows and Unlink in place of the quad, since it has no corners to drag; a free
+one draws the Slices faintly under the quad, and its dragged corners snap to
+their edges and corners within a few screen pixels, Alt held turning that off
+(`corner-snap.ts`).

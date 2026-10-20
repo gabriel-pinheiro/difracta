@@ -11,6 +11,7 @@ export * from "./document/macros.ts";
 export * from "./document/mappings.ts";
 export * from "./document/media.ts";
 export * from "./document/media-uses.ts";
+export * from "./document/slices.ts";
 export * from "./packs/ids.ts";
 export * from "./packs/manifest.ts";
 export * from "./packs/proxies.ts";

@@ -51,6 +51,7 @@ const DocumentFileSchema = z
     masks: DocumentSchema.shape.masks.default({}),
     paths: DocumentSchema.shape.paths.default({}),
     outputMasks: DocumentSchema.shape.outputMasks.default({}),
+    slices: DocumentSchema.shape.slices.default({}),
     /** Format 1's Media items; only its Screen Shares are kept. */
     media: z.record(z.string(), z.unknown()).optional(),
     packs: DocumentSchema.shape.packs.default({}),
@@ -84,6 +85,7 @@ export function serializeDocument(document: Document): string {
     masks: document.masks,
     paths: document.paths,
     outputMasks: document.outputMasks,
+    slices: document.slices,
     packs: document.packs,
     shares: document.shares,
     scenes: document.scenes,
@@ -125,6 +127,7 @@ export function parseDocumentFile(text: string): ParsedDocumentFile {
       masks: parsed.data.masks as Document["masks"],
       paths: parsed.data.paths as Document["paths"],
       outputMasks: parsed.data.outputMasks as Document["outputMasks"],
+      slices: parsed.data.slices as Document["slices"],
       packs: parsed.data.packs,
       shares: {
         ...sharesFromMedia(parsed.data.media),

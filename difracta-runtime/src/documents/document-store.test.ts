@@ -339,6 +339,7 @@ describe("DocumentStore", () => {
         masks: {},
         paths: {},
         outputMasks: {},
+        slices: {},
         packs: {},
         shares: {},
         scenes: {},
@@ -350,5 +351,28 @@ describe("DocumentStore", () => {
       }),
     );
     expect(round.ok && round.document.operational.blackout).toBe(false);
+  });
+
+  it("opens a file from before Slices with no Display size and no Slices", () => {
+    const parsed = parseDocumentFile(
+      JSON.stringify({
+        kind: "difracta-installation",
+        formatVersion: 2,
+        installation: { id: "i", name: "N", activeScene: null },
+        outputs: {
+          out_a: {
+            id: "out_a",
+            name: "TV",
+            limitPixelRatio: false,
+            order: "a0",
+          },
+        },
+      }),
+    );
+    if (!parsed.ok) throw new Error(parsed.error);
+    expect(parsed.document.outputs.out_a?.displaySize).toBeNull();
+    expect(parsed.document.slices).toEqual({});
+    const again = parseDocumentFile(serializeDocument(parsed.document));
+    expect(again.ok && again.document).toEqual(parsed.document);
   });
 });

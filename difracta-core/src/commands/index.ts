@@ -86,11 +86,18 @@ import { scenePlay } from "./scene.play.ts";
 import { sceneRemove } from "./scene.remove.ts";
 import { sceneRename } from "./scene.rename.ts";
 import { shareCreate } from "./share.create.ts";
+import { sliceCreate } from "./slice.create.ts";
+import { sliceNudge } from "./slice.nudge.ts";
+import { sliceRemove } from "./slice.remove.ts";
+import { sliceRename } from "./slice.rename.ts";
+import { sliceSplit } from "./slice.split.ts";
+import { sliceUpdate } from "./slice.update.ts";
 import { shareRemove } from "./share.remove.ts";
 import { shareRename } from "./share.rename.ts";
 import { surfaceAssign } from "./surface.assign.ts";
 import { surfaceCornerNudge, surfaceCornerSet } from "./surface.corner.ts";
 import { surfaceCreate } from "./surface.create.ts";
+import { surfaceFollow } from "./surface.follow.ts";
 import { surfaceRemove } from "./surface.remove.ts";
 import { surfaceRename } from "./surface.rename.ts";
 import { surfaceSize } from "./surface.size.ts";
@@ -110,11 +117,18 @@ export const builtInCommands: readonly CommandDefinition<never>[] = [
   outputMaskPointAdd,
   outputMaskPointRemove,
   outputMaskRemove,
+  sliceCreate,
+  sliceRename,
+  sliceUpdate,
+  sliceNudge,
+  sliceSplit,
+  sliceRemove,
   surfaceCreate,
   surfaceRename,
   surfaceAssign,
   surfaceCornerSet,
   surfaceCornerNudge,
+  surfaceFollow,
   surfaceSize,
   surfaceRemove,
   regionCreate,

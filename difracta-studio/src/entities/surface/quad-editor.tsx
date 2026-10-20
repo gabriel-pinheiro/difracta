@@ -6,8 +6,11 @@ import {
 } from "@difracta/core";
 import {
   nudgeKeyHandler,
+  pixelStep,
   PolygonEditor,
   type Outline,
+  type PixelSpace,
+  type SnapContext,
 } from "@/inspector/fields/polygon-editor";
 import { cn } from "@/lib/utils";
 
@@ -31,7 +34,8 @@ export function quadPoints(quad: Quad): readonly Point[] {
 /**
  * The Surface's quad inside its Output's Projection Frame: the polygon
  * editor plus one button per corner, laid out like the corners, for
- * selecting and nudging by keyboard.
+ * selecting and nudging by keyboard. With the frame's pixels known, corners
+ * read in pixels and arrow keys move them by one.
  */
 export function QuadEditor({
   corners,
@@ -41,6 +45,9 @@ export function QuadEditor({
   onSelect,
   onSet,
   onNudge,
+  backdrop,
+  snap,
+  pixels,
 }: {
   readonly corners: Quad;
   /** Other Surfaces on the same Output, drawn as outlines for context. */
@@ -52,6 +59,10 @@ export function QuadEditor({
   readonly onSelect: (index: number) => void;
   readonly onSet: (corner: CornerName, point: Point) => Promise<unknown>;
   readonly onNudge: (corner: CornerName, by: Point) => void;
+  /** Shapes drawn faintly beneath, such as the Output's Slices. */
+  readonly backdrop?: readonly Outline[] | undefined;
+  readonly snap?: ((point: Point, context: SnapContext) => Point) | undefined;
+  readonly pixels?: PixelSpace | undefined;
 }) {
   const cornerAt = (index: number): CornerName => CORNERS[index] ?? "topLeft";
   const nudgeAt = (index: number, by: Point): void =>
@@ -68,6 +79,9 @@ export function QuadEditor({
         onSet={(index, point) => onSet(cornerAt(index), point)}
         onNudge={nudgeAt}
         spaceLabel="Surface corners in the Output's frame"
+        backdrop={backdrop}
+        snap={snap}
+        pixels={pixels}
       />
       <div
         className="grid grid-cols-2 gap-1"
@@ -80,7 +94,11 @@ export function QuadEditor({
             type="button"
             role="radio"
             aria-checked={index === selected}
-            title="Arrow keys move the corner; Shift for larger, Ctrl for finer steps"
+            title={
+              pixels === undefined
+                ? "Arrow keys move the corner; Shift for larger, Ctrl for finer steps"
+                : "Arrow keys move the corner by a pixel; Shift by ten"
+            }
             className={cn(
               "h-6 rounded-md border text-xs focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none",
               index === selected
@@ -90,7 +108,11 @@ export function QuadEditor({
             )}
             onClick={() => onSelect(index)}
             onFocus={() => onSelect(index)}
-            onKeyDown={nudgeKeyHandler(index, nudgeAt)}
+            onKeyDown={nudgeKeyHandler(
+              index,
+              nudgeAt,
+              pixels === undefined ? undefined : pixelStep(pixels),
+            )}
           >
             {cornerLabels[corner]}
           </button>

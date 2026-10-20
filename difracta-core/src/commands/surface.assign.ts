@@ -3,13 +3,15 @@ import { z } from "zod";
 import { accepted, defineCommand, rejected } from "../command/command.ts";
 import { FULL_FRAME } from "../document/geometry.ts";
 import type { Patch } from "../document/patch.ts";
+import { isSliced } from "../document/slices.ts";
 
 /**
  * Puts a Surface on Outputs or takes it off them, any number at once so
  * "every table" is one undo step. A mapping the Surface already holds for an
  * Output keeps its corners either way, so putting a Surface back on a
  * projector restores its calibration; an Output it was never on gets a
- * mapping covering the whole frame.
+ * mapping covering the whole frame, which on an Output with Slices follows
+ * the whole frame.
  */
 export const surfaceAssign = defineCommand({
   name: "surface.assign",
@@ -41,7 +43,9 @@ export const surfaceAssign = defineCommand({
           patches.push({
             op: "set",
             path: ["surfaces", surface.id, "mappings", output],
-            value: { enabled: true, corners: FULL_FRAME },
+            value: isSliced(document.slices, output)
+              ? { enabled: true, corners: FULL_FRAME, follow: { frame: true } }
+              : { enabled: true, corners: FULL_FRAME },
           });
       } else if (mapping.enabled !== payload.enabled) {
         patches.push({

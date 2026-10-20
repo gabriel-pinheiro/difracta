@@ -57,6 +57,7 @@ export function CalibrationControls({
   const selection = {
     surfaceId,
     outputMaskId: null,
+    sliceId: null,
     maskId,
     pathId,
     regionId,

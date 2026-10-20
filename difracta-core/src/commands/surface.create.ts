@@ -5,6 +5,7 @@ import { tableEntries, type Surface } from "../document/document.ts";
 import { FULL_FRAME } from "../document/geometry.ts";
 import { uniqueName } from "../document/names.ts";
 import { appendOrderKey, orderedEntries } from "../document/order.ts";
+import { isSliced } from "../document/slices.ts";
 import { generateId, id } from "../ids.ts";
 
 export const surfaceCreate = defineCommand({
@@ -48,7 +49,9 @@ export const surfaceCreate = defineCommand({
       mappings: Object.fromEntries(
         outputs.map((output) => [
           output,
-          { enabled: true, corners: FULL_FRAME },
+          isSliced(document.slices, output)
+            ? { enabled: true, corners: FULL_FRAME, follow: { frame: true } }
+            : { enabled: true, corners: FULL_FRAME },
         ]),
       ),
       order: appendOrderKey(document.surfaces),

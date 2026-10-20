@@ -304,3 +304,61 @@ describe("inTypedTerms", () => {
     expect(inTypedTerms("boom", "a/b", "a/c")).toBe("boom");
   });
 });
+
+describe("Slices", () => {
+  function led(): Document {
+    let document = stage();
+    for (const [name, payload] of [
+      [
+        "output.update",
+        { outputId: "out_tv", displaySize: { width: 200, height: 100 } },
+      ],
+      [
+        "output.update",
+        { outputId: "out_beam", displaySize: { width: 200, height: 100 } },
+      ],
+      ["slice.create", { id: "sl_tv", outputId: "out_tv", name: "Center" }],
+      ["slice.create", { id: "sl_beam", outputId: "out_beam", name: "Center" }],
+    ] as const) {
+      const result = executeCommand(registry, document, name, payload);
+      if (!result.ok) throw new Error(result.error);
+      document = result.document;
+    }
+    return document;
+  }
+
+  it("resolves a Slice by name, telling same-named ones apart by Output", () => {
+    const document = led();
+    expect(() => resolveId(document, "slices", "Center")).toThrow(
+      "“Center” matches 2 Slices: Center (sl_tv, on Output TV), Center (sl_beam, on Output Beam)",
+    );
+    expect(
+      resolvePayloadNames(document, "slice.update", {
+        sliceId: "sl_tv",
+        position: { x: 10, y: 0 },
+      }),
+    ).toEqual({ sliceId: "sl_tv", position: { x: 10, y: 0 } });
+  });
+
+  it("resolves what a mapping follows, leaving frame and null alone", () => {
+    const document = led();
+    expect(() =>
+      resolvePayloadNames(document, "surface.follow", {
+        surfaceId: "Wall",
+        follow: "Center",
+      }),
+    ).toThrow(/matches 2 Slices/);
+    expect(
+      resolvePayloadNames(document, "surface.follow", {
+        surfaceId: "Wall",
+        follow: "frame",
+      }),
+    ).toEqual({ surfaceId: "sur_wall", follow: "frame" });
+    expect(
+      resolvePayloadNames(document, "surface.follow", {
+        surfaceId: "Wall",
+        follow: null,
+      }),
+    ).toEqual({ surfaceId: "sur_wall", follow: null });
+  });
+});

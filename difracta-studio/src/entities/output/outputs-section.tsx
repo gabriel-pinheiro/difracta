@@ -3,10 +3,17 @@ import {
   generateId,
   orderedEntries,
   type Output,
+  type Slice,
   type Surface,
   type Table,
 } from "@difracta/core";
-import { Monitor, MonitorUp, SquareDashed, Trash2 } from "lucide-react";
+import {
+  LayoutPanelTop,
+  Monitor,
+  MonitorUp,
+  SquareDashed,
+  Trash2,
+} from "lucide-react";
 import { useState } from "react";
 
 import { NameDialog } from "@/components/name-dialog";
@@ -21,6 +28,8 @@ import {
   NewOutputMaskDialog,
   OutputMaskRows,
 } from "@/entities/output-mask/output-mask-rows";
+import { useCreateSlice } from "@/entities/slice/use-create-slice";
+import { SliceRows } from "@/entities/slice/slice-rows";
 import { useCommand, useDocumentPath } from "@/lib/client";
 import { useNow } from "@/lib/use-now";
 import { useExpansion } from "@/navigator/expansion";
@@ -41,11 +50,16 @@ import {
   toneTitle,
   type SessionTable,
 } from "./output-live";
-import { outputWarningCount, outputWithoutSurface } from "./output-warning";
+import {
+  outputWarningCount,
+  outputWithoutSurface,
+  sliceOverlapWarning,
+} from "./output-warning";
 
 /**
  * Navigator section listing the Outputs; "+" asks for a name, creates one
- * and selects it. An Output's own "+" adds an Output Mask under it.
+ * and selects it. An Output's own "+" adds an Output Mask under it, or a
+ * Slice, which opens the Slice editor on it.
  */
 export function OutputsSection({ view }: { readonly view: DocumentView }) {
   const command = useCommand(view);
@@ -53,8 +67,10 @@ export function OutputsSection({ view }: { readonly view: DocumentView }) {
   const { selection, select } = useSelection();
   const outputs = useDocumentPath<Table<Output>>(view, ["outputs"]) ?? {};
   const surfaces = useDocumentPath<Table<Surface>>(view, ["surfaces"]) ?? {};
+  const slices = useDocumentPath<Table<Slice>>(view, ["slices"]) ?? {};
   const [naming, setNaming] = useState(false);
   const [masking, setMasking] = useState<Output | undefined>(undefined);
+  const createSlice = useCreateSlice(view);
   const ordered = orderedEntries(outputs);
 
   function create(name: string): void {
@@ -68,10 +84,10 @@ export function OutputsSection({ view }: { readonly view: DocumentView }) {
     <>
       <NavigatorSection
         storageKey="output"
-        holds={["output", "outputMask"]}
+        holds={["output", "outputMask", "slice"]}
         label="Outputs"
         empty={ordered.length === 0 ? "No Outputs yet." : undefined}
-        warnings={outputWarningCount(outputs, surfaces)}
+        warnings={outputWarningCount(outputs, surfaces, slices)}
         onCreate={() => setNaming(true)}
       >
         <SortableList
@@ -90,14 +106,19 @@ export function OutputsSection({ view }: { readonly view: DocumentView }) {
                     view={view}
                     output={output}
                     unassigned={outputWithoutSurface(output.id, surfaces)}
+                    overlap={sliceOverlapWarning(slices, output.id)}
                     selected={isSelected(selection, "output", output.id)}
                     onSelect={() => select({ kind: "output", id: output.id })}
-                    onCreate={() => setMasking(output)}
+                    onAddMask={() => setMasking(output)}
+                    onAddSlice={() => void createSlice(output.id)}
                   />
                 </ContextMenuTrigger>
                 <ContextMenuContent>
                   <ContextMenuItem onClick={() => setMasking(output)}>
                     <SquareDashed /> Add Output Mask…
+                  </ContextMenuItem>
+                  <ContextMenuItem onClick={() => void createSlice(output.id)}>
+                    <LayoutPanelTop /> Add Slice
                   </ContextMenuItem>
                   <ContextMenuSeparator />
                   <ContextMenuItem
@@ -135,23 +156,27 @@ export function OutputsSection({ view }: { readonly view: DocumentView }) {
   );
 }
 
-/** The Output's row plus, while open, its Output Masks and then one row per Output Session under it. */
+/** The Output's row plus, while open, its Output Masks, its Slices and then one row per Output Session under it. */
 function OutputRow({
   view,
   output,
   unassigned,
+  overlap,
   selected,
   onSelect,
-  onCreate,
+  onAddMask,
+  onAddSlice,
 }: {
   readonly view: DocumentView;
   readonly output: Output;
   /** No Surface renders through this Output. */
   readonly unassigned: boolean;
+  /** What overlaps in its Display Frame, while something does. */
+  readonly overlap: string | undefined;
   readonly selected: boolean;
   readonly onSelect: () => void;
-  /** Adds an Output Mask under it. */
-  readonly onCreate: () => void;
+  readonly onAddMask: () => void;
+  readonly onAddSlice: () => void;
 }) {
   const sessions = sessionList(
     useDocumentPath<SessionTable>(view, [
@@ -174,7 +199,10 @@ function OutputRow({
         expanded={expanded}
         onToggle={(next) => setExpanded("output", output.id, next)}
         onSelect={onSelect}
-        onCreate={onCreate}
+        createItems={[
+          { label: "Output Mask…", icon: SquareDashed, onSelect: onAddMask },
+          { label: "Slice", icon: LayoutPanelTop, onSelect: onAddSlice },
+        ]}
       >
         {unassigned && (
           <NavigatorWarning
@@ -182,12 +210,16 @@ function OutputRow({
             explanation="Nothing renders on this Output until a Surface is assigned to it."
           />
         )}
+        {overlap !== undefined && (
+          <NavigatorWarning label="Slices overlap" explanation={overlap} />
+        )}
         <span
           className={`size-1.5 shrink-0 rounded-full ${toneClass[presenceTone(sessions)]}`}
           title={toneTitle(sessions)}
         />
       </NavigatorRow>
       {expanded && <OutputMaskRows view={view} outputId={output.id} />}
+      {expanded && <SliceRows view={view} outputId={output.id} />}
       {expanded && sessions.length === 0 && (
         <NavigatorEmptyRow depth={2}>Not connected</NavigatorEmptyRow>
       )}

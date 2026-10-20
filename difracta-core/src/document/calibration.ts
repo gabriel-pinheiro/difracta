@@ -5,6 +5,7 @@ import type {
   OutputMask,
   Path,
   Region,
+  Slice,
   Surface,
 } from "./document.ts";
 import { isEnabledOn } from "./mappings.ts";
@@ -20,6 +21,8 @@ export interface ResolvedCalibration {
   readonly region: Region | undefined;
   /** The Output Mask being aligned over the Output's patterns. */
   readonly outputMask: OutputMask | undefined;
+  /** The Slice selected on the Output's Slice test card. */
+  readonly slice: Slice | undefined;
   /** Selected Mask, Path or Output Mask point, clamped to its points. */
   readonly point: number | undefined;
 }
@@ -27,7 +30,7 @@ export interface ResolvedCalibration {
 /**
  * The effective Calibration Mode, or undefined when there is none or what it
  * names has since gone: its Output removed, its Surface removed or taken off
- * that Output, its Mask, Path, Region or Output Mask removed. Authoring
+ * that Output, its Mask, Path, Region, Output Mask or Slice removed. Authoring
  * commands do not touch operational state, so a stale entry can exist
  * briefly; readers go through here and treat it as no calibration.
  */
@@ -46,6 +49,12 @@ export function resolveCalibration(
     outputMask?.outputId !== calibration.outputId
   )
     return undefined;
+  const slice =
+    calibration.sliceId === null
+      ? undefined
+      : document.slices[calibration.sliceId];
+  if (calibration.sliceId !== null && slice?.outputId !== calibration.outputId)
+    return undefined;
   if (calibration.surfaceId === null) {
     const point =
       outputMask === undefined || calibration.point === null
@@ -59,6 +68,7 @@ export function resolveCalibration(
       path: undefined,
       region: undefined,
       outputMask,
+      slice,
       point,
     };
   }
@@ -96,6 +106,7 @@ export function resolveCalibration(
     path,
     region,
     outputMask: undefined,
+    slice: undefined,
     point,
   };
 }

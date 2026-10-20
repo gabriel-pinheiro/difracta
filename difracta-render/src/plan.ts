@@ -23,7 +23,7 @@ import {
   type VisualLayer,
 } from "@difracta/core";
 
-import { calibrationDraws } from "./plan-calibration.ts";
+import { calibrationDraws, type SliceTile } from "./plan-calibration.ts";
 import {
   regionCorners,
   regionPaths,
@@ -139,6 +139,8 @@ export interface FramePlan {
   readonly draws: readonly SurfaceDraw[];
   /** The Output Mask being aligned in Calibration Mode on this Output, over the draws. */
   readonly outputMaskOutline: OutputMaskOutline | undefined;
+  /** The Slice test card, in place of the draws, while it is calibrated on this Output; empty otherwise. */
+  readonly sliceCard: readonly SliceTile[];
   /** The Scene's Layers to composite, bottom first; empty while calibrating. */
   readonly layers: readonly LayerDraw[];
   /** The Scene's Filters in the same order, each placed by `below`. */
@@ -152,14 +154,19 @@ export interface FramePlan {
 }
 
 const NOTHING = { layers: [], filters: [] } as const;
-const NO_CALIBRATION = { draws: [], outputMaskOutline: undefined } as const;
+const NO_CALIBRATION = {
+  draws: [],
+  outputMaskOutline: undefined,
+  sliceCard: [],
+} as const;
 
 /**
  * What one Output shows for a document: nothing under Blackout; otherwise
  * the active Scene's Layers on their Surfaces, or, in Calibration Mode on
  * this Output, the calibrated Surface as a pattern and the others as the
  * view says, or every Surface as a pattern when the Output itself or one of
- * its Output Masks is calibrated (`plan-calibration.ts`); the Output's
+ * its Output Masks is calibrated, or its Slice test card
+ * (`plan-calibration.ts`); the Output's
  * masks come along either way. The Catalog says which Paths each Visual
  * needs bound. Pure, so the rules are testable without a GPU.
  */
@@ -289,7 +296,7 @@ function layerDraw(
   const resolved = resolveTarget(document, layer.target);
   if (resolved === undefined) return undefined;
   const { surface, region, rect } = resolved;
-  const surfaceCorners = enabledCorners(surface, outputId);
+  const surfaceCorners = enabledCorners(document, surface, outputId);
   if (surfaceCorners === undefined) return undefined;
   const paths = resolveLayerPaths(document, catalog, layer);
   if (paths === undefined) return undefined;

@@ -34,6 +34,7 @@ export const outputCreate = defineCommand({
       id: outputId,
       name,
       limitPixelRatio: false,
+      displaySize: null,
       order: appendOrderKey(document.outputs),
     };
     return accepted([

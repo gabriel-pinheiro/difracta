@@ -16,6 +16,7 @@ import { pathEntity } from "./path/path-entity";
 import { regionEntity } from "./region/region-entity";
 import { sceneEntity } from "./scene/scene-entity";
 import { shareEntity } from "./share/share-entity";
+import { sliceEntity } from "./slice/slice-entity";
 import { surfaceEntity } from "./surface/surface-entity";
 
 /**
@@ -62,6 +63,7 @@ export interface EntityModule {
 export const entities = {
   output: outputEntity,
   outputMask: outputMaskEntity,
+  slice: sliceEntity,
   surface: surfaceEntity,
   region: regionEntity,
   mask: maskEntity,

@@ -37,6 +37,8 @@ import { MAX_FRAME_SECONDS } from "./sdk/visual.ts";
 import { ShaderVisualPrograms } from "./shader-visuals.ts";
 import { SurfaceGeometries } from "./surface-geometry.ts";
 import { SurfaceProgram } from "./surface-program.ts";
+import { SliceCardDrawing } from "./slice-card.ts";
+import { slicedFrame, SlicePass, type SlicedFrame } from "./slice-pass.ts";
 
 /** The geometry key of the full-frame quad the Output Mask pass and outline draw with. */
 const FRAME_TARGET = "frame";
@@ -105,12 +107,20 @@ export interface CompositorOptions {
    * `shares`, and disposing the compositor disposes the claim.
    */
   readonly viewer?: LiveSource;
+  /**
+   * Draws the Projection Frame into the canvas even on an Output with
+   * Slices, laid out like the stage, without the slice pass: Studio's
+   * Preview. Without it an Output with Slices draws its Display Frame.
+   */
+  readonly projectionFrame?: boolean;
 }
 
 interface Resources {
   readonly gl: WebGL2RenderingContext;
   readonly program: SurfaceProgram;
   readonly calibration: CalibrationDrawing;
+  readonly sliceCard: SliceCardDrawing;
+  readonly slices: SlicePass;
   readonly masks: MaskTextures;
   readonly outputMasks: OutputMaskTexture;
   readonly players: LayerPlayers;
@@ -145,6 +155,9 @@ class WebGLCompositor implements Compositor {
   readonly #catalog: Catalog;
   readonly #media: EngineMedia;
   readonly #text: TextRasters;
+  readonly #projectionFrame: boolean;
+  /** The capped Projection Frame size last warned about, so it is logged once. */
+  #cappedWarning = "";
   #resources: Resources | undefined;
   #lost = false;
   #lastNow: number | undefined;
@@ -173,6 +186,7 @@ class WebGLCompositor implements Compositor {
   ) {
     this.#canvas = canvas;
     this.#catalog = catalog;
+    this.#projectionFrame = options.projectionFrame === true;
     this.#media = new EngineMedia({
       catalog,
       mediaUrl: options.mediaUrl ?? (() => undefined),
@@ -219,9 +233,18 @@ class WebGLCompositor implements Compositor {
     this.#lastNow = now;
     const resources = (this.#resources ??= this.#setup());
     const { gl, program } = resources;
+    // On an Output with Slices everything below draws into the offscreen
+    // Projection Frame at its own size, and the slice pass fits it into the
+    // canvas last; every size derived from the frame is in its pixels.
+    const sliced = this.#projectionFrame
+      ? undefined
+      : slicedFrame(document, outputId, resources.maxDimension);
+    if (sliced !== undefined) this.#warnCapped(sliced);
+    const frameWidth = sliced?.width ?? width;
+    const frameHeight = sliced?.height ?? height;
     this.#media.sync(document, outputId, {
-      width,
-      height,
+      width: frameWidth,
+      height: frameHeight,
       now,
       maxDimension: resources.maxDimension,
     });
@@ -233,16 +256,22 @@ class WebGLCompositor implements Compositor {
       this.#catalog,
     );
     this.#media.preload(() => plannedMedia(plan.layers, this.#catalog));
-    const step = resources.players.step(plan.layers, dt, width, height);
+    const step = resources.players.step(
+      plan.layers,
+      dt,
+      frameWidth,
+      frameHeight,
+    );
     resources.media.retain(step.textures);
     this.#text.retain(step.textures);
     const chain = resources.filters.step(
       plan.filters,
       plan.layers,
       dt,
-      width,
-      height,
-      (draw) => targetBufferSize(draw, width, height, resources.maxDimension),
+      frameWidth,
+      frameHeight,
+      (draw) =>
+        targetBufferSize(draw, frameWidth, frameHeight, resources.maxDimension),
     );
     // A pass over Layers that all drew nothing this frame would transform
     // a blank frame at full-frame cost, so only passes with input run.
@@ -298,12 +327,18 @@ class WebGLCompositor implements Compositor {
     gl.clear(gl.COLOR_BUFFER_BIT);
     if (plan.blackout)
       return { drew: true, layers, shaders, filters, videos, shares, issues };
+    const frameTarget = resources.slices.framebuffer(sliced);
+    if (frameTarget !== null) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, frameTarget);
+      gl.viewport(0, 0, frameWidth, frameHeight);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+    }
 
     // With a Filter to run, the Layers accumulate in the chain's target
     // instead of the screen, each pass transforms what is there so far,
     // and the last target is presented.
     const filtered = passes.length > 0;
-    if (filtered) resources.chain.begin(width, height);
+    if (filtered) resources.chain.begin(frameWidth, frameHeight);
     program.use();
     let next = 0;
     const passesBelow = (count: number): void => {
@@ -327,30 +362,35 @@ class WebGLCompositor implements Compositor {
         const result = resources.layerChain.run(
           frame,
           nested,
-          targetBufferSize(frame.draw, width, height, resources.maxDimension),
+          targetBufferSize(
+            frame.draw,
+            frameWidth,
+            frameHeight,
+            resources.maxDimension,
+          ),
           frame.fresh,
         );
         treated = result.texture;
         executed += result.executed;
         if (filtered) resources.chain.resume();
         else {
-          gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-          gl.viewport(0, 0, width, height);
+          gl.bindFramebuffer(gl.FRAMEBUFFER, frameTarget);
+          gl.viewport(0, 0, frameWidth, frameHeight);
         }
         program.use();
       }
       const geometry = resources.geometries.get(
         frame.draw.target,
         frame.draw.corners,
-        width,
-        height,
+        frameWidth,
+        frameHeight,
       );
       if (geometry === undefined) continue;
       program.setSurface(geometry);
       const maskTexture = resources.masks.get(
         { ...frame.draw, corners: frame.draw.surfaceCorners },
-        width,
-        height,
+        frameWidth,
+        frameHeight,
       );
       if (treated !== undefined)
         drawTexture(resources, frame.draw, treated, maskTexture, true);
@@ -362,25 +402,25 @@ class WebGLCompositor implements Compositor {
     }
     passesBelow(plan.layers.length);
     if (filtered) {
-      resources.chain.present();
+      resources.chain.present(frameTarget);
       program.use();
     }
     for (const draw of plan.draws) {
       const geometry = resources.geometries.get(
         draw.surface.id,
         draw.corners,
-        width,
-        height,
+        frameWidth,
+        frameHeight,
       );
       if (geometry === undefined) continue;
       program.setSurface(geometry);
-      const maskTexture = resources.masks.get(draw, width, height);
+      const maskTexture = resources.masks.get(draw, frameWidth, frameHeight);
       resources.calibration.draw(
         draw,
         maskTexture,
         geometry.matrix,
-        width,
-        height,
+        frameWidth,
+        frameHeight,
       );
     }
     // The Output's masks cut the finished frame to black: after every root
@@ -390,13 +430,17 @@ class WebGLCompositor implements Compositor {
     const frame = resources.geometries.get(
       FRAME_TARGET,
       FULL_FRAME,
-      width,
-      height,
+      frameWidth,
+      frameHeight,
     );
+    if (plan.sliceCard.length > 0 && frame !== undefined) {
+      program.setSurface(frame);
+      resources.sliceCard.draw(plan.sliceCard, frameWidth, frameHeight);
+    }
     const outputMask = resources.outputMasks.get(
       plan.outputMasks,
-      width,
-      height,
+      frameWidth,
+      frameHeight,
     );
     if (outputMask !== undefined && frame !== undefined)
       cutFrame(program, frame, outputMask);
@@ -404,6 +448,7 @@ class WebGLCompositor implements Compositor {
       program.setSurface(frame);
       resources.calibration.drawFrameOutline(plan.outputMaskOutline);
     }
+    if (sliced !== undefined) resources.slices.present(sliced, width, height);
     // Mask textures follow the plan, not the draw: a Surface whose Layer is
     // hidden or blank this frame keeps its Masks rasterized, and a filtered
     // Layer keeps its result while it is planned, hidden or blank too.
@@ -426,6 +471,17 @@ class WebGLCompositor implements Compositor {
     };
   }
 
+  /** Logs once per size that the Projection Frame is drawn scaled down to fit the GPU. */
+  #warnCapped(sliced: SlicedFrame): void {
+    if (!sliced.capped) return;
+    const key = `${String(sliced.frame.width)}x${String(sliced.frame.height)}`;
+    if (key === this.#cappedWarning) return;
+    this.#cappedWarning = key;
+    console.warn(
+      `The Projection Frame is ${key} pixels, past this GPU's texture limit; it is drawn at ${String(sliced.width)}x${String(sliced.height)} and scaled up.`,
+    );
+  }
+
   trigger(layerId: string, key: string): void {
     this.#resources?.players.cue(layerId, key);
   }
@@ -442,6 +498,8 @@ class WebGLCompositor implements Compositor {
     resources.masks.dispose();
     resources.outputMasks.dispose();
     resources.calibration.dispose();
+    resources.sliceCard.dispose();
+    resources.slices.dispose();
     resources.players.dispose();
     resources.filters.dispose();
     resources.layerChain.dispose();
@@ -484,6 +542,8 @@ class WebGLCompositor implements Compositor {
       gl,
       program,
       calibration: new CalibrationDrawing(program),
+      sliceCard: new SliceCardDrawing(program),
+      slices: new SlicePass(gl),
       masks: new MaskTextures(gl),
       outputMasks: new OutputMaskTexture(gl),
       players: new LayerPlayers(gl, this.#catalog, this.#media, this.#text),

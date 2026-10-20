@@ -7,8 +7,8 @@ import type { Patch } from "../document/patch.ts";
 
 /**
  * Removing an Output also drops its mapping from every Surface, with a
- * warning for each Surface that loses something, and its Output Masks, which
- * nothing else references.
+ * warning for each Surface that loses something, and its Output Masks and
+ * Slices, which only its own mappings reference.
  */
 export const outputRemove = defineCommand({
   name: "output.remove",
@@ -42,6 +42,9 @@ export const outputRemove = defineCommand({
     for (const mask of tableEntries(document.outputMasks))
       if (mask.outputId === outputId)
         patches.push({ op: "remove", path: ["outputMasks", mask.id] });
+    for (const slice of tableEntries(document.slices))
+      if (slice.outputId === outputId)
+        patches.push({ op: "remove", path: ["slices", slice.id] });
     patches.push({ op: "remove", path: ["outputs", outputId] });
     return accepted(patches, undefined, warnings);
   },

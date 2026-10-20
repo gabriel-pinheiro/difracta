@@ -4,6 +4,7 @@ import {
   type OutputMask,
   type Path,
   type Region,
+  type Slice,
   type Surface,
   type Table,
 } from "@difracta/core";
@@ -21,7 +22,8 @@ import { followedOutput } from "./mapping-output";
  * Region moves the pattern to it, on the same Output when it can
  * (`followedOutput`); the view is kept and the inspector then reports its
  * own corner or point. Selecting an Output Mask moves it to that mask on its
- * Output. Selecting anything else leaves the mode as it is, so a glance at
+ * Output, and selecting a Slice to its Output's Slice test card with that
+ * Slice selected. Selecting anything else leaves the mode as it is, so a glance at
  * an Output's stats does not drop the pattern on stage. Reacts to selection
  * changes only: another Studio moving the calibration must not be pulled
  * back here.
@@ -39,6 +41,7 @@ export function CalibrationFollowsSelection({
   const regions = useDocumentPath<Table<Region>>(view, ["regions"]) ?? {};
   const outputMasks =
     useDocumentPath<Table<OutputMask>>(view, ["outputMasks"]) ?? {};
+  const slices = useDocumentPath<Table<Slice>>(view, ["slices"]) ?? {};
   const latest = useRef({
     calibration,
     surfaces,
@@ -46,6 +49,7 @@ export function CalibrationFollowsSelection({
     paths,
     regions,
     outputMasks,
+    slices,
   });
   useEffect(() => {
     latest.current = {
@@ -55,6 +59,7 @@ export function CalibrationFollowsSelection({
       paths,
       regions,
       outputMasks,
+      slices,
     };
   });
   const previous = useRef<Selection | undefined>(selection);
@@ -63,6 +68,24 @@ export function CalibrationFollowsSelection({
     previous.current = selection;
     const current = latest.current;
     if (current.calibration === null) return;
+    if (selection?.kind === "slice") {
+      const slice = current.slices[selection.id];
+      if (slice === undefined || current.calibration.sliceId === slice.id)
+        return;
+      set({
+        ...current.calibration,
+        surfaceId: null,
+        outputId: slice.outputId,
+        outputMaskId: null,
+        sliceId: slice.id,
+        maskId: null,
+        pathId: null,
+        regionId: null,
+        corner: null,
+        point: null,
+      });
+      return;
+    }
     if (selection?.kind === "outputMask") {
       const outputMask = current.outputMasks[selection.id];
       if (
@@ -75,6 +98,7 @@ export function CalibrationFollowsSelection({
         surfaceId: null,
         outputId: outputMask.outputId,
         outputMaskId: outputMask.id,
+        sliceId: null,
         maskId: null,
         pathId: null,
         regionId: null,
@@ -101,6 +125,7 @@ export function CalibrationFollowsSelection({
       surfaceId: surface.id,
       outputId,
       outputMaskId: null,
+      sliceId: null,
       corner: null,
       point: null,
     });

@@ -47,7 +47,21 @@ export function outputCalibrationFor(
   return calibration !== null &&
     calibration.surfaceId === null &&
     calibration.outputId === outputId &&
-    calibration.outputMaskId === outputMaskId
+    calibration.outputMaskId === outputMaskId &&
+    calibration.sliceId === null
+    ? calibration
+    : undefined;
+}
+
+/** The Calibration Mode entry when the Output shows its Slice test card, whichever Slice is selected. */
+export function sliceCalibrationFor(
+  calibration: Calibration | null,
+  outputId: string,
+): Calibration | undefined {
+  return calibration !== null &&
+    calibration.surfaceId === null &&
+    calibration.outputId === outputId &&
+    calibration.sliceId !== null
     ? calibration
     : undefined;
 }

@@ -1,4 +1,4 @@
-import { settings, type Document } from "@difracta/core";
+import { isSliced, settings, type Document } from "@difracta/core";
 import {
   createCompositor,
   type Compositor,
@@ -93,8 +93,12 @@ export class FrameCanvas {
   }): void {
     this.#document = state.document;
     this.#outputId = state.outputId;
+    // An Output with Slices draws at device pixels whatever the switch says:
+    // its Slices must land on the processor's pixels, and a lower ratio
+    // would not make its Projection Frame cheaper.
     this.#limitPixelRatio =
-      state.document.outputs[state.outputId]?.limitPixelRatio ?? false;
+      (state.document.outputs[state.outputId]?.limitPixelRatio ?? false) &&
+      !isSliced(state.document.slices, state.outputId);
     if (this.#idleTimer === undefined) return;
     window.clearTimeout(this.#idleTimer);
     this.#idleTimer = undefined;

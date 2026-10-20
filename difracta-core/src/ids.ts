@@ -11,6 +11,7 @@ export type SurfaceId = Id<"surface">;
 export type RegionId = Id<"region">;
 export type MaskId = Id<"mask">;
 export type OutputMaskId = Id<"outputMask">;
+export type SliceId = Id<"slice">;
 export type PathId = Id<"path">;
 export type SceneId = Id<"scene">;
 export type LayerId = Id<"layer">;

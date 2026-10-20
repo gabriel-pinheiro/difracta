@@ -6,6 +6,7 @@ import {
   tableEntries,
   type Output,
   type OutputMask,
+  type Slice,
   type Surface,
   type Table,
 } from "@difracta/core";
@@ -54,6 +55,8 @@ export function OutputMaskInspector({
   const output = useDocumentPath<Output>(view, ["outputs", outputId]);
   const surfaces = useDocumentPath<Table<Surface>>(view, ["surfaces"]) ?? {};
   const masks = useDocumentPath<Table<OutputMask>>(view, ["outputMasks"]) ?? {};
+  const outputs = useDocumentPath<Table<Output>>(view, ["outputs"]) ?? {};
+  const slices = useDocumentPath<Table<Slice>>(view, ["slices"]) ?? {};
   const { calibration } = useCalibration(view);
   const aspect = useOutputAspect(view, outputId);
   // Open on the point the Output already highlights, if it does.
@@ -68,7 +71,7 @@ export function OutputMaskInspector({
   const point = Math.min(selected, mask.points.length - 1);
   const outlines: Outline[] = [
     ...tableEntries(surfaces).flatMap((surface) => {
-      const quad = enabledCorners(surface, mask.outputId);
+      const quad = enabledCorners({ outputs, slices }, surface, mask.outputId);
       return quad === undefined
         ? []
         : [{ name: surface.name, points: quadPoints(quad) }];

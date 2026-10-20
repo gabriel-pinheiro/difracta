@@ -4,8 +4,8 @@ import { useRef, useState } from "react";
 import { useLatestWins } from "@/lib/use-latest-wins";
 import { cn } from "@/lib/utils";
 
-import { NumberField } from "./number-field";
-import { fromPercent, nudgeFromKey, toPercent } from "./points";
+import { PointFields } from "./point-fields";
+import { nudgeFromKey } from "./points";
 
 /** Width of the space in preview units; height follows the aspect ratio. */
 const SPACE_WIDTH = 200;
@@ -16,6 +16,22 @@ const HANDLE_RADIUS = 5;
 export interface Outline {
   readonly name: string;
   readonly points: readonly Point[];
+}
+
+/** The space in pixels, for showing coordinates and nudging in pixels. */
+export interface PixelSpace {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/** What a snapping rule needs to know about a drag. */
+export interface SnapContext {
+  /** Alt held: no snapping. */
+  readonly altKey: boolean;
+  /** Screen pixels per unit of the space, on each axis. */
+  readonly screenPerUnit: Point;
 }
 
 /**
@@ -37,6 +53,9 @@ export function PolygonEditor({
   spaceLabel,
   closed = true,
   shapeOf,
+  backdrop = [],
+  snap,
+  pixels,
 }: {
   readonly points: readonly Point[];
   readonly names: readonly string[];
@@ -57,6 +76,12 @@ export function PolygonEditor({
   readonly spaceLabel: string;
   /** False draws the shape as a line from the first point to the last, unfilled. */
   readonly closed?: boolean;
+  /** Shapes drawn faintly under everything, such as an Output's Slices. */
+  readonly backdrop?: readonly Outline[] | undefined;
+  /** Where a dragged point lands, given where the pointer is. */
+  readonly snap?: ((point: Point, context: SnapContext) => Point) | undefined;
+  /** When given, coordinates show in these pixels and arrow keys move by one. */
+  readonly pixels?: PixelSpace | undefined;
 }) {
   const [dragging, setDragging] = useState<
     { index: number; point: Point } | undefined
@@ -91,11 +116,18 @@ export function PolygonEditor({
     const local = new DOMPoint(event.clientX, event.clientY).matrixTransform(
       matrix.inverse(),
     );
-    return { x: local.x / width, y: local.y / height };
+    const point = { x: local.x / width, y: local.y / height };
+    return snap === undefined
+      ? point
+      : snap(point, {
+          altKey: event.altKey,
+          screenPerUnit: { x: matrix.a * width, y: matrix.d * height },
+        });
   }
 
+  const pixel = pixels === undefined ? undefined : pixelStep(pixels);
   function keyDown(index: number, event: React.KeyboardEvent): void {
-    const by = nudgeFromKey(event);
+    const by = nudgeFromKey(event, pixel);
     if (by === undefined) return;
     event.preventDefault();
     onNudge(index, by);
@@ -117,6 +149,16 @@ export function PolygonEditor({
           className="fill-background stroke-muted-foreground/40"
           vectorEffect="non-scaling-stroke"
         />
+        {backdrop.map((shape) => (
+          <polygon
+            key={shape.name}
+            points={polygon(shape.points)}
+            className="fill-muted/50 stroke-muted-foreground/30"
+            vectorEffect="non-scaling-stroke"
+          >
+            <title>{shape.name}</title>
+          </polygon>
+        ))}
         {outlines.map((outline) => (
           <polygon
             key={outline.name}
@@ -190,37 +232,28 @@ export function PolygonEditor({
           );
         })}
       </svg>
-      <div className="grid grid-cols-2 gap-2">
-        <NumberField
-          label="X"
-          unit="%"
-          step={0.1}
-          value={toPercent(current.x)}
-          onCommit={(value) =>
-            void onSet(selected, { ...committed, x: fromPercent(value) })
-          }
-        />
-        <NumberField
-          label="Y"
-          unit="%"
-          step={0.1}
-          value={toPercent(current.y)}
-          onCommit={(value) =>
-            void onSet(selected, { ...committed, y: fromPercent(value) })
-          }
-        />
-      </div>
+      <PointFields
+        point={current}
+        pixels={pixels}
+        onCommit={(next) => void onSet(selected, { ...committed, ...next })}
+      />
     </div>
   );
 }
 
-/** Keyboard handler for a button standing for one point: arrow keys nudge it. */
+/** One pixel of a pixel space, as a fraction of it on each axis. */
+export function pixelStep(pixels: PixelSpace): Point {
+  return { x: 1 / pixels.width, y: 1 / pixels.height };
+}
+
+/** Keyboard handler for a button standing for one point: arrow keys nudge it, by a pixel with `pixel`. */
 export function nudgeKeyHandler(
   index: number,
   onNudge: (index: number, by: Point) => void,
+  pixel?: Point,
 ): (event: React.KeyboardEvent) => void {
   return (event) => {
-    const by = nudgeFromKey(event);
+    const by = nudgeFromKey(event, pixel);
     if (by === undefined) return;
     event.preventDefault();
     onNudge(index, by);

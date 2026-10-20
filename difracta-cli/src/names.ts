@@ -25,6 +25,7 @@ const NOUNS: Record<TableName, string> = {
   masks: "Mask",
   paths: "Path",
   outputMasks: "Output Mask",
+  slices: "Slice",
   packs: "Pack",
   shares: "Screen Share",
   scenes: "Scene",
@@ -52,6 +53,7 @@ const KEY_TABLES: Readonly<Record<string, TableName>> = {
   maskId: "masks",
   pathId: "paths",
   outputMaskId: "outputMasks",
+  sliceId: "slices",
   shareId: "shares",
   packId: "packs",
   sceneId: "scenes",
@@ -98,7 +100,7 @@ function whereabouts(
     const surface = document.surfaces[String(record.surfaceId)];
     return surface === undefined ? undefined : `on Surface ${surface.name}`;
   }
-  if (table === "outputMasks") {
+  if (table === "outputMasks" || table === "slices") {
     const output = document.outputs[String(record.outputId)];
     return output === undefined ? undefined : `on Output ${output.name}`;
   }
@@ -230,7 +232,7 @@ export function resolvePathNames(document: Document, path: string): string {
 /**
  * A command payload with every entity reference turned into an id: the
  * `…Id` keys, `output` and `outputs`; `target` as a Surface or a Region
- * (`resolveTargetName`); `parentId` and `after` for the table the
+ * (`resolveTargetName`); `follow` as a Slice unless it is "frame"; `parentId` and `after` for the table the
  * command name says (or the payload's own `table`, as `entity.move` has);
  * `address`/`addresses`; lists such as `layerIds`; and objects inside arrays
  * (Macro actions) the same way.
@@ -283,6 +285,8 @@ function resolveField(
     return resolveTargetName(document, value);
   if (key === "regionId" && typeof value === "string")
     return resolveRegionName(document, value);
+  if (key === "follow" && typeof value === "string" && value !== "frame")
+    return resolveId(document, "slices", value);
   const table = fieldTable(prefix, siblings, key);
   if (table !== undefined && typeof value === "string")
     return resolveId(document, table, value);
